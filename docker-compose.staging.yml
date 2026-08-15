@@ -1,0 +1,48 @@
+name: ikrarku-staging
+
+services:
+  ikrarku:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    image: ikrarku-sites:0.15-staging
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env.staging
+    environment:
+      NODE_ENV: production
+      API_PORT: 5180
+      DATA_DIR: /app/data
+      UPLOAD_DIR: /app/uploads
+      RECEIPT_DIR: /app/receipts
+      DB_FILE: /app/data/ikrarku.sqlite
+    ports:
+      - "127.0.0.1:5180:5180"
+    volumes:
+      - ikrarku_data:/app/data
+      - ikrarku_uploads:/app/uploads
+      - ikrarku_receipts:/app/receipts
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5180/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 25s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  ikrarku_data:
+    name: ikrarku_staging_data
+  ikrarku_uploads:
+    name: ikrarku_staging_uploads
+  ikrarku_receipts:
+    name: ikrarku_staging_receipts

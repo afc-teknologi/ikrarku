@@ -1,0 +1,27 @@
+name: Staging Check
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.16.0'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run preflight
+      - run: npm run qa:static
+      - run: npm run qa:db
+      - run: npm run qa:ux
+      - run: npm run lint
+      - run: npm run build
+        env:
+          VITE_API_URL: /api
+      - run: node --check server/index.mjs
+      - run: docker build --build-arg VITE_API_URL=/api -t ikrarku-sites:staging-check .

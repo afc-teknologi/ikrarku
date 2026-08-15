@@ -1,0 +1,57 @@
+{
+  "name": "ikrarku-sites-cms",
+  "private": true,
+  "version": "0.16.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n API,WEB -c blue,green \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:web": "vite --host 0.0.0.0 --port 5173",
+    "dev:api": "node --watch server/index.mjs",
+    "start": "node server/index.mjs",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview --host 0.0.0.0 --port 5173",
+    "build:staging": "vite build --mode staging",
+    "check": "npm run lint && npm run build && node --check server/index.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "qa:static": "node scripts/qa-static.mjs",
+    "qa:db": "node scripts/qa-db.mjs",
+    "qa": "npm run preflight && npm run qa:static && npm run qa:db && npm run qa:ux && npm run qa:edge && npm run qa:wysiwyg && npm run lint && npm run build && node --check server/index.mjs",
+    "qa:ux": "node scripts/qa-ux-v016.mjs",
+    "qa:edge": "node scripts/qa-edge-v016.mjs",
+    "qa:wysiwyg": "node scripts/qa-wysiwyg-v016.mjs"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "clsx": "^2.1.1",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^5.1.0",
+    "lucide-react": "^1.24.0",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.5",
+    "pdfkit": "^0.17.1",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "recharts": "^3.9.2"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.13.2",
+    "@types/nodemailer": "^6.4.17",
+    "@types/pdfkit": "^0.13.9",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "concurrently": "^9.2.0",
+    "oxlint": "^1.71.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.1.1"
+  },
+  "engines": {
+    "node": ">=22.13.0",
+    "npm": ">=10.0.0"
+  }
+}
