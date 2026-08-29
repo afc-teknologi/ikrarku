@@ -333,16 +333,23 @@ function initDb() {
   ensureStaff('role_cs','cs','Customer Service')
   ensureStaff('role_editor','editor','Web Designer')
 
+  // Backfill preview images for templates that have none, so template detail / checkout / showcase
+  // never render an empty (looks-broken) hero. Idempotent — only touches empty preview_url.
   const templateCount = db.prepare('SELECT COUNT(*) count FROM templates').get().count
   if (!templateCount) {
     const insert = db.prepare(`INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
     const rows = [
       ['split-serenity','Split Serenity','Editorial','Layout editorial dua kolom dengan panel fixed dan area cerita yang dapat di-scroll.',499000,'IDR','Published','/themes/split-reference.png','#f4eadc','#17241f',0,'split'],
-      ['cinematic-story','Cinema Night','Cinematic','Pengalaman undangan sinematik dengan kontras gelap, scene-based storytelling, dan motion premium.',699000,'IDR','Published',null,'#e11d2e','#090909',1,'cinematic'],
-      ['storybook-magic','Storybook Magic','Fairytale','Tema fairytale modern dengan chapter storytelling, warna lembut, dan aksen champagne gold.',649000,'IDR','Published',null,'#d7b66f','#dceafa',1,'storybook'],
+      ['cinematic-story','Cinema Night','Cinematic','Pengalaman undangan sinematik dengan kontras gelap, scene-based storytelling, dan motion premium.',699000,'IDR','Published','/themes/cover-reference.png','#e11d2e','#090909',1,'cinematic'],
+      ['storybook-magic','Storybook Magic','Fairytale','Tema fairytale modern dengan chapter storytelling, warna lembut, dan aksen champagne gold.',649000,'IDR','Published','/themes/split-reference.png','#d7b66f','#dceafa',1,'storybook'],
     ]
     for (const row of rows) insert.run(...row,'user_admin','user_admin','[]',now(),now())
   }
+  // Backfill preview images for any existing templates that have none (existing staging DBs).
+  try{
+    db.prepare(`UPDATE templates SET preview_url='/themes/cover-reference.png' WHERE (preview_url IS NULL OR preview_url='') AND preset IN ('cinematic','classic')`).run()
+    db.prepare(`UPDATE templates SET preview_url='/themes/split-reference.png' WHERE (preview_url IS NULL OR preview_url='')`).run()
+  }catch{/* ignore */}
 
   const methodCount = db.prepare('SELECT COUNT(*) count FROM payment_methods').get().count
   if (!methodCount) {

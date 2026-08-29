@@ -363,11 +363,7 @@ html,body,#root{min-width:0!important}
 .article-catalog-section .public-empty{color:#2f4740;border:1px dashed rgba(24,59,49,.22);background:#fff}
 .article-catalog-section .public-empty span{color:#77857f}
 .article-catalog-section .public-empty svg{color:#125946}
-/* TC-005/017: guarantee a designed background so a slow/missing reference image never looks broken */
-.mock-preview{background:linear-gradient(145deg,#1f4a3c,#0c2a22),linear-gradient(145deg,rgba(10,35,27,.2),rgba(6,20,15,.7)),url('/themes/cover-reference.png') center/cover}
-.mini-canvas{background:linear-gradient(145deg,#20323a,#0e2a34),linear-gradient(rgba(7,28,22,.35),rgba(7,28,22,.75)),url('/themes/split-reference.png') center/cover}
-.showcase-card.split{background:linear-gradient(150deg,#17352c,#0c211b),url('/themes/split-reference.png') center/cover}
-.showcase-card.cinema{background:linear-gradient(135deg,#1a0a0c,#090909),linear-gradient(135deg,rgba(0,0,0,.05),rgba(0,0,0,.4)),url('/themes/cover-reference.png') center/cover}
+/* TC-005/017: keep only the original image backgrounds (no opaque overlay that hides them) */
 /* TC-017 #1: inspiration card text no longer clipped when the viewport shrinks */
 .inspiration-card{overflow:visible}
 .inspiration-card h3{word-break:break-word;overflow-wrap:anywhere}
@@ -394,3 +390,10 @@ html,body,#root{min-width:0!important}
 
 /* keep native <form> transparent so auth-card layout is unchanged (Enter-to-submit) */
 .auth-card .auth-fields{display:contents}
+
+/* ---- Revision fixes 2: restore images + inspiration title wrap ---- */
+/* #1: single-word inspiration titles (Traditional/Cinematic) must wrap, not clip, at narrow widths */
+.landing-v015 .inspiration-card{overflow:hidden}
+.landing-v015 .inspiration-card h3{font-size:clamp(18px,1.9vw,28px);overflow-wrap:anywhere;word-break:normal;hyphens:auto;line-height:1.12}
+@media(max-width:1180px){ .landing-v015 .inspiration-rail{grid-template-columns:repeat(3,1fr)} }
+@media(max-width:820px){ .landing-v015 .inspiration-rail{grid-template-columns:repeat(2,1fr)} .landing-v015 .inspiration-card{min-height:170px} }

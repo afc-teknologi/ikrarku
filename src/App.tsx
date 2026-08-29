@@ -564,6 +564,7 @@ function App() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [checkoutOrder, setCheckoutOrder] = useState<OrderResult | null>(null)
   const [landingScrollTarget, setLandingScrollTarget] = useState<string | null>(null)
+  const [notFound, setNotFound] = useState(false)
   const funnelPrevViewRef = useRef<View>('landing')
   const [lastPaidOrder, setLastPaidOrder] = useState<OrderResult | null>(null)
   const [taskItems, setTaskItems] = useState<TaskItem[]>([])
@@ -602,7 +603,7 @@ function App() {
           try {
             const publicSite=await api.publicSite(pathSlug)
             setPublicSiteData({...publicSite,sections:hydrateSections(publicSite.sections || [])})
-          } catch { setPublicSiteData(null); slugNotFound=true }
+          } catch { setPublicSiteData(null); slugNotFound=true; setNotFound(true) }
         }
         const token = localStorage.getItem('ikrarku-api-token')
         if (token) {
@@ -1141,6 +1142,9 @@ function App() {
   }
 
   if (loading) return <LoadingScreen />
+
+  if (notFound) return <NotFoundPage onHome={() => { setNotFound(false); window.history.replaceState(window.history.state,'','/'); setView('landing') }} />
+
 
   if (publicSiteData) return <PublicWeddingPage site={publicSiteData} />
 
