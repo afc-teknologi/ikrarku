@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlignCenter, AlignJustify, AlignLeft, AlignRight, ArrowLeft,
   BarChart3, Bold, BookOpen, CalendarDays, Check, ChevronDown, ChevronLeft,
   ChevronRight, CircleHelp, Clock3, Columns2, Columns3, Columns4, Copy,
   Crown, Eye, EyeOff, FileText, FormInput, Globe2, GripVertical, Heart,
   Image as ImageIcon, Italic, LayoutDashboard, LogOut,
-  MessageCircle, MessageSquareText, Monitor, MoveDown, MoveUp,
+  MessageCircle, MessageSquareText, Menu, Monitor, MoveDown, MoveUp,
   Palette, PanelLeftClose, Play, Plus, Repeat2, Save, Search, Send,
   Settings, ShieldCheck, Smartphone, Sparkles, Trash2, Type, Underline,
   Upload, Users, Video, WandSparkles, X, Zap, MapPin, MailOpen, UserPlus, Download, TimerReset, Film, Castle,
@@ -18,7 +18,7 @@ import './App.css'
 import { api, assetUrl, setApiToken } from './api'
 
 type Role = 'User' | 'Editor' | 'Admin' | 'Customer Service'
-type View = 'landing' | 'login' | 'signup' | 'verify-email' | 'dashboard' | 'templates' | 'template-detail' | 'checkout' | 'payment-success' | 'editor' | 'articles' | 'article-editor' | 'settings' | 'payment-settings' | 'orders' | 'my-orders' | 'audit-log' | 'admin' | 'users' | 'roles' | 'tasks' | 'help' | 'customer-service' | 'cs-dashboard' | 'sound-library'
+type View = 'landing' | 'login' | 'signup' | 'verify-email' | 'not-found' | 'dashboard' | 'templates' | 'template-detail' | 'checkout' | 'payment-success' | 'editor' | 'articles' | 'article-editor' | 'settings' | 'payment-settings' | 'orders' | 'my-orders' | 'audit-log' | 'admin' | 'users' | 'roles' | 'tasks' | 'help' | 'customer-service' | 'cs-dashboard' | 'sound-library'
 type PageKey = 'pages' | 'invitees' | 'rsvp-page'
 type InspectorTab = 'content' | 'style' | 'advanced'
 type Alignment = 'left' | 'center' | 'right' | 'justify'
@@ -563,6 +563,8 @@ function App() {
   const [selectedPublicTemplate, setSelectedPublicTemplate] = useState<Template | null>(null)
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([])
   const [checkoutOrder, setCheckoutOrder] = useState<OrderResult | null>(null)
+  const [landingScrollTarget, setLandingScrollTarget] = useState<string | null>(null)
+  const funnelPrevViewRef = useRef<View>('landing')
   const [lastPaidOrder, setLastPaidOrder] = useState<OrderResult | null>(null)
   const [taskItems, setTaskItems] = useState<TaskItem[]>([])
   const [roleItems, setRoleItems] = useState<RoleItem[]>([])
@@ -577,6 +579,7 @@ function App() {
   const [auditLogs,setAuditLogs]=useState<any[]>([])
   const [notificationMuted,setNotificationMuted]=useState<boolean>(()=>localStorage.getItem('ikrarku-notification-muted')==='true')
   const notificationBaseline=useRef<{tasks:number;messages:number}|null>(null)
+  const customerSupportBaseline=useRef<number|null>(null)
 
   useEffect(() => {
     let active = true
@@ -598,7 +601,7 @@ function App() {
           try {
             const publicSite=await api.publicSite(pathSlug)
             setPublicSiteData({...publicSite,sections:hydrateSections(publicSite.sections || [])})
-          } catch { setPublicSiteData(null) }
+          } catch { setPublicSiteData(null); if(!localStorage.getItem('ikrarku-api-token')) setView('not-found') }
         }
         const token = localStorage.getItem('ikrarku-api-token')
         if (token) {
@@ -737,6 +740,62 @@ function App() {
     void poll();const interval=window.setInterval(()=>void poll(),10000)
     return()=>{stopped=true;window.clearInterval(interval)}
   },[currentAccountId,view,notificationMuted,permissionKey])
+
+  const refreshMyChat=useCallback(async(notify=true)=>{
+    if(!currentAccountId) return
+    try{
+      const own=await api.myConversation()
+      if(!own?.conversation) return
+      const mapped=(own.messages||[]).map((message:any)=>({id:message.id,sender:message.sender_type==='support'?'support':'user',text:message.body,time:message.created_at,conversationId:currentAccountId,senderName:message.sender_type==='support'?'ikrarku Support':currentAccount?.name || 'User'}))
+      setChatMessages(previousMessages=>{ const otherThreads=previousMessages.filter(message=>(message.conversationId||currentAccountId)!==currentAccountId); return [...otherThreads,...mapped] })
+      const supportCount=mapped.filter((message:any)=>message.sender==='support').length
+      const previousSupport=customerSupportBaseline.current
+      if(notify && previousSupport!==null && supportCount>previousSupport && !notificationMuted){playNotificationTone();flash('Balasan baru dari ikrarku Support.')}
+      customerSupportBaseline.current=supportCount
+    }catch{/* customer conversation optional */}
+  },[currentAccountId,currentAccount,notificationMuted])
+
+  useEffect(()=>{
+    if(!currentAccountId || view==='landing' || view==='login' || view==='signup' || view==='verify-email') return
+    let stopped=false
+    const tick=async()=>{ if(!stopped) await refreshMyChat() }
+    void tick()
+    const interval=window.setInterval(()=>void tick(), chatWidgetOpen?2500:8000)
+    return()=>{stopped=true;window.clearInterval(interval)}
+  },[currentAccountId,view,chatWidgetOpen,refreshMyChat])
+
+  // Browser back button support for the public order funnel (template-detail / checkout / payment-success)
+  useEffect(()=>{
+    const funnel=new Set<View>(['template-detail','checkout','payment-success','login','signup'])
+    if(funnel.has(view) && !funnel.has(funnelPrevViewRef.current)) window.history.pushState({ikrarkuFunnel:true},'')
+    funnelPrevViewRef.current=view
+  },[view])
+  useEffect(()=>{
+    const funnel=new Set<View>(['template-detail','checkout','payment-success','login','signup'])
+    const onPop=()=>{ if(funnel.has(funnelPrevViewRef.current)){ const cur=funnelPrevViewRef.current; if(cur==='template-detail'||cur==='checkout'||cur==='payment-success') setLandingScrollTarget('templates'); setView('landing') } }
+    window.addEventListener('popstate',onPop)
+    return ()=>window.removeEventListener('popstate',onPop)
+  },[])
+
+  // Per-view browser tab title and address-bar path (TC-018 SEO / URL relevance)
+  useEffect(()=>{
+    const titles:Partial<Record<View,string>>={
+      landing:'ikrarku Sites — Wedding Website & Undangan Digital',
+      login:'Masuk — ikrarku Sites', signup:'Daftar Akun — ikrarku Sites', 'verify-email':'Verifikasi Email — ikrarku Sites',
+      'not-found':'Halaman tidak ditemukan — ikrarku Sites',
+      templates:'Templates — ikrarku Sites', 'template-detail':'Detail Template — ikrarku Sites',
+      checkout:'Pesan Sekarang — ikrarku Sites', 'payment-success':'Pembayaran Berhasil — ikrarku Sites',
+      articles:'ikrarku Journal — ikrarku Sites', dashboard:'Dashboard — ikrarku Sites', admin:'Administrator — ikrarku Sites',
+      'cs-dashboard':'Customer Service — ikrarku Sites', 'customer-service':'Support Inbox — ikrarku Sites',
+    }
+    document.title=titles[view]||'ikrarku Sites'
+    const paths:Partial<Record<View,string>>={
+      landing:'/', login:'/login', signup:'/signup', 'verify-email':'/verify-email', 'not-found':window.location.pathname,
+      templates:'/templates', 'template-detail':'/templates', checkout:'/pesan-sekarang', 'payment-success':'/pembayaran-berhasil', articles:'/articles',
+    }
+    const target=paths[view]
+    if(target && window.location.pathname!==target){ try{ window.history.replaceState(window.history.state,'',target+window.location.search) }catch{/* ignore */} }
+  },[view])
 
   const flash = (message: string) => {
     setToast(message)
@@ -1001,6 +1060,7 @@ function App() {
   }
 
   const beginCheckout = (template: Template) => {
+    try{ const draft=JSON.parse(sessionStorage.getItem('ikrarku-checkout-draft')||'{}'); if(draft.templateId && draft.templateId!==template.id) sessionStorage.removeItem('ikrarku-checkout-draft') }catch{ sessionStorage.removeItem('ikrarku-checkout-draft') }
     setSelectedPublicTemplate(template)
     setCheckoutOrder(null)
     setView('checkout')
@@ -1021,6 +1081,8 @@ function App() {
       const paid = await api.payOrder(checkoutOrder.id,paymentMethod)
       const result = { ...checkoutOrder, ...paid, receiptUrl:paid.receiptUrl ? assetUrl(paid.receiptUrl) : undefined }
       setLastPaidOrder(result)
+      sessionStorage.removeItem('ikrarku-checkout-draft')
+      setCheckoutOrder(null)
       setView('payment-success')
       return true
     } catch (error) { flash(error instanceof Error ? error.message : 'Pembayaran gagal.'); return false }
@@ -1079,10 +1141,10 @@ function App() {
 
   if (publicSiteData) return <PublicWeddingPage site={publicSiteData} />
 
-  if (view === 'landing') return <><LandingPage setView={setView} articles={articleItems.filter(article => article.status === 'Published')} templates={publicTemplates} onTemplate={openTemplateJourney} databaseOnline={databaseOnline} /><ChatWidget messages={chatMessages.filter(message => (message.conversationId || 'guest') === 'guest')} sendChat={text => sendChat('user', text, 'guest', 'Website Visitor')} open={chatWidgetOpen} onOpenChange={setChatWidgetOpen} /></>
+  if (view === 'landing') return <><LandingPage setView={setView} articles={articleItems.filter(article => article.status === 'Published')} templates={publicTemplates} onTemplate={openTemplateJourney} databaseOnline={databaseOnline} scrollTarget={landingScrollTarget} onScrolled={() => setLandingScrollTarget(null)} /><ChatWidget messages={chatMessages.filter(message => (message.conversationId || 'guest') === 'guest')} sendChat={text => sendChat('user', text, 'guest', 'Website Visitor')} open={chatWidgetOpen} onOpenChange={setChatWidgetOpen} /></>
 
 
-  if (view === 'template-detail' && selectedPublicTemplate) return <TemplateJourneyPage template={selectedPublicTemplate} onBack={() => setView('landing')} onPreview={() => setSelectedTemplate(selectedPublicTemplate)} onOrder={() => beginCheckout(selectedPublicTemplate)} />
+  if (view === 'template-detail' && selectedPublicTemplate) return <TemplateJourneyPage template={selectedPublicTemplate} onBack={() => { setLandingScrollTarget('templates'); setView('landing') }} onPreview={() => setSelectedTemplate(selectedPublicTemplate)} onOrder={() => beginCheckout(selectedPublicTemplate)} />
 
   if (view === 'checkout' && selectedPublicTemplate) return <CheckoutPage template={selectedPublicTemplate} paymentMethods={paymentMethods.filter(method => method.enabled)} order={checkoutOrder} onBack={() => setView('template-detail')} createOrder={createCheckoutOrder} payOrder={payCheckoutOrder} onSignIn={()=>{sessionStorage.setItem('ikrarku-checkout-return','true');setView('login')}} onRegister={()=>{sessionStorage.setItem('ikrarku-checkout-return','true');setView('signup')}} />
 
@@ -1090,6 +1152,9 @@ function App() {
 
   if (view === 'login' || view === 'signup') return <Auth view={view} setView={setView} login={login} signupAccount={signupAccount} />
   if (view === 'verify-email') return <VerifyEmailPage setView={setView} />
+
+  if (view === 'not-found') return <NotFoundPage onHome={() => { window.history.replaceState(window.history.state,'','/'); setView('landing') }} />
+
 
   if (view === 'editor') {
     return <>
@@ -1128,7 +1193,7 @@ function App() {
       {view === 'admin' && <AdminDashboard setView={setView} templates={templateCatalog} articles={articleItems} accounts={accounts} tasks={taskItems} metrics={csMetricData} roles={roleItems} createAccount={createAccount} orderAnalytics={orderAnalytics} />}
       {view === 'help' && <HelpCenter />}
       {view === 'sound-library' && <SoundLibrary catalog={soundCatalog} addSound={addSoundToCatalog} deleteSound={deleteSoundFromCatalog} />}
-      {view === 'customer-service' && <CustomerServiceDatabase conversations={serverConversations} users={contactableUsers} onRefresh={async()=>{setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics())}} onReply={async(conversationId,text)=>{await api.reply(conversationId,text);setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics())}} onOutbound={async(userId,text)=>{await api.outboundMessage({userId,body:text,channel:'Web'});setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics());flash('Pesan dikirim ke Customer.')}} onStatus={async(conversationId,status)=>{await api.updateConversation(conversationId,status);setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics())}} onRead={async(conversationId)=>{await api.markConversationRead(conversationId);setServerConversations(previous=>previous.map(item=>item.id===conversationId?{...item,unreadCount:0}:item))}} />}
+      {view === 'customer-service' && <CustomerServiceDatabase conversations={serverConversations} users={contactableUsers} onRefresh={async()=>{setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics())}} onReply={async(conversationId,text)=>{await api.reply(conversationId,text);setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics());void refreshMyChat(false)}} onOutbound={async(userId,text)=>{await api.outboundMessage({userId,body:text,channel:'Web'});setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics());void refreshMyChat(false);flash('Pesan dikirim ke Customer.')}} onStatus={async(conversationId,status)=>{await api.updateConversation(conversationId,status);setServerConversations(await api.conversations());setCsMetricData(await api.csMetrics())}} onRead={async(conversationId)=>{await api.markConversationRead(conversationId);setServerConversations(previous=>previous.map(item=>item.id===conversationId?{...item,unreadCount:0}:item))}} />}
     </main>
     <ChatWidget messages={chatMessages.filter(message => (message.conversationId || currentAccountId) === currentAccountId)} sendChat={text => sendChat('user', text)} open={chatWidgetOpen} onOpenChange={setChatWidgetOpen} />
     {previewOpen && <PreviewModal sections={sections} template={selectedTemplate} greetings={greetings} addGreeting={addGreeting} guests={guests} addGuest={addGuest} onClose={() => setPreviewOpen(false)} />}
@@ -1149,12 +1214,19 @@ function PublicWeddingPage({site}:{site:any}) {
   return <div className="public-site-route"><WeddingCanvas page="pages" sections={site.sections||[]} selectedTemplate={template} greetings={greetings} addGreeting={addGreeting} guests={guests} addGuest={addGuest}/></div>
 }
 
-function LandingPage({ setView, articles, templates, onTemplate, databaseOnline: _databaseOnline }: { setView: (view: View) => void; articles: ArticleItem[]; templates: Template[]; onTemplate: (template: Template) => void; databaseOnline: boolean }) {
+function LandingPage({ setView, articles, templates, onTemplate, databaseOnline: _databaseOnline, scrollTarget, onScrolled }: { setView: (view: View) => void; articles: ArticleItem[]; templates: Template[]; onTemplate: (template: Template) => void; databaseOnline: boolean; scrollTarget?: string | null; onScrolled?: () => void }) {
   const [selectedArticle, setSelectedArticle] = useState<ArticleItem | null>(null)
-  const featuredTemplates = templates.slice(0, 3)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const pricedTemplates = useMemo(() => [...templates].sort((a, b) => (a.price || 0) - (b.price || 0)), [templates])
+  const featuredTemplates = pricedTemplates.slice(0, 3)
+  useEffect(() => {
+    if (!scrollTarget) return
+    const timer = window.setTimeout(() => { document.getElementById(scrollTarget)?.scrollIntoView({ behavior: 'smooth' }); onScrolled?.() }, 60)
+    return () => window.clearTimeout(timer)
+  }, [scrollTarget, onScrolled])
   if (selectedArticle) return <ArticleReaderPage article={selectedArticle} onBack={() => setSelectedArticle(null)} publicMode />
   return <div className="landing-page landing-v015">
-    <header className="landing-nav"><Brand /><nav><a href="#inspiration">Inspiration</a><a href="#templates">Templates</a><a href="#how-it-works">How it works</a><a href="#articles">Articles</a></nav><div><button className="landing-login" onClick={() => setView('login')}>Sign in</button><button className="landing-cta" onClick={() => document.getElementById('templates')?.scrollIntoView({behavior:'smooth'})}>Explore templates <ArrowRight size={16} /></button></div></header>
+    <header className="landing-nav"><Brand /><nav><a href="#inspiration">Inspiration</a><a href="#templates">Templates</a><a href="#how-it-works">How it works</a><a href="#articles">Articles</a></nav><div className="landing-nav-actions"><button className="landing-login" onClick={() => setView('login')}>Sign in</button><button className="landing-cta" onClick={() => document.getElementById('templates')?.scrollIntoView({behavior:'smooth'})}>Explore templates <ArrowRight size={16} /></button><button className="landing-burger" aria-label="Buka menu" aria-expanded={mobileMenuOpen} onClick={() => setMobileMenuOpen(value => !value)}>{mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}</button></div>{mobileMenuOpen && <div className="landing-mobile-menu"><a href="#inspiration" onClick={() => setMobileMenuOpen(false)}>Inspiration</a><a href="#templates" onClick={() => setMobileMenuOpen(false)}>Templates</a><a href="#how-it-works" onClick={() => setMobileMenuOpen(false)}>How it works</a><a href="#articles" onClick={() => setMobileMenuOpen(false)}>Articles</a><button className="mobile-menu-signin" onClick={() => { setMobileMenuOpen(false); setView('login') }}>Sign in</button><button className="mobile-menu-cta" onClick={() => { setMobileMenuOpen(false); document.getElementById('templates')?.scrollIntoView({behavior:'smooth'}) }}>Explore templates <ArrowRight size={15} /></button></div>}</header>
     <main>
       <section className="landing-hero creative-hero"><div className="hero-glow one" /><div className="hero-glow two" /><div className="hero-copy"><div className="hero-pill"><WandSparkles size={14} /> Create a wedding story that feels like you</div><h1>Design your day.<br /><em>Share it beautifully.</em></h1><p>Pilih design, personalisasi setiap section, tambahkan RSVP, galeri, lokasi, musik, dan Buka Undangan—semuanya dalam visual editor yang mudah dipahami.</p><div className="hero-actions"><button onClick={() => document.getElementById('templates')?.scrollIntoView({behavior:'smooth'})}>Start with a template <ArrowRight size={17} /></button><button onClick={() => document.getElementById('how-it-works')?.scrollIntoView({behavior:'smooth'})}><PlayCircle size={17} /> See how it works</button></div><div className="hero-trust"><div><strong>Visual</strong><span>Design without code</span></div><div><strong>Responsive</strong><span>Desktop & mobile</span></div><div><strong>Supported</strong><span>CS + Web Designer</span></div></div></div>
         <div className="hero-creative-studio"><div className="studio-toolbar"><span><MousePointer2 size={14}/> Select</span><span><Palette size={14}/> Style</span><span><WandSparkles size={14}/> Animate</span></div><div className="studio-stage"><div className="studio-page"><small>THE WEDDING OF</small><h3>Aurelia <em>&</em> Raynard</h3><p>Every promise deserves a beautiful beginning.</p><button>Open Invitation</button></div><div className="studio-floating-card card-a"><ImageIcon size={15}/><span>Gallery</span></div><div className="studio-floating-card card-b"><MessageCircle size={15}/><span>Greetings</span></div><div className="studio-floating-card card-c"><Palette size={15}/><span>Gradient</span></div></div><div className="studio-pages">{featuredTemplates.length ? featuredTemplates.map((template,index)=><button key={template.id} onClick={()=>onTemplate(template)} className={index===0?'active':''}><i style={{background:template.bg}}/><span>{template.name}</span></button>) : <><button className="active"><i/><span>Classic</span></button><button><i/><span>Editorial</span></button><button><i/><span>Storybook</span></button></>}</div></div>
@@ -1162,7 +1234,7 @@ function LandingPage({ setView, articles, templates, onTemplate, databaseOnline:
       <section className="logo-strip creative-strip"><span>DRAG & DROP</span><span>GRADIENT</span><span>ANIMATION</span><span>RSVP</span><span>GALLERY</span><span>SOUND</span><span>LIVE PREVIEW</span></section>
       <section id="inspiration" className="landing-section inspiration-section"><div className="section-intro"><span>DESIGN INSPIRATION</span><h2>Start from a feeling, not a blank page.</h2><p>Jelajahi gaya yang paling dekat dengan karakter pernikahan Anda, lalu personalisasi warna, typography, media, dan motion.</p></div><div className="inspiration-rail">{[['Editorial','Clean & timeless'],['Romantic','Soft & intimate'],['Modern','Bold & minimal'],['Traditional','Warm & cultural'],['Cinematic','Dramatic & immersive']].map(([name,desc],index)=><article key={name} className={`inspiration-card tone-${index}`} onClick={()=>document.getElementById('templates')?.scrollIntoView({behavior:'smooth'})}><span>{String(index+1).padStart(2,'0')}</span><h3>{name}</h3><p>{desc}</p><ArrowRight size={16}/></article>)}</div></section>
       <section id="how-it-works" className="landing-section product-section"><div className="section-intro"><span>CREATE VISUALLY</span><h2>Simple enough to start. Powerful enough to make it yours.</h2><p>Editor menggunakan pola yang familiar: pilih object, atur style, align, preview, undo, lalu publish.</p></div><div className="product-grid"><article className="product-card large"><div className="card-icon"><MousePointer2 size={20} /></div><h3>Direct visual editing</h3><p>Klik teks untuk edit langsung, drag Feature ke Column, align object, atur width, gradient, background, dan animation dari inspector.</p><div className="editor-mini"><div className="mini-tree"><span>Pages</span><i>Hero</i><i>Story</i><i>Gallery</i></div><div className="mini-canvas"><strong>Your Wedding</strong><span>Click to edit</span></div><div className="mini-style"><b>Style</b><i /><i /><i /></div></div></article><article className="product-card"><div className="card-icon"><Palette size={20} /></div><h3>Design system</h3><p>Solid, gradient, image background, spacing, typography, object alignment, dan responsive preview tersedia dalam satu workflow.</p><div className="gradient-orb-demo"><i/><i/><i/></div></article><article className="product-card dark"><div className="card-icon"><WandSparkles size={20} /></div><h3>Motion with control</h3><p>Pilih entrance, transition, visual effect, dan opening animation. Reduced-motion fallback menjaga pengalaman tetap nyaman.</p><div className="motion-demo"><i /><i /><i /><i /></div></article><article className="product-card wide"><div className="card-icon"><CheckCircle2 size={20} /></div><h3>Preview before you publish</h3><p>Desktop/mobile preview membantu memastikan hasil editor tetap representatif sebelum website dibagikan.</p><div className="role-flow"><span>Edit</span><ArrowRight size={16} /><span>Preview</span><ArrowRight size={16} /><span>Publish</span></div></article></div></section>
-      <section id="templates" className="landing-section template-showcase"><div className="section-intro light"><span>BEAUTIFUL BY DEFAULT</span><h2>Choose a design, then make it unmistakably yours.</h2><p>Klik template untuk melihat actual design, detail, harga, dan journey pemesanan.</p></div><div className="showcase-track">{templates.slice(0,6).map((template,index)=><article key={template.id} className={`showcase-card ${template.preset === 'split' ? 'split' : template.preset === 'cinematic' ? 'cinema' : template.preset === 'storybook' ? 'story' : index%2?'cinema':'split'}`} onClick={()=>onTemplate(template)}><div className="showcase-mini-preview">{template.canvasSections?.slice(0,2).map(section=><i key={section.id} style={{background:getGradientBackground(section.backgroundGradientEnabled,section.backgroundGradientFrom,section.backgroundGradientTo,section.backgroundGradientAngle,section.backgroundColor)}}/> )}</div><small>{template.category.toUpperCase()}</small><h3>{template.name}</h3><p>{template.description || 'A thoughtfully designed wedding website experience.'}</p><div className="showcase-price">{formatRupiah(template.price || 0)} <span>one-time</span></div><button>View design <ArrowRight size={14}/></button></article>)}</div></section>
+      <section id="templates" className="landing-section template-showcase"><div className="section-intro light"><span>BEAUTIFUL BY DEFAULT</span><h2>Choose a design, then make it unmistakably yours.</h2><p>Klik template untuk melihat actual design, detail, harga, dan journey pemesanan.</p></div><div className="showcase-track">{pricedTemplates.slice(0,6).map((template,index)=><article key={template.id} className={`showcase-card ${template.preset === 'split' ? 'split' : template.preset === 'cinematic' ? 'cinema' : template.preset === 'storybook' ? 'story' : index%2?'cinema':'split'}`} onClick={()=>onTemplate(template)}><div className="showcase-mini-preview">{template.canvasSections?.slice(0,2).map(section=><i key={section.id} style={{background:getGradientBackground(section.backgroundGradientEnabled,section.backgroundGradientFrom,section.backgroundGradientTo,section.backgroundGradientAngle,section.backgroundColor)}}/> )}</div><small>{template.category.toUpperCase()} · {template.premium?'PREMIUM':'STANDARD'}</small><h3>{template.name}</h3><p>{template.description || 'A thoughtfully designed wedding website experience.'}</p><div className="showcase-price">{formatRupiah(template.price || 0)} <span>one-time</span></div><button>View design <ArrowRight size={14}/></button></article>)}</div></section>
       <section className="landing-section trust-section"><div className="section-intro"><span>FROM DESIGN TO WEDDING DAY</span><h2>Everything stays connected after you choose a template.</h2></div><div className="trust-steps"><article><span>01</span><strong>Choose</strong><p>Pilih design yang paling sesuai.</p></article><article><span>02</span><strong>Personalize</strong><p>Atur content, photo, warna, effect, dan pages.</p></article><article><span>03</span><strong>Collaborate</strong><p>Customer Service dan Web Designer membantu proses Anda.</p></article><article><span>04</span><strong>Publish</strong><p>Bagikan URL personal dan mulai menerima RSVP.</p></article></div></section>
       <section id="articles" className="landing-section article-catalog-section"><div className="section-intro"><span>IKRARKU JOURNAL</span><h2>Ideas and guidance for a wedding that feels personal.</h2><p>Inspirasi design, planning, content, dan digital invitation yang dapat membantu Anda membuat keputusan dengan lebih mudah.</p></div>{articles.length?<div className="article-catalog-grid">{articles.slice(0,8).map((article,index)=><article key={article.id} className={`article-catalog-card tone-${index%4}`} onClick={()=>setSelectedArticle(article)}><div className="article-catalog-cover" style={article.coverUrl?{backgroundImage:`linear-gradient(180deg,rgba(4,22,17,.04),rgba(4,22,17,.68)),url(${article.coverUrl})`}:undefined}><span>{article.category}</span><small>{new Date(article.date).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'})}</small></div><div><h3>{article.title}</h3><p>{article.excerpt}</p><button>Read article <ArrowRight size={14}/></button></div></article>)}</div>:<div className="public-empty"><BookOpen size={28}/><strong>Wedding journal segera hadir</strong><span>Inspirasi dan panduan terbaru akan tampil di sini.</span></div>}</section>
       <section className="landing-cta-section"><div><span>READY TO BEGIN?</span><h2>Start with a design you already love.</h2><p>Pilih template, personalisasi bersama tim kami, lalu bagikan wedding website Anda.</p></div><button onClick={() => document.getElementById('templates')?.scrollIntoView({behavior:'smooth'})}>Explore templates <ArrowRight size={18} /></button></section>
@@ -1180,11 +1252,31 @@ function Auth({ view, setView, login, signupAccount }: { view: View; setView: (v
   const [showConfirm,setShowConfirm]=useState(false)
   const [submitting,setSubmitting]=useState(false)
   const [verificationUrl,setVerificationUrl]=useState('')
+  const [authError,setAuthError]=useState('')
   const passwordMatch=password===passwordConfirm
+  const signupDisabled=view==='signup'&&(!name||!email||!username||password.length<8||!passwordMatch)
+  const submit=async()=>{
+    if(submitting) return
+    setSubmitting(true);setAuthError('')
+    if(view==='signup'){
+      if(signupDisabled){setAuthError('Lengkapi data dan pastikan password minimal 8 karakter serta cocok.');setSubmitting(false);return}
+      const result=await signupAccount(name,username,password,passwordConfirm,email)
+      if(result.devVerificationUrl)setVerificationUrl(result.devVerificationUrl)
+    } else {
+      if(!username||!password){setAuthError('Username dan password wajib diisi.')}
+      else{const ok=await login(username,password);if(!ok)setAuthError('Username atau password salah. Periksa kembali lalu coba lagi.')}
+    }
+    setSubmitting(false)
+  }
+  const onFieldKeyDown=(event:{key:string;preventDefault:()=>void})=>{ if(event.key==='Enter'){ event.preventDefault(); void submit() } }
   return <div className="auth-page">
     <section className="auth-visual"><button className="auth-back" onClick={() => setView('landing')}><ArrowLeft size={16} /> Kembali ke website</button><Brand light /><div><div className="eyebrow light">WEDDING WEBSITE WORKSPACE</div><h1>Every promise deserves<br />a beautiful beginning.</h1><p>Gunakan akun Anda untuk melanjutkan ke workspace ikrarku dan mengakses fitur sesuai peran Anda.</p></div><div className="auth-quote">“Rencanakan janji, rayakan cerita.”</div></section>
-    <section className="auth-form-wrap"><div className="auth-card"><div className="mobile-brand"><Brand /></div><span className="auth-kicker">{view === 'signup' ? 'CREATE USER ACCOUNT' : 'WELCOME BACK'}</span><h2>{view === 'signup' ? 'Mulai cerita Anda' : 'Masuk ke ikrarku'}</h2><p>{view === 'signup' ? 'Email wajib diverifikasi sebelum akun dapat digunakan.' : 'Masukkan username dan password akun terdaftar.'}</p>{view === 'signup' && <><label>Full name<input value={name} onChange={event=>setName(event.target.value)}/></label><label>Email<input value={email} onChange={event=>setEmail(event.target.value)} type="email"/></label></>}<label>Username<input value={username} onChange={event=>setUsername(event.target.value)}/></label><label>Password<div className="password-field"><input type={showPassword?'text':'password'} value={password} onChange={event=>setPassword(event.target.value)}/><button type="button" aria-label={showPassword?'Hide password':'Show password'} onClick={()=>setShowPassword(value=>!value)}>{showPassword?<EyeOff size={16}/>:<Eye size={16}/>}</button></div></label>{view==='signup'&&<label>Repeat Password<div className="password-field"><input type={showConfirm?'text':'password'} value={passwordConfirm} onChange={event=>setPasswordConfirm(event.target.value)}/><button type="button" aria-label={showConfirm?'Hide repeated password':'Show repeated password'} onClick={()=>setShowConfirm(value=>!value)}>{showConfirm?<EyeOff size={16}/>:<Eye size={16}/>}</button></div>{passwordConfirm&&<small className={passwordMatch?'password-ok':'password-error'}>{passwordMatch?'Password sesuai':'Password belum sama'}</small>}</label>}{view==='login'&&<div className="login-hints"><span>Akun tim dikelola oleh Administrator</span><span>Butuh bantuan akses? Hubungi Administrator tim Anda.</span></div>}{verificationUrl&&<div className="verification-dev-link"><CheckCircle2 size={18}/><div><strong>Email konfirmasi masuk ke outbox.</strong><span>Localhost helper:</span><button onClick={()=>{window.history.pushState({},'',new URL(verificationUrl).pathname+new URL(verificationUrl).search);setView('verify-email')}}>Buka tautan verifikasi</button></div></div>}<button className="primary-btn full" disabled={submitting || (view==='signup'&&(!name||!email||!username||password.length<8||!passwordMatch))} onClick={async()=>{setSubmitting(true);if(view==='signup'){const result=await signupAccount(name,username,password,passwordConfirm,email);if(result.devVerificationUrl)setVerificationUrl(result.devVerificationUrl)}else await login(username,password);setSubmitting(false)}}>{submitting?'Processing...':view === 'signup' ? 'Register & Send Verification' : 'Sign in'} <ArrowRight size={16}/></button><div className="auth-switch">{view === 'signup' ? 'Sudah memiliki akun?' : 'Belum memiliki akun?'} <button onClick={() => setView(view === 'signup' ? 'login' : 'signup')}>{view === 'signup' ? 'Sign in' : 'Sign up'}</button></div></div></section>
+    <section className="auth-form-wrap"><div className="auth-card"><div className="mobile-brand"><Brand /></div><span className="auth-kicker">{view === 'signup' ? 'CREATE USER ACCOUNT' : 'WELCOME BACK'}</span><h2>{view === 'signup' ? 'Mulai cerita Anda' : 'Masuk ke ikrarku'}</h2><p>{view === 'signup' ? 'Email wajib diverifikasi sebelum akun dapat digunakan.' : 'Masukkan username dan password akun terdaftar.'}</p>{view === 'signup' && <><label>Full name<input value={name} onChange={event=>setName(event.target.value)} onKeyDown={onFieldKeyDown}/></label><label>Email<input value={email} onChange={event=>setEmail(event.target.value)} type="email" onKeyDown={onFieldKeyDown}/></label></>}<label>Username<input value={username} onChange={event=>{setUsername(event.target.value);setAuthError('')}} onKeyDown={onFieldKeyDown}/></label><label>Password<div className="password-field"><input type={showPassword?'text':'password'} value={password} onChange={event=>{setPassword(event.target.value);setAuthError('')}} onKeyDown={onFieldKeyDown}/><button type="button" aria-label={showPassword?'Hide password':'Show password'} onClick={()=>setShowPassword(value=>!value)}>{showPassword?<EyeOff size={16}/>:<Eye size={16}/>}</button></div>{view==='signup'&&<small className={`field-hint ${password && password.length<8?'field-hint-warn':''}`}>Minimal 8 karakter. Disarankan gabungan huruf besar, angka, dan simbol.</small>}</label>{view==='signup'&&<label>Repeat Password<div className="password-field"><input type={showConfirm?'text':'password'} value={passwordConfirm} onChange={event=>setPasswordConfirm(event.target.value)} onKeyDown={onFieldKeyDown}/><button type="button" aria-label={showConfirm?'Hide repeated password':'Show repeated password'} onClick={()=>setShowConfirm(value=>!value)}>{showConfirm?<EyeOff size={16}/>:<Eye size={16}/>}</button></div>{passwordConfirm&&<small className={passwordMatch?'password-ok':'password-error'}>{passwordMatch?'Password sesuai':'Password belum sama'}</small>}</label>}{view==='login'&&<div className="login-hints"><span>Akun tim dikelola oleh Administrator</span><span>Butuh bantuan akses? Hubungi Administrator tim Anda.</span></div>}{verificationUrl&&<div className="verification-dev-link"><CheckCircle2 size={18}/><div><strong>Registrasi berhasil — akun belum aktif.</strong><span>Aktifkan akun untuk bisa login:</span><button onClick={()=>{window.history.pushState({},'',new URL(verificationUrl).pathname+new URL(verificationUrl).search);setView('verify-email')}}>Aktifkan akun sekarang</button></div></div>}{authError&&<div className="auth-error" role="alert"><X size={16}/><span>{authError}</span></div>}<button className="primary-btn full" disabled={submitting || signupDisabled} onClick={()=>void submit()}>{submitting?'Processing...':view === 'signup' ? 'Register & Send Verification' : 'Sign in'} <ArrowRight size={16}/></button><div className="auth-switch">{view === 'signup' ? 'Sudah memiliki akun?' : 'Belum memiliki akun?'} <button onClick={() => { setName('');setEmail('');setUsername('');setPassword('');setPasswordConfirm('');setAuthError('');setVerificationUrl('');setShowPassword(false);setShowConfirm(false);setView(view === 'signup' ? 'login' : 'signup') }}>{view === 'signup' ? 'Sign in' : 'Sign up'}</button></div></div></section>
   </div>
+}
+
+function NotFoundPage({onHome}:{onHome:()=>void}){
+  return <div className="notfound-page"><Brand/><div className="notfound-card"><span className="notfound-code">404</span><h1>Halaman tidak ditemukan</h1><p>Maaf, alamat yang Anda tuju tidak tersedia atau sudah dipindahkan. Periksa kembali tautannya atau kembali ke beranda.</p><button className="primary-btn" onClick={onHome}><ArrowLeft size={16}/>Kembali ke beranda</button></div></div>
 }
 
 function VerifyEmailPage({setView}:{setView:(view:View)=>void}){
@@ -1198,7 +1290,7 @@ function VerifyEmailPage({setView}:{setView:(view:View)=>void}){
 
 function TemplateJourneyPage({ template, onBack, onPreview, onOrder }: { template:Template; onBack:()=>void; onPreview:()=>void; onOrder:()=>void }) {
   const [previewOpen,setPreviewOpen]=useState(false)
-  return <div className="journey-page"><header><button onClick={onBack}><ArrowLeft size={17}/>Kembali</button><Brand/><button className="journey-order" onClick={onOrder}><ShoppingCart size={16}/>Pesan Sekarang</button></header><main><section className={`journey-visual preset-${template.preset || 'classic'}`} style={template.preview?{backgroundImage:`linear-gradient(180deg,rgba(5,20,15,.1),rgba(5,20,15,.65)),url(${template.preview})`}:{background:template.bg}}><div><span>{template.category}</span><h1>{template.name}</h1><p>A wedding website collection by ikrarku Sites.</p></div></section><section className="journey-content"><div><span className="eyebrow">TEMPLATE JOURNEY</span><h2>A story designed to feel unmistakably yours.</h2><p>{template.description || 'Template premium dengan storytelling, responsif, dan siap dikustomisasi melalui visual Canvas Editor.'}</p><div className="journey-features"><article><LayoutTemplate size={20}/><strong>Responsive Canvas</strong><span>Desktop dan mobile experience yang konsisten.</span></article><article><WandSparkles size={20}/><strong>No-code customization</strong><span>Text, image, motion, sound, RSVP, dan gallery.</span></article><article><UserCheck size={20}/><strong>Managed onboarding</strong><span>Setelah pembayaran, order di-assign ke CS dan Web Designer.</span></article></div><button className="secondary-btn" onClick={()=>{setPreviewOpen(true);onPreview()}}><Eye size={16}/>Preview Template</button></div><aside><small>ONE-TIME PACKAGE</small><strong>{formatRupiah(template.price || 0)}</strong><span>Sudah termasuk onboarding dan project assignment.</span><hr/><ul><li><Check size={14}/>Template license</li><li><Check size={14}/>Customer Service onboarding</li><li><Check size={14}/>Web Designer assignment</li><li><Check size={14}/>Email & PDF receipt</li></ul><button onClick={onOrder}><ShoppingCart size={17}/>Pesan Sekarang</button></aside></section></main>{previewOpen&&<div className="journey-preview-overlay actual-template-preview"><button className="preview-close" onClick={()=>setPreviewOpen(false)}><X size={18}/></button><div className="actual-template-preview-shell">{template.canvasSections?.length?<WeddingCanvas page="pages" sections={hydrateSections(template.canvasSections)} selectedTemplate={template} greetings={[]} addGreeting={()=>undefined} guests={[]} addGuest={()=>undefined}/>:<div className={`journey-preview-window preset-${template.preset || 'classic'}`} style={template.preview?{backgroundImage:`linear-gradient(180deg,rgba(5,20,15,.08),rgba(5,20,15,.58)),url(${template.preview})`}:{background:template.bg}}><h2>{template.name}</h2><p>Preview image template.</p></div>}</div></div>}</div>
+  return <div className="journey-page"><header><button onClick={onBack}><ArrowLeft size={17}/>Kembali</button><Brand/><button className="journey-order" onClick={onOrder}><ShoppingCart size={16}/>Pesan Sekarang</button></header><main><section className={`journey-visual preset-${template.preset || 'classic'}`} style={template.preview?{backgroundImage:`linear-gradient(180deg,rgba(5,20,15,.1),rgba(5,20,15,.65)),url(${template.preview})`}:{background:template.bg}}><div><span>{template.category}</span><h1>{template.name}</h1><p>A wedding website collection by ikrarku Sites.</p></div></section><section className="journey-content"><div><span className="eyebrow">TEMPLATE JOURNEY</span><h2>A story designed to feel unmistakably yours.</h2><p>{template.description || 'Template premium dengan storytelling, responsif, dan siap dikustomisasi melalui visual Canvas Editor.'}</p><div className="journey-features"><article><LayoutTemplate size={20}/><strong>Responsive Canvas</strong><span>Desktop dan mobile experience yang konsisten.</span></article><article><WandSparkles size={20}/><strong>No-code customization</strong><span>Text, image, motion, sound, RSVP, dan gallery.</span></article><article><UserCheck size={20}/><strong>Managed onboarding</strong><span>Setelah pembayaran, order di-assign ke CS dan Web Designer.</span></article></div><button className="secondary-btn" onClick={()=>{setPreviewOpen(true);onPreview()}}><Eye size={16}/>Preview Template</button></div><aside><small>ONE-TIME PACKAGE · {template.premium?'PREMIUM':'STANDARD'}</small><strong>{formatRupiah(template.price || 0)}</strong><span>Sudah termasuk onboarding dan project assignment.</span><hr/><ul><li><Check size={14}/>Template license</li><li><Check size={14}/>Customer Service onboarding</li><li><Check size={14}/>Web Designer assignment</li><li><Check size={14}/>Email & PDF receipt</li>{template.premium&&<><li><Check size={14}/>Premium motion & sound library</li><li><Check size={14}/>Priority onboarding</li></>}</ul><button onClick={onOrder}><ShoppingCart size={17}/>Pesan Sekarang</button></aside></section></main>{previewOpen&&<div className="journey-preview-overlay actual-template-preview"><button className="preview-close" onClick={()=>setPreviewOpen(false)}><X size={18}/></button><div className="actual-template-preview-shell">{template.canvasSections?.length?<WeddingCanvas page="pages" sections={hydrateSections(template.canvasSections)} selectedTemplate={template} greetings={[]} addGreeting={()=>undefined} guests={[]} addGuest={()=>undefined}/>:<div className={`journey-preview-window preset-${template.preset || 'classic'}`} style={template.preview?{backgroundImage:`linear-gradient(180deg,rgba(5,20,15,.08),rgba(5,20,15,.58)),url(${template.preview})`}:{background:template.bg}}><h2>{template.name}</h2><p>Preview image template.</p></div>}</div></div>}</div>
 }
 
 function CheckoutPage({ template, paymentMethods, order, onBack, createOrder, payOrder, onSignIn, onRegister }: { template:Template; paymentMethods:PaymentMethod[]; order:OrderResult|null; onBack:()=>void; createOrder:(name:string,email:string,phone:string)=>Promise<OrderResult|null>; payOrder:(method:string)=>Promise<boolean>; onSignIn:()=>void; onRegister:()=>void }) {

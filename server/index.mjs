@@ -317,6 +317,21 @@ function initDb() {
     insertUser.run('user_admin','Platform','Admin',bootstrapEmail,bootstrapUsername,bcrypt.hashSync(bootstrapPassword,10),'role_admin',1,now(),now())
   }
 
+  // Ensure at least one active Customer Service and one active Editor exist so paid orders
+  // can be assigned (payment is rejected otherwise). Idempotent: only seeds when missing.
+  const domain=(process.env.ADMIN_BOOTSTRAP_EMAIL||'admin@ikrarku.local').split('@')[1]||'ikrarku.local'
+  const staffPassword=process.env.STAFF_BOOTSTRAP_PASSWORD||process.env.ADMIN_BOOTSTRAP_PASSWORD||(NODE_ENV==='production'?crypto.randomBytes(18).toString('base64'):'staff')
+  const ensureStaff=(roleId,uname,fname)=>{
+    const existing=db.prepare('SELECT COUNT(*) count FROM users WHERE role_id=? AND active=1').get(roleId).count
+    if(existing) return
+    try{
+      db.prepare(`INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(id('usr'),fname,'ikrarku',`${uname}@${domain}`,uname,bcrypt.hashSync(staffPassword,10),roleId,1,1,now(),now())
+    }catch{/* username/email may already exist */}
+  }
+  ensureStaff('role_cs','cs','Customer Service')
+  ensureStaff('role_editor','editor','Web Designer')
+
   const templateCount = db.prepare('SELECT COUNT(*) count FROM templates').get().count
   if (!templateCount) {
     const insert = db.prepare(`INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)

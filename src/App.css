@@ -297,3 +297,86 @@ html,body,#root{min-width:0!important}
   .actual-preview-cover{padding:8% 6%}
   .actual-preview-cover-content>strong{font-size:16px}
 }
+
+.auth-error{display:flex;align-items:center;gap:8px;margin:2px 0 14px;padding:10px 12px;border:1px solid #edc9c4;background:#fbeeec;border-radius:9px;color:#a5433b;font-size:11px;font-weight:600}.auth-error svg{flex:0 0 auto}
+
+/* ---- QA fixes: TC-002 navbar mobile, TC-003 password hint, TC-004 password reveal ---- */
+.landing-nav-actions{display:flex;gap:8px;align-items:center}
+.landing-burger{display:none;width:42px;height:40px;border:1px solid rgba(31,72,59,.15);background:#fff;border-radius:10px;color:#245243;align-items:center;justify-content:center;padding:0}
+.landing-v015 .landing-nav .landing-mobile-menu{display:none}
+.field-hint{display:block;margin-top:6px;font-size:10px;color:#7c8a84;line-height:1.5}
+.field-hint-warn{color:#b07a2f}
+/* Remove browser-native password reveal so only the app's eye toggle shows (fixes double-eye) */
+.password-field input::-ms-reveal,.password-field input::-ms-clear{display:none}
+.password-field input::-webkit-credentials-auto-fill-button,.password-field input::-webkit-strong-password-auto-fill-button{visibility:hidden;display:none!important;pointer-events:none;height:0;width:0;margin:0}
+@media(max-width:900px){
+  html:has(.landing-page),body:has(.landing-page),#root:has(.landing-page){min-width:0}
+  .landing-v015 .landing-nav .landing-login,.landing-v015 .landing-nav .landing-cta{display:none}
+  .landing-v015 .landing-nav .landing-burger{display:inline-flex}
+  .landing-v015 .landing-nav .landing-mobile-menu{display:flex;flex-direction:column;position:absolute;top:78px;left:0;right:0;background:rgba(249,249,245,.98);backdrop-filter:blur(18px);border-bottom:1px solid rgba(31,72,59,.1);padding:10px 18px 16px;gap:2px;box-shadow:0 22px 42px rgba(20,50,40,.14)}
+  .landing-v015 .landing-nav .landing-mobile-menu a,.landing-v015 .landing-nav .landing-mobile-menu button{text-align:left;padding:12px 10px;font-size:13px;color:#2d4a40;background:none;border:0;border-radius:9px;display:flex;align-items:center;gap:7px}
+  .landing-v015 .landing-nav .landing-mobile-menu a:hover,.landing-v015 .landing-nav .landing-mobile-menu button:hover{background:#eef3f0}
+  .landing-v015 .landing-nav .landing-mobile-menu .mobile-menu-signin{color:#315046;font-weight:700;margin-top:4px;border-top:1px solid #e4ebe6}
+  .landing-v015 .landing-nav .landing-mobile-menu .mobile-menu-cta{color:#fff;background:#153f34;font-weight:700;justify-content:center;margin-top:6px}
+}
+
+/* ---- QA fixes batch 2: TC-016 auth responsive, TC-010 landing mobile sections ---- */
+@media(max-width:900px){
+  /* TC-016: sign in/up must scroll vertically only, no horizontal overflow */
+  html:has(.auth-page),body:has(.auth-page),#root:has(.auth-page){min-width:0}
+  .auth-page{grid-template-columns:1fr;overflow-x:hidden;min-height:100vh}
+  .auth-visual{display:none}
+  .auth-form-wrap{padding:32px 20px}
+  .auth-card{width:100%}
+  .mobile-brand{display:flex;margin-bottom:18px}
+
+  /* TC-010: prevent decorative absolute elements from overlapping text + tighten spacing */
+  .landing-v015 .product-grid{grid-template-columns:1fr;gap:16px}
+  .landing-v015 .product-card{min-height:auto;padding:24px}
+  .landing-v015 .product-card.large{grid-row:auto;min-height:auto}
+  .landing-v015 .product-card.wide{grid-column:auto}
+  .landing-v015 .editor-mini,.landing-v015 .motion-demo,.landing-v015 .gradient-orb-demo,.landing-v015 .metric-ring{position:static;inset:auto;height:auto;margin-top:18px;width:100%}
+  .landing-v015 .motion-demo{display:flex;gap:10px;height:60px;position:relative}
+  .landing-v015 .editor-mini{display:grid;height:230px}
+
+  /* TC-010: templates showcase single column, no cramped/broken layout */
+  .landing-v015 .showcase-track{grid-template-columns:1fr;gap:16px}
+  .landing-v015 .showcase-card{height:auto;min-height:360px;padding:26px}
+
+  /* TC-010: "Start with a design you already love." centered & stacked on mobile */
+  .landing-v015 .landing-cta-section{flex-direction:column;text-align:center;gap:22px;padding:42px 26px;margin:0 18px 70px}
+  .landing-v015 .landing-cta-section button{align-self:center}
+  .landing-v015 .landing-footer{flex-direction:column;height:auto;padding:26px 18px;gap:12px;text-align:center}
+}
+@media(max-width:600px){
+  .landing-v015 .hero-copy h1{font-size:40px}
+  .landing-v015 .section-intro h2{font-size:30px}
+  .landing-v015 .inspiration-rail{grid-template-columns:1fr}
+  .landing-v015 .trust-steps{grid-template-columns:1fr}
+  .landing-v015 .roles-grid{grid-template-columns:1fr}
+}
+
+/* ---- QA fixes batch 3: TC-005/017 broken/overlap/invisible, TC-014 404, TC-018 ---- */
+/* TC-005 #1: "Kembali ke website" no longer overlaps the ikrarku logo on the sign-in visual */
+.auth-back{position:static;align-self:flex-start;margin-bottom:18px}
+/* TC-005 #4: "Wedding journal segera hadir" was white on a light section (invisible) */
+.article-catalog-section .public-empty{color:#2f4740;border:1px dashed rgba(24,59,49,.22);background:#fff}
+.article-catalog-section .public-empty span{color:#77857f}
+.article-catalog-section .public-empty svg{color:#125946}
+/* TC-005/017: guarantee a designed background so a slow/missing reference image never looks broken */
+.mock-preview{background:linear-gradient(145deg,#1f4a3c,#0c2a22),linear-gradient(145deg,rgba(10,35,27,.2),rgba(6,20,15,.7)),url('/themes/cover-reference.png') center/cover}
+.mini-canvas{background:linear-gradient(145deg,#20323a,#0e2a34),linear-gradient(rgba(7,28,22,.35),rgba(7,28,22,.75)),url('/themes/split-reference.png') center/cover}
+.showcase-card.split{background:linear-gradient(150deg,#17352c,#0c211b),url('/themes/split-reference.png') center/cover}
+.showcase-card.cinema{background:linear-gradient(135deg,#1a0a0c,#090909),linear-gradient(135deg,rgba(0,0,0,.05),rgba(0,0,0,.4)),url('/themes/cover-reference.png') center/cover}
+/* TC-017 #1: inspiration card text no longer clipped when the viewport shrinks */
+.inspiration-card{overflow:visible}
+.inspiration-card h3{word-break:break-word;overflow-wrap:anywhere}
+.inspiration-card p{opacity:.85;line-height:1.5}
+/* TC-014: custom 404 page */
+.notfound-page{min-height:100vh;background:radial-gradient(circle at 20% 10%,#eff7f2,#f8f5ee 45%,#f2eee5);display:flex;flex-direction:column;align-items:center;padding:42px;min-width:0}
+.notfound-card{margin:auto;width:min(560px,94vw);background:#fff;border:1px solid var(--line);border-radius:22px;padding:48px 44px;text-align:center;box-shadow:0 30px 80px rgba(20,50,40,.12)}
+.notfound-code{display:inline-block;font-family:'Playfair Display',Georgia,serif;font-size:64px;color:#125946;letter-spacing:2px}
+.notfound-card h1{font-family:'Playfair Display',Georgia,serif;font-size:30px;color:#173f33;margin:6px 0 10px}
+.notfound-card p{color:#72807b;line-height:1.65;margin-bottom:22px}
+.notfound-card .primary-btn{margin:auto}
+@media(max-width:900px){ html:has(.notfound-page),body:has(.notfound-page),#root:has(.notfound-page){min-width:0} }
