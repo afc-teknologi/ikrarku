@@ -585,6 +585,10 @@ function App() {
   useEffect(() => {
     let active = true
     const bootstrap = async () => {
+      // Capture the path BEFORE any await — the title/URL effect may rewrite the address bar to '/'
+      // on first paint, which would otherwise erase the slug before we can detect an unknown route.
+      const pathSlug=window.location.pathname.replace(/^\/+|\/+$/g,'')
+      const reserved=new Set(['','login','signup','verify-email','dashboard','templates','template-detail','pesan-sekarang','pembayaran-berhasil','articles','settings','admin','orders','my-orders','users','roles','tasks','audit-log','help','cs-dashboard','customer-service','sound-library','payment-settings','editor'])
       try {
         const data = await api.publicBootstrap()
         if (!active) return
@@ -595,8 +599,6 @@ function App() {
         setArticleItems((data.articles || []).map((item: ArticleItem) => ({ ...item, coverUrl: item.coverUrl ? assetUrl(item.coverUrl) : undefined })))
         setPaymentMethods(data.paymentMethods || [])
         setDatabaseOnline(true)
-        const pathSlug=window.location.pathname.replace(/^\/+|\/+$/g,'')
-        const reserved=new Set(['','login','signup','verify-email','dashboard','templates','template-detail','pesan-sekarang','pembayaran-berhasil','articles','settings','admin','orders','my-orders','users','roles','tasks','audit-log','help','cs-dashboard','customer-service','sound-library','payment-settings','editor'])
         let slugNotFound=false
         if(pathSlug==='verify-email') setView('verify-email')
         if(pathSlug && !reserved.has(pathSlug)) {
@@ -792,13 +794,19 @@ function App() {
       'cs-dashboard':'Customer Service — ikrarku Sites', 'customer-service':'Support Inbox — ikrarku Sites',
     }
     document.title=titles[view]||'ikrarku Sites'
+    if(notFound || publicSiteData) return
+    const appPaths=new Set(['/login','/signup','/verify-email','/templates','/pesan-sekarang','/pembayaran-berhasil','/articles'])
+    if(view==='landing'){
+      if(appPaths.has(window.location.pathname)){ try{ window.history.replaceState(window.history.state,'','/') }catch{/* ignore */} }
+      return
+    }
     const paths:Partial<Record<View,string>>={
-      landing:'/', login:'/login', signup:'/signup', 'verify-email':'/verify-email', 'not-found':window.location.pathname,
+      login:'/login', signup:'/signup', 'verify-email':'/verify-email',
       templates:'/templates', 'template-detail':'/templates', checkout:'/pesan-sekarang', 'payment-success':'/pembayaran-berhasil', articles:'/articles',
     }
     const target=paths[view]
     if(target && window.location.pathname!==target){ try{ window.history.replaceState(window.history.state,'',target+window.location.search) }catch{/* ignore */} }
-  },[view])
+  },[view,notFound,publicSiteData])
 
   const flash = (message: string) => {
     setToast(message)
