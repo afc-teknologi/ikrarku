@@ -596,12 +596,13 @@ function App() {
         setDatabaseOnline(true)
         const pathSlug=window.location.pathname.replace(/^\/+|\/+$/g,'')
         const reserved=new Set(['','login','signup','verify-email','dashboard','templates','template-detail','pesan-sekarang','pembayaran-berhasil','articles','settings','admin','orders','my-orders','users','roles','tasks','audit-log','help','cs-dashboard','customer-service','sound-library','payment-settings','editor'])
+        let slugNotFound=false
         if(pathSlug==='verify-email') setView('verify-email')
         if(pathSlug && !reserved.has(pathSlug)) {
           try {
             const publicSite=await api.publicSite(pathSlug)
             setPublicSiteData({...publicSite,sections:hydrateSections(publicSite.sections || [])})
-          } catch { setPublicSiteData(null); setView('not-found') }
+          } catch { setPublicSiteData(null); slugNotFound=true }
         }
         const token = localStorage.getItem('ikrarku-api-token')
         if (token) {
@@ -624,6 +625,7 @@ function App() {
             setView('landing')
           }
         }
+        if(slugNotFound) setView('not-found')
       } catch (error) {
         console.error(error)
         setDatabaseOnline(false)
@@ -1079,6 +1081,7 @@ function App() {
     if (!checkoutOrder) return false
     try {
       const paid = await api.payOrder(checkoutOrder.id,paymentMethod)
+      if(paid.paymentUrl){ window.location.href=paid.paymentUrl; return true }
       const result = { ...checkoutOrder, ...paid, receiptUrl:paid.receiptUrl ? assetUrl(paid.receiptUrl) : undefined }
       setLastPaidOrder(result)
       sessionStorage.removeItem('ikrarku-checkout-draft')
@@ -1253,6 +1256,7 @@ function Auth({ view, setView, login, signupAccount }: { view: View; setView: (v
   const [submitting,setSubmitting]=useState(false)
   const [verificationUrl,setVerificationUrl]=useState('')
   const [authError,setAuthError]=useState('')
+  const [signupSubmitted,setSignupSubmitted]=useState(false)
   const passwordMatch=password===passwordConfirm
   const signupDisabled=view==='signup'&&(!name||!email||!username||password.length<8||!passwordMatch)
   const submit=async()=>{
@@ -1261,6 +1265,7 @@ function Auth({ view, setView, login, signupAccount }: { view: View; setView: (v
     if(view==='signup'){
       if(signupDisabled){setAuthError('Lengkapi data dan pastikan password minimal 8 karakter serta cocok.');setSubmitting(false);return}
       const result=await signupAccount(name,username,password,passwordConfirm,email)
+      if(result.ok)setSignupSubmitted(true)
       if(result.devVerificationUrl)setVerificationUrl(result.devVerificationUrl)
     } else {
       if(!username||!password){setAuthError('Username dan password wajib diisi.')}
@@ -1271,7 +1276,7 @@ function Auth({ view, setView, login, signupAccount }: { view: View; setView: (v
   const onFieldKeyDown=(event:{key:string;preventDefault:()=>void})=>{ if(event.key==='Enter'){ event.preventDefault(); void submit() } }
   return <div className="auth-page">
     <section className="auth-visual"><button className="auth-back" onClick={() => setView('landing')}><ArrowLeft size={16} /> Kembali ke website</button><Brand light /><div><div className="eyebrow light">WEDDING WEBSITE WORKSPACE</div><h1>Every promise deserves<br />a beautiful beginning.</h1><p>Gunakan akun Anda untuk melanjutkan ke workspace ikrarku dan mengakses fitur sesuai peran Anda.</p></div><div className="auth-quote">“Rencanakan janji, rayakan cerita.”</div></section>
-    <section className="auth-form-wrap"><div className="auth-card"><div className="mobile-brand"><Brand /></div><span className="auth-kicker">{view === 'signup' ? 'CREATE USER ACCOUNT' : 'WELCOME BACK'}</span><h2>{view === 'signup' ? 'Mulai cerita Anda' : 'Masuk ke ikrarku'}</h2><p>{view === 'signup' ? 'Email wajib diverifikasi sebelum akun dapat digunakan.' : 'Masukkan username dan password akun terdaftar.'}</p>{view === 'signup' && <><label>Full name<input value={name} onChange={event=>setName(event.target.value)} onKeyDown={onFieldKeyDown}/></label><label>Email<input value={email} onChange={event=>setEmail(event.target.value)} type="email" onKeyDown={onFieldKeyDown}/></label></>}<label>Username<input value={username} onChange={event=>{setUsername(event.target.value);setAuthError('')}} onKeyDown={onFieldKeyDown}/></label><label>Password<div className="password-field"><input type={showPassword?'text':'password'} value={password} onChange={event=>{setPassword(event.target.value);setAuthError('')}} onKeyDown={onFieldKeyDown}/><button type="button" aria-label={showPassword?'Hide password':'Show password'} onClick={()=>setShowPassword(value=>!value)}>{showPassword?<EyeOff size={16}/>:<Eye size={16}/>}</button></div>{view==='signup'&&<small className={`field-hint ${password && password.length<8?'field-hint-warn':''}`}>Minimal 8 karakter. Disarankan gabungan huruf besar, angka, dan simbol.</small>}</label>{view==='signup'&&<label>Repeat Password<div className="password-field"><input type={showConfirm?'text':'password'} value={passwordConfirm} onChange={event=>setPasswordConfirm(event.target.value)} onKeyDown={onFieldKeyDown}/><button type="button" aria-label={showConfirm?'Hide repeated password':'Show repeated password'} onClick={()=>setShowConfirm(value=>!value)}>{showConfirm?<EyeOff size={16}/>:<Eye size={16}/>}</button></div>{passwordConfirm&&<small className={passwordMatch?'password-ok':'password-error'}>{passwordMatch?'Password sesuai':'Password belum sama'}</small>}</label>}{view==='login'&&<div className="login-hints"><span>Akun tim dikelola oleh Administrator</span><span>Butuh bantuan akses? Hubungi Administrator tim Anda.</span></div>}{verificationUrl&&<div className="verification-dev-link"><CheckCircle2 size={18}/><div><strong>Registrasi berhasil — akun belum aktif.</strong><span>Aktifkan akun untuk bisa login:</span><button onClick={()=>{window.history.pushState({},'',new URL(verificationUrl).pathname+new URL(verificationUrl).search);setView('verify-email')}}>Aktifkan akun sekarang</button></div></div>}{authError&&<div className="auth-error" role="alert"><X size={16}/><span>{authError}</span></div>}<button className="primary-btn full" disabled={submitting || signupDisabled} onClick={()=>void submit()}>{submitting?'Processing...':view === 'signup' ? 'Register & Send Verification' : 'Sign in'} <ArrowRight size={16}/></button><div className="auth-switch">{view === 'signup' ? 'Sudah memiliki akun?' : 'Belum memiliki akun?'} <button onClick={() => { setName('');setEmail('');setUsername('');setPassword('');setPasswordConfirm('');setAuthError('');setVerificationUrl('');setShowPassword(false);setShowConfirm(false);setView(view === 'signup' ? 'login' : 'signup') }}>{view === 'signup' ? 'Sign in' : 'Sign up'}</button></div></div></section>
+    <section className="auth-form-wrap"><div className="auth-card"><div className="mobile-brand"><Brand /></div><span className="auth-kicker">{view === 'signup' ? 'CREATE USER ACCOUNT' : 'WELCOME BACK'}</span><h2>{view === 'signup' ? 'Mulai cerita Anda' : 'Masuk ke ikrarku'}</h2><p>{view === 'signup' ? 'Email wajib diverifikasi sebelum akun dapat digunakan.' : 'Masukkan username dan password akun terdaftar.'}</p><form className="auth-fields" onSubmit={event=>{event.preventDefault();if(!submitting)void submit()}}>{view === 'signup' && <><label>Full name<input value={name} onChange={event=>setName(event.target.value)} onKeyDown={onFieldKeyDown}/></label><label>Email<input value={email} onChange={event=>setEmail(event.target.value)} type="email" onKeyDown={onFieldKeyDown}/></label></>}<label>Username<input value={username} onChange={event=>{setUsername(event.target.value);setAuthError('')}} onKeyDown={onFieldKeyDown}/></label><label>Password<div className="password-field"><input type={showPassword?'text':'password'} value={password} onChange={event=>{setPassword(event.target.value);setAuthError('')}} onKeyDown={onFieldKeyDown}/><button type="button" aria-label={showPassword?'Hide password':'Show password'} onClick={()=>setShowPassword(value=>!value)}>{showPassword?<EyeOff size={16}/>:<Eye size={16}/>}</button></div>{view==='signup'&&<small className={`field-hint ${password && password.length<8?'field-hint-warn':''}`}>Minimal 8 karakter. Disarankan gabungan huruf besar, angka, dan simbol.</small>}</label>{view==='signup'&&<label>Repeat Password<div className="password-field"><input type={showConfirm?'text':'password'} value={passwordConfirm} onChange={event=>setPasswordConfirm(event.target.value)} onKeyDown={onFieldKeyDown}/><button type="button" aria-label={showConfirm?'Hide repeated password':'Show repeated password'} onClick={()=>setShowConfirm(value=>!value)}>{showConfirm?<EyeOff size={16}/>:<Eye size={16}/>}</button></div>{passwordConfirm&&<small className={passwordMatch?'password-ok':'password-error'}>{passwordMatch?'Password sesuai':'Password belum sama'}</small>}</label>}{view==='login'&&<div className="login-hints"><span>Akun tim dikelola oleh Administrator</span><span>Butuh bantuan akses? Hubungi Administrator tim Anda.</span></div>}{signupSubmitted&&<div className="verification-dev-link"><CheckCircle2 size={18}/><div><strong>Registrasi berhasil.</strong><span>Kami mengirim tautan verifikasi ke {email}. Buka email dan klik tautannya untuk mengaktifkan akun sebelum login.</span>{verificationUrl&&<button type="button" onClick={()=>{window.history.pushState({},'',new URL(verificationUrl).pathname+new URL(verificationUrl).search);setView('verify-email')}}>Buka tautan verifikasi (dev)</button>}</div></div>}{authError&&<div className="auth-error" role="alert"><X size={16}/><span>{authError}</span></div>}<button type="submit" className="primary-btn full" disabled={submitting || signupDisabled}>{submitting?'Processing...':view === 'signup' ? 'Register & Send Verification' : 'Sign in'} <ArrowRight size={16}/></button></form><div className="auth-switch">{view === 'signup' ? 'Sudah memiliki akun?' : 'Belum memiliki akun?'} <button type="button" onClick={() => { setName('');setEmail('');setUsername('');setPassword('');setPasswordConfirm('');setAuthError('');setVerificationUrl('');setSignupSubmitted(false);setShowPassword(false);setShowConfirm(false);setView(view === 'signup' ? 'login' : 'signup') }}>{view === 'signup' ? 'Sign in' : 'Sign up'}</button></div></div></section>
   </div>
 }
 

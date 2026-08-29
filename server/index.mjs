@@ -293,6 +293,7 @@ function initDb() {
   ensureColumn('templates','canvas_json',"TEXT NOT NULL DEFAULT '[]'")
   ensureColumn('conversations','public_token','TEXT')
   ensureColumn('orders','user_id','TEXT')
+  ensureColumn('orders','gateway_ref','TEXT')
   try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_slug_unique ON sites(slug) WHERE slug <> ''") } catch { /* legacy duplicate slug can be corrected in CMS */ }
   db.exec("UPDATE templates SET status='Published' WHERE status IN ('Published','Approved')")
   db.exec("UPDATE users SET email_verified=1 WHERE email_verified IS NULL OR role_id!='role_user'")
@@ -499,7 +500,7 @@ app.post('/api/auth/signup', rateLimit('signup',8,60_000), (req,res) => {
   db.prepare(`INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).run(id('site'),userId,`${firstName} ${lastName}`.trim(),username,'[]','Draft',now(),now())
   const verifyUrl=`${CLIENT_ORIGIN.replace(/\/$/,'')}/verify-email?token=${verificationToken}`
   queueEmail(email,'Konfirmasi akun ikrarku',`<h2>Konfirmasi email Anda</h2><p>Halo ${firstName}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`)
-  res.status(201).json({ ok:true, verificationRequired:true, ...(NODE_ENV!=='production'||!process.env.SMTP_HOST?{devVerificationUrl:verifyUrl}: {}) })
+  res.status(201).json({ ok:true, verificationRequired:true, emailQueued:true, ...(NODE_ENV!=='production'?{devVerificationUrl:verifyUrl}:{}) })
 })
 app.post('/api/auth/verify-email', (req,res) => {
   const token=String(req.body?.token||'')
@@ -862,15 +863,12 @@ app.post('/api/orders', rateLimit('orders',20,60_000), (req,res) => {
   db.prepare(`INSERT INTO orders(id,order_no,customer_name,email,phone,template_id,amount,currency,payment_status,order_status,created_at,user_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(orderId,orderNo,customerName,email,phone,template.id,template.price,template.currency,'Pending','Awaiting Payment',now(),viewer?.id||null)
   res.status(201).json({id:orderId,orderNo,amount:template.price,currency:template.currency})
 })
-app.post('/api/orders/:id/pay', async (req,res) => {
-  const order=db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id); if(!order)return res.status(404).json({error:'Order tidak ditemukan'}); const method=db.prepare('SELECT * FROM payment_methods WHERE code=? AND enabled=1').get(req.body.paymentMethod); if(!method)return res.status(400).json({error:'Metode pembayaran tidak aktif'})
-  if(order.payment_status==='Paid') return res.status(409).json({error:'Order sudah dibayar'})
-  if(NODE_ENV==='production' && process.env.PAYMENT_MODE!=='simulation') return res.status(501).json({error:'Payment gateway webhook belum dikonfigurasi untuk production'})
-  // Localhost/staging simulation marks payment as accepted. Production must use a verified gateway webhook.
+// Shared fulfilment used by both simulation payments and the Mayar payment webhook.
+async function fulfillPaidOrder(order, methodCode){
   const csId=chooseAssignee('role_cs'); const editorId=chooseAssignee('role_editor')
-  if(!csId || !editorId) return res.status(409).json({error:'Pembayaran belum dapat diterima. Admin harus menambahkan minimal satu Customer Service dan satu Editor aktif.'})
+  if(!csId || !editorId){ const err=new Error('Pembayaran belum dapat diterima. Admin harus menambahkan minimal satu Customer Service dan satu Editor aktif.'); err.status=409; throw err }
   const paidAt=now()
-  db.prepare(`UPDATE orders SET payment_method=?,payment_status='Paid',order_status='Paid - Onboarding',assigned_cs_id=?,assigned_editor_id=?,paid_at=? WHERE id=?`).run(method.code,csId,editorId,paidAt,order.id)
+  db.prepare(`UPDATE orders SET payment_method=?,payment_status='Paid',order_status='Paid - Onboarding',assigned_cs_id=?,assigned_editor_id=?,paid_at=? WHERE id=?`).run(methodCode,csId,editorId,paidAt,order.id)
   const paidOrder=db.prepare('SELECT * FROM orders WHERE id=?').get(order.id); const template=db.prepare('SELECT * FROM templates WHERE id=?').get(order.template_id); const receipt=await createReceipt(paidOrder,template)
   db.prepare('UPDATE orders SET receipt_no=?,receipt_path=? WHERE id=?').run(receipt.receiptNo,receipt.filepath,order.id)
   const taskInsert=db.prepare(`INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
@@ -880,9 +878,69 @@ app.post('/api/orders/:id/pay', async (req,res) => {
   db.prepare(`INSERT INTO messages(id,conversation_id,sender_type,body,created_at) VALUES(?,?,?,?,?)`).run(id('msg'),conversationId,'system',`Order ${order.order_no} telah dibayar. Hubungi customer untuk onboarding.`,now())
   const html=`<h2>Pembayaran diterima</h2><p>Halo ${order.customer_name}, pembayaran untuk template <strong>${template.name}</strong> telah kami terima.</p><p>Order: ${order.order_no}<br>Jumlah: Rp ${Number(order.amount).toLocaleString('id-ID')}</p><p>Tim Customer Service dan Web Designer ikrarku akan menghubungi Anda.</p>`
   const outboxId=id('mail'); db.prepare(`INSERT INTO email_outbox(id,to_email,subject,html,status,attachment_path,created_at) VALUES(?,?,?,?,?,?,?)`).run(outboxId,order.email,`Receipt pembayaran ${order.order_no}`,html,process.env.SMTP_HOST?'Queued':'Ready for SMTP',receipt.filepath,now()); void deliverEmail(outboxId)
-  res.json({ok:true,status:'Paid',receiptUrl:receipt.publicUrl,assignedCsId:csId,assignedEditorId:editorId,conversationId})
+  return { receiptUrl:receipt.publicUrl, assignedCsId:csId, assignedEditorId:editorId, conversationId }
+}
+
+// Create a Mayar (mayar.id) payment/invoice and return its hosted payment URL.
+async function createMayarInvoice(order, template){
+  const base=(process.env.MAYAR_API_BASE||'https://api.mayar.id/hl/v1').replace(/\/$/,'')
+  const key=process.env.MAYAR_API_KEY
+  if(!key) throw Object.assign(new Error('MAYAR_API_KEY belum diset'),{status:500})
+  const payload={
+    name:order.customer_name, email:order.email, mobile:order.phone||'',
+    amount:Number(order.amount), description:`Template ${template?.name||order.template_id} · ${order.order_no}`,
+    redirectUrl:`${CLIENT_ORIGIN.replace(/\/$/,'')}/pembayaran-berhasil?order=${encodeURIComponent(order.order_no)}`,
+    webhookUrl:`${CLIENT_ORIGIN.replace(/\/$/,'')}/api/webhooks/mayar`,
+    // reference is echoed back by Mayar webhooks so we can match the order.
+    reference:order.id
+  }
+  const response=await fetch(`${base}/invoice/create`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify(payload)})
+  const data=await response.json().catch(()=>({}))
+  if(!response.ok) throw Object.assign(new Error(data?.messages||data?.message||'Gagal membuat invoice Mayar'),{status:502})
+  const link=data?.data?.link||data?.data?.paymentUrl||data?.link||data?.paymentUrl
+  const transactionId=data?.data?.id||data?.data?.transactionId||data?.id
+  if(!link) throw Object.assign(new Error('Mayar tidak mengembalikan payment URL'),{status:502})
+  return { link, transactionId }
+}
+
+app.post('/api/orders/:id/pay', async (req,res) => {
+  const order=db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id); if(!order)return res.status(404).json({error:'Order tidak ditemukan'}); const method=db.prepare('SELECT * FROM payment_methods WHERE code=? AND enabled=1').get(req.body.paymentMethod); if(!method)return res.status(400).json({error:'Metode pembayaran tidak aktif'})
+  if(order.payment_status==='Paid') return res.status(409).json({error:'Order sudah dibayar'})
+  const mode=process.env.PAYMENT_MODE||(NODE_ENV==='production'?'gateway':'simulation')
+  // Gateway mode: Mayar (mayar.id). Create a hosted invoice and let the customer pay there;
+  // the order stays "Pending" until Mayar calls our webhook. Simulation stays instant for local/staging QA.
+  if(mode==='mayar'){
+    try{
+      const template=db.prepare('SELECT * FROM templates WHERE id=?').get(order.template_id)
+      const { link, transactionId }=await createMayarInvoice(order, template)
+      db.prepare(`UPDATE orders SET payment_method=?,order_status='Awaiting Payment',gateway_ref=? WHERE id=?`).run(method.code,transactionId||null,order.id)
+      return res.json({ok:true,status:'Pending',paymentUrl:link,gateway:'mayar'})
+    }catch(error){ return res.status(error.status||502).json({error:error.message||'Gagal memproses pembayaran Mayar'}) }
+  }
+  if(mode!=='simulation') return res.status(501).json({error:'Payment gateway belum dikonfigurasi. Set PAYMENT_MODE=mayar dan MAYAR_API_KEY, atau PAYMENT_MODE=simulation.'})
+  // Localhost/staging simulation marks payment as accepted immediately.
+  try{
+    const result=await fulfillPaidOrder(order, method.code)
+    res.json({ok:true,status:'Paid',...result})
+  }catch(error){ res.status(error.status||500).json({error:error.message||'Pembayaran gagal.'}) }
 })
 
+// Mayar payment webhook: confirms payment and fulfils the order. Verifies a shared token.
+app.post('/api/webhooks/mayar', async (req,res) => {
+  const configuredToken=process.env.MAYAR_WEBHOOK_TOKEN
+  const provided=req.headers['x-mayar-token']||req.query.token||req.body?.token
+  if(configuredToken && provided!==configuredToken) return res.status(401).json({error:'Invalid webhook token'})
+  const event=String(req.body?.event||req.body?.status||'').toLowerCase()
+  const reference=req.body?.data?.reference||req.body?.reference||req.body?.data?.merchantRef
+  const isPaid=['paid','settled','success','payment.received','testing'].some(flag=>event.includes(flag))
+  if(!reference) return res.status(400).json({error:'Missing reference'})
+  const order=db.prepare('SELECT * FROM orders WHERE id=? OR gateway_ref=?').get(reference,reference)
+  if(!order) return res.status(404).json({error:'Order tidak ditemukan'})
+  if(order.payment_status==='Paid') return res.json({ok:true,already:true})
+  if(!isPaid) return res.json({ok:true,ignored:event})
+  try{ await fulfillPaidOrder(order, order.payment_method||'MAYAR'); res.json({ok:true}) }
+  catch(error){ res.status(error.status||500).json({error:error.message}) }
+})
 app.get('/api/me/orders', auth, (req,res) => {
   const rows=db.prepare(`SELECT o.*,t.name template_name,t.category template_category,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id WHERE o.user_id=? OR lower(o.email)=lower(?) ORDER BY o.created_at DESC`).all(req.user.id,req.user.email)
   res.json(rows.map(o=>({...o,tasks:db.prepare('SELECT id,title,status,priority,assigned_role_id,created_at,updated_at FROM tasks WHERE order_id=? ORDER BY created_at').all(o.id),conversation:db.prepare('SELECT id,status,channel,updated_at FROM conversations WHERE order_id=? ORDER BY updated_at DESC LIMIT 1').get(o.id)||null,receiptUrl:o.receipt_path?`/receipts/${path.basename(o.receipt_path)}`:null})))

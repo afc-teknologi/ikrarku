@@ -391,3 +391,6 @@ html,body,#root{min-width:0!important}
 @media(max-width:900px){
   .landing-v015 .gradient-orb-demo,.landing-v015 .motion-demo{display:none}
 }
+
+/* keep native <form> transparent so auth-card layout is unchanged (Enter-to-submit) */
+.auth-card .auth-fields{display:contents}
