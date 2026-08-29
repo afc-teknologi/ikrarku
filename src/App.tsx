@@ -595,13 +595,13 @@ function App() {
         setPaymentMethods(data.paymentMethods || [])
         setDatabaseOnline(true)
         const pathSlug=window.location.pathname.replace(/^\/+|\/+$/g,'')
-        const reserved=new Set(['','login','signup','verify-email','dashboard','templates','articles','settings','admin','orders'])
+        const reserved=new Set(['','login','signup','verify-email','dashboard','templates','template-detail','pesan-sekarang','pembayaran-berhasil','articles','settings','admin','orders','my-orders','users','roles','tasks','audit-log','help','cs-dashboard','customer-service','sound-library','payment-settings','editor'])
         if(pathSlug==='verify-email') setView('verify-email')
         if(pathSlug && !reserved.has(pathSlug)) {
           try {
             const publicSite=await api.publicSite(pathSlug)
             setPublicSiteData({...publicSite,sections:hydrateSections(publicSite.sections || [])})
-          } catch { setPublicSiteData(null); if(!localStorage.getItem('ikrarku-api-token')) setView('not-found') }
+          } catch { setPublicSiteData(null); setView('not-found') }
         }
         const token = localStorage.getItem('ikrarku-api-token')
         if (token) {

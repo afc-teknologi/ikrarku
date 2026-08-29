@@ -380,3 +380,14 @@ html,body,#root{min-width:0!important}
 .notfound-card p{color:#72807b;line-height:1.65;margin-bottom:22px}
 .notfound-card .primary-btn{margin:auto}
 @media(max-width:900px){ html:has(.notfound-page),body:has(.notfound-page),#root:has(.notfound-page){min-width:0} }
+
+/* ---- Revision fixes: tablet decorative overlap + scrollable CMS sidebar ---- */
+/* #4: CMS left sidebar is fixed-height; let the menu list scroll so all items + Sign out are reachable */
+.sidebar nav{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;scrollbar-width:thin;padding-right:2px}
+.sidebar-bottom{margin-top:8px;flex:0 0 auto}
+.sidebar nav::-webkit-scrollbar{width:6px}
+.sidebar nav::-webkit-scrollbar-thumb{background:rgba(24,59,49,.18);border-radius:8px}
+/* #3: hide purely-decorative demo shapes on tablet/phone so they never overlap the section text */
+@media(max-width:900px){
+  .landing-v015 .gradient-orb-demo,.landing-v015 .motion-demo{display:none}
+}
