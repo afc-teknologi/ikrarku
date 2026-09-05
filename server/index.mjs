@@ -484,6 +484,16 @@ app.post('/api/public/chat', rateLimit('public-chat',30,60_000), (req,res) => {
   res.status(201).json({conversationId:conversation.id,conversationToken:conversation.public_token,messageId,assignedCsId:conversation.assigned_cs_id})
 })
 
+// Guest widget polls this to receive support/admin replies (matched by the public token issued above).
+app.get('/api/public/chat', rateLimit('public-chat-read',120,60_000), (req,res) => {
+  const token=String(req.query.token||'')
+  if(!token) return res.json({conversation:null,messages:[]})
+  const conversation=db.prepare('SELECT * FROM conversations WHERE public_token=?').get(token)
+  if(!conversation) return res.json({conversation:null,messages:[]})
+  const messages=db.prepare('SELECT id,sender_type,body,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC').all(conversation.id)
+  res.json({conversation:{id:conversation.id,status:conversation.status},messages})
+})
+
 app.post('/api/auth/login', rateLimit('login',12,60_000), (req,res) => {
   const { username, password } = req.body || {}
   const row = db.prepare(`SELECT u.*,r.name role_name,r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id WHERE u.username=?`).get(username)

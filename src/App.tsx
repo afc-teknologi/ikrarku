@@ -769,6 +769,26 @@ function App() {
     return()=>{stopped=true;window.clearInterval(interval)}
   },[currentAccountId,view,chatWidgetOpen,refreshMyChat])
 
+  // Guest (landing widget) chat: poll the public conversation so admin/CS replies appear without login.
+  const refreshGuestChat=useCallback(async()=>{
+    const publicToken=localStorage.getItem('ikrarku-public-chat-token')
+    if(!publicToken) return
+    try{
+      const data=await api.publicConversation(publicToken)
+      if(!data?.conversation) return
+      const mapped=(data.messages||[]).map((message:any)=>({id:message.id,sender:message.sender_type==='support'||message.sender_type==='system'?'support':'user',text:message.body,time:new Date(message.created_at).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit'}),conversationId:'guest',senderName:message.sender_type==='support'?'ikrarku Support':'Website Visitor'}))
+      setChatMessages(previous=>{ const others=previous.filter(message=>(message.conversationId||'guest')!=='guest'); return [...others,...mapped] })
+    }catch{/* ignore */}
+  },[])
+  useEffect(()=>{
+    if(localStorage.getItem('ikrarku-api-token')) return
+    let stopped=false
+    const tick=async()=>{ if(!stopped) await refreshGuestChat() }
+    void tick()
+    const interval=window.setInterval(()=>void tick(), chatWidgetOpen?2500:9000)
+    return()=>{stopped=true;window.clearInterval(interval)}
+  },[view,chatWidgetOpen,refreshGuestChat])
+
   // Browser back button support for the public order funnel (template-detail / checkout / payment-success)
   useEffect(()=>{
     const funnel=new Set<View>(['template-detail','checkout','payment-success','login','signup'])

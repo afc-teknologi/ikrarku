@@ -32,6 +32,7 @@ export const api = {
   publicRsvp:(slug:string,payload:any)=>request<any>(`/public/sites/${slug}/rsvp`,{method:'POST',body:JSON.stringify(payload)}),
   publicGreeting:(slug:string,payload:any)=>request<any>(`/public/sites/${slug}/greetings`,{method:'POST',body:JSON.stringify(payload)}),
   publicChat:(payload:any)=>request<any>('/public/chat',{method:'POST',body:JSON.stringify(payload)}),
+  publicConversation:(token:string)=>request<any>(`/public/chat?token=${encodeURIComponent(token)}`),
   login:(username:string,password:string)=>request<{token:string;user:ApiUser}>('/auth/login',{method:'POST',body:JSON.stringify({username,password})}),
   signup:(payload:any)=>request<any>('/auth/signup',{method:'POST',body:JSON.stringify(payload)}),
   verifyEmail:(tokenValue:string)=>request<any>('/auth/verify-email',{method:'POST',body:JSON.stringify({token:tokenValue})}),
