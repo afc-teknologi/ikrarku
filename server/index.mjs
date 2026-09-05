@@ -628,7 +628,8 @@ app.get('/api/articles', auth, (req,res) => {
 app.post('/api/articles', auth, permit('articles.manage'), (req,res) => {
   const { title,slug,category='Planning',excerpt='',content='',status='Draft',tags=[],coverUrl=null }=req.body||{}
   if(!title) return res.status(400).json({error:'Judul wajib diisi'})
-  const articleId=id('art'); const finalSlug=slug||title.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')+'-'+Date.now().toString().slice(-5)
+  const articleId=id('art'); let finalSlug=(slug||title).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'article'
+  if(db.prepare('SELECT 1 FROM articles WHERE slug=?').get(finalSlug)) finalSlug=`${finalSlug}-${Date.now().toString().slice(-5)}`
   db.prepare(`INSERT INTO articles(id,title,slug,category,excerpt,content,status,author_id,tags_json,cover_url,published_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(articleId,title,finalSlug,category,excerpt,content,status,req.user.id,JSON.stringify(tags),coverUrl,status==='Published'?now():null,now(),now())
   const row=db.prepare(`SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.id=?`).get(articleId)
   auditLog(req.user.id,'article.create','article',articleId,{title,status}); res.status(201).json(mapArticle(row))
@@ -679,6 +680,14 @@ app.post('/api/users', auth, permit('users.manage'), (req,res) => {
   try{db.prepare(`INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(userId,firstName,lastName,email,username,bcrypt.hashSync(password,10),roleId,1,now(),now()); if(roleId==='role_user')db.prepare(`INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).run(id('site'),userId,`${firstName} ${lastName}`.trim(),username,'[]','Draft',now(),now()); auditLog(req.user.id,'user.create','user',userId,{email,username,roleId}); res.status(201).json({id:userId})}catch{res.status(409).json({error:'Email atau username sudah digunakan'})}
 })
 app.patch('/api/users/:id/role', auth, permit('users.manage'), (req,res) => { db.prepare('UPDATE users SET role_id=?,updated_at=? WHERE id=?').run(req.body.roleId,now(),req.params.id); auditLog(req.user.id,'user.role.change','user',req.params.id,{roleId:req.body.roleId}); res.json({ok:true}) })
+app.delete('/api/users/:id', auth, permit('users.manage'), (req,res) => {
+  const target=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id)
+  if(!target) return res.status(404).json({error:'Akun tidak ditemukan'})
+  if(target.id===req.user.id) return res.status(400).json({error:'Tidak dapat menghapus akun Anda sendiri.'})
+  if(target.role_id==='role_admin'){ const admins=db.prepare("SELECT COUNT(*) c FROM users WHERE role_id='role_admin' AND active=1").get().c; if(admins<=1) return res.status(400).json({error:'Minimal harus ada satu Administrator aktif.'}) }
+  db.prepare('DELETE FROM users WHERE id=?').run(req.params.id)
+  auditLog(req.user.id,'user.delete','user',req.params.id,{email:target.email}); res.json({ok:true})
+})
 
 app.get('/api/clients', auth, permit('users.view'), (req,res) => {
   const base=`SELECT u.id,u.first_name,u.last_name,u.email,u.username,u.active,u.created_at,s.id site_id,s.title site_title,s.slug,s.status site_status,s.canvas_json,a.editor_id,e.first_name||' '||e.last_name assigned_editor FROM users u JOIN roles r ON r.id=u.role_id LEFT JOIN sites s ON s.user_id=u.id LEFT JOIN site_assignments a ON a.user_id=u.id LEFT JOIN users e ON e.id=a.editor_id WHERE r.name='User'`

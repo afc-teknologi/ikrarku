@@ -63,6 +63,7 @@ export const api = {
   autosaveClientSite:(id:string,payload:any)=>request(`/clients/${id}/site/autosave`,{method:'PUT',body:JSON.stringify(payload)}),
   clientSiteRevisions:(id:string)=>request<any[]>(`/clients/${id}/site/revisions`),
   createUser:(payload:any)=>request<any>('/users',{method:'POST',body:JSON.stringify(payload)}),
+  deleteUser:(id:string)=>request<any>(`/users/${id}`,{method:'DELETE'}),
   setUserRole:(id:string,roleId:string)=>request(`/users/${id}/role`,{method:'PATCH',body:JSON.stringify({roleId})}),
   contactableUsers:()=>request<any[]>('/contactable-users'),
   uploadMedia:(payload:FormData)=>request<any>('/media',{method:'POST',body:payload}),
