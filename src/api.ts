@@ -13,6 +13,11 @@ async function request<T>(path:string, options:RequestInit={}) : Promise<T> {
   if(token()) headers.set('Authorization',`Bearer ${token()}`)
   const response = await fetch(`${API_BASE}${path}`,{...options,headers})
   const data = await response.json().catch(()=>({}))
+  if(response.status===401 && (data.code==='idle_timeout' || data.code==='session_expired')) {
+    // QA TC-101: sesi idle/expired dibersihkan agar user diarahkan login ulang.
+    setApiToken('')
+    try { localStorage.removeItem('ikrarku-session-v7'); localStorage.removeItem('ikrarku-last-activity') } catch { /* storage tidak tersedia */ }
+  }
   if(!response.ok) throw new Error(data.error || `HTTP ${response.status}`)
   return data as T
 }
@@ -37,6 +42,9 @@ export const api = {
   signup:(payload:any)=>request<any>('/auth/signup',{method:'POST',body:JSON.stringify(payload)}),
   verifyEmail:(tokenValue:string)=>request<any>('/auth/verify-email',{method:'POST',body:JSON.stringify({token:tokenValue})}),
   resendVerification:(email:string)=>request<any>('/auth/resend-verification',{method:'POST',body:JSON.stringify({email})}),
+  checkEmail:(email:string)=>request<{registered:boolean;verified:boolean}>('/auth/check-email',{method:'POST',body:JSON.stringify({email})}),
+  forgotPassword:(email:string)=>request<any>('/auth/forgot-password',{method:'POST',body:JSON.stringify({email})}),
+  resetPassword:(payload:{token:string;password:string;passwordConfirm:string})=>request<any>('/auth/reset-password',{method:'POST',body:JSON.stringify(payload)}),
   me:()=>request<{user:ApiUser}>('/me'),
   updateMe:(payload:any)=>request('/me',{method:'PATCH',body:JSON.stringify(payload)}),
   myConversation:()=>request<any>('/me/conversation'),
@@ -47,6 +55,8 @@ export const api = {
   autosaveTemplate:(id:string,canvasJson:any[])=>request<any>(`/templates/${id}/autosave`,{method:'PUT',body:JSON.stringify({canvasJson})}),
   templateRevisions:(id:string)=>request<any[]>(`/templates/${id}/revisions`),
   reviewTemplate:(id:string,decision:'Approved'|'Rejected',feedback='')=>request<any>(`/templates/${id}/review`,{method:'POST',body:JSON.stringify({decision,feedback})}),
+  takedownTemplate:(id:string,reason='')=>request<any>(`/templates/${id}/takedown`,{method:'POST',body:JSON.stringify({reason})}),
+  republishTemplate:(id:string)=>request<any>(`/templates/${id}/republish`,{method:'POST'}),
   articles:()=>request<any[]>('/articles'),
   createArticle:(payload:any)=>request<any>('/articles',{method:'POST',body:JSON.stringify(payload)}),
   updateArticle:(id:string,payload:any)=>request<any>(`/articles/${id}`,{method:'PATCH',body:JSON.stringify(payload)}),
@@ -66,6 +76,7 @@ export const api = {
   createUser:(payload:any)=>request<any>('/users',{method:'POST',body:JSON.stringify(payload)}),
   deleteUser:(id:string)=>request<any>(`/users/${id}`,{method:'DELETE'}),
   setUserRole:(id:string,roleId:string)=>request(`/users/${id}/role`,{method:'PATCH',body:JSON.stringify({roleId})}),
+  updateUser:(id:string,payload:any)=>request<any>(`/users/${id}`,{method:'PATCH',body:JSON.stringify(payload)}),
   contactableUsers:()=>request<any[]>('/contactable-users'),
   uploadMedia:(payload:FormData)=>request<any>('/media',{method:'POST',body:payload}),
   sounds:()=>request<any[]>('/sounds'),
@@ -95,5 +106,7 @@ export const api = {
   reply:(id:string,body:string)=>request(`/conversations/${id}/messages`,{method:'POST',body:JSON.stringify({body})}),
   csMetrics:()=>request<any>('/cs/metrics'),
   emailOutbox:()=>request<any[]>('/email-outbox'),
+  retryEmail:(id:string)=>request<any>(`/email-outbox/${id}/retry`,{method:'POST'}),
+  mailerStatus:()=>request<{configured:boolean;host:string|null;failed:number;pending:number}>('/mailer-status'),
   auditLogs:()=>request<any[]>('/audit-logs'),
 }

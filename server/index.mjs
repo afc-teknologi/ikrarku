@@ -294,6 +294,13 @@ function initDb() {
   ensureColumn('conversations','public_token','TEXT')
   ensureColumn('orders','user_id','TEXT')
   ensureColumn('orders','gateway_ref','TEXT')
+  // QA TC-101 idle session, TC-105 reset password, TC-075/076 takedown, TC-106 sample image
+  ensureColumn('users','reset_token','TEXT')
+  ensureColumn('users','reset_expires','TEXT')
+  ensureColumn('sessions','last_seen_at','TEXT')
+  ensureColumn('templates','sample_image_url','TEXT')
+  ensureColumn('templates','header_image_url','TEXT')
+  ensureColumn('templates','unpublished_at','TEXT')
   try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_slug_unique ON sites(slug) WHERE slug <> ''") } catch { /* legacy duplicate slug can be corrected in CMS */ }
   db.exec("UPDATE templates SET status='Published' WHERE status IN ('Published','Approved')")
   db.exec("UPDATE users SET email_verified=1 WHERE email_verified IS NULL OR role_id!='role_user'")
@@ -388,11 +395,21 @@ function userPayload(user) {
     settings: parseJson(user.settings_json, {}),
   }
 }
+// QA TC-101: sesi otomatis berakhir setelah idle (default 120 menit, 0 = nonaktif).
+const SESSION_IDLE_MINUTES = Number(process.env.SESSION_IDLE_MINUTES ?? 120)
 function auth(req, res, next) {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
   if (!token) return res.status(401).json({ error: 'Authentication required' })
-  const row = db.prepare(`SELECT s.token,s.expires_at,u.*,r.name role_name,r.permissions_json FROM sessions s JOIN users u ON u.id=s.user_id JOIN roles r ON r.id=u.role_id WHERE s.token=?`).get(token)
-  if (!row || new Date(row.expires_at) < new Date()) return res.status(401).json({ error: 'Session expired' })
+  const row = db.prepare(`SELECT s.token,s.expires_at,s.last_seen_at,u.*,r.name role_name,r.permissions_json FROM sessions s JOIN users u ON u.id=s.user_id JOIN roles r ON r.id=u.role_id WHERE s.token=?`).get(token)
+  if (!row || new Date(row.expires_at) < new Date()) return res.status(401).json({ error: 'Session expired', code:'session_expired' })
+  if (SESSION_IDLE_MINUTES > 0) {
+    const last = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0
+    if (last && Date.now() - last > SESSION_IDLE_MINUTES * 60_000) {
+      db.prepare('DELETE FROM sessions WHERE token=?').run(token)
+      return res.status(401).json({ error: `Sesi berakhir karena tidak ada aktivitas selama ${SESSION_IDLE_MINUTES} menit. Silakan login kembali.`, code:'idle_timeout' })
+    }
+    db.prepare('UPDATE sessions SET last_seen_at=? WHERE token=?').run(now(), token)
+  }
   req.user = userPayload(row)
   req.token = token
   next()
@@ -501,8 +518,8 @@ app.post('/api/auth/login', rateLimit('login',12,60_000), (req,res) => {
   if (!row.active || !row.email_verified) return res.status(403).json({ error:'Email belum diverifikasi. Silakan cek email konfirmasi Anda.' })
   const token = crypto.randomBytes(32).toString('hex')
   const expires = new Date(Date.now() + 7*24*60*60*1000).toISOString()
-  db.prepare(`INSERT INTO sessions(token,user_id,expires_at,created_at) VALUES(?,?,?,?)`).run(token,row.id,expires,now())
-  res.json({ token, user:userPayload(row) })
+  db.prepare(`INSERT INTO sessions(token,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`).run(token,row.id,expires,now(),now())
+  res.json({ token, user:userPayload(row), sessionIdleMinutes: SESSION_IDLE_MINUTES })
 })
 app.post('/api/auth/signup', rateLimit('signup',8,60_000), (req,res) => {
   const { firstName, lastName='', email, username, password, passwordConfirm } = req.body || {}
@@ -517,7 +534,8 @@ app.post('/api/auth/signup', rateLimit('signup',8,60_000), (req,res) => {
   db.prepare(`INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).run(id('site'),userId,`${firstName} ${lastName}`.trim(),username,'[]','Draft',now(),now())
   const verifyUrl=`${CLIENT_ORIGIN.replace(/\/$/,'')}/verify-email?token=${verificationToken}`
   queueEmail(email,'Konfirmasi akun ikrarku',`<h2>Konfirmasi email Anda</h2><p>Halo ${firstName}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`)
-  res.status(201).json({ ok:true, verificationRequired:true, emailQueued:true, ...(NODE_ENV!=='production'?{devVerificationUrl:verifyUrl}:{}) })
+  const mailerReady=Boolean(process.env.SMTP_HOST)
+  res.status(201).json({ ok:true, verificationRequired:true, emailQueued:mailerReady, mailerReady, ...((NODE_ENV!=='production'||!mailerReady)?{devVerificationUrl:verifyUrl}:{}) })
 })
 app.post('/api/auth/verify-email', (req,res) => {
   const token=String(req.body?.token||'')
@@ -538,7 +556,43 @@ app.post('/api/auth/resend-verification', rateLimit('verify-resend',8,60_000), (
   queueEmail(row.email,'Konfirmasi akun ikrarku',`<h2>Konfirmasi email Anda</h2><p>Halo ${escapeHtml(row.first_name)}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`)
   res.json({ok:true,message:'Email verifikasi dikirim ulang.',...(NODE_ENV!=='production'||!process.env.SMTP_HOST?{devVerificationUrl:verifyUrl}:{})})
 })
-app.get('/api/me', auth, (req,res) => res.json({ user:req.user }))
+// QA TC-072: checkout mengenali apakah email pemesan sudah punya akun ikrarku.
+app.post('/api/auth/check-email', rateLimit('check-email',40,60_000), (req,res) => {
+  const email=String(req.body?.email||'').trim().toLowerCase()
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:'Format email tidak valid'})
+  const row=db.prepare('SELECT id,email_verified FROM users WHERE lower(email)=?').get(email)
+  res.json({ registered:Boolean(row), verified:Boolean(row&&row.email_verified) })
+})
+// QA TC-105: lupa password.
+app.post('/api/auth/forgot-password', rateLimit('forgot-password',8,60_000), (req,res) => {
+  const email=String(req.body?.email||'').trim().toLowerCase()
+  const generic={ ok:true, message:'Jika email terdaftar, tautan reset password sudah dikirim. Cek inbox dan folder spam.' }
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:'Format email tidak valid'})
+  const row=db.prepare('SELECT * FROM users WHERE lower(email)=?').get(email)
+  if(!row) return res.json(generic)
+  const token=crypto.randomBytes(32).toString('hex')
+  const expires=new Date(Date.now()+60*60*1000).toISOString()
+  db.prepare('UPDATE users SET reset_token=?,reset_expires=?,updated_at=? WHERE id=?').run(token,expires,now(),row.id)
+  const resetUrl=`${CLIENT_ORIGIN.replace(/\/$/,'')}/reset-password?token=${token}`
+  queueEmail(row.email,'Reset password ikrarku',`<h2>Reset password</h2><p>Halo ${escapeHtml(row.first_name||'')}, klik tautan berikut untuk membuat password baru:</p><p><a href="${resetUrl}">Reset Password</a></p><p>Tautan berlaku 1 jam. Abaikan email ini jika Anda tidak meminta reset.</p>`)
+  auditLog(row.id,'account.forgot_password','user',row.id,{})
+  const mailerReady=Boolean(process.env.SMTP_HOST)
+  res.json({ ...generic, mailerReady, ...((NODE_ENV!=='production'||!mailerReady)?{devResetUrl:resetUrl}:{}) })
+})
+app.post('/api/auth/reset-password', rateLimit('reset-password',12,60_000), (req,res) => {
+  const { token, password, passwordConfirm } = req.body || {}
+  if(String(password||'').length<8) return res.status(400).json({error:'Password minimal 8 karakter'})
+  if(password!==passwordConfirm) return res.status(400).json({error:'Konfirmasi password tidak sama'})
+  const row=db.prepare('SELECT * FROM users WHERE reset_token=?').get(String(token||''))
+  if(!row) return res.status(400).json({error:'Token reset tidak valid'})
+  if(!row.reset_expires || new Date(row.reset_expires).getTime()<Date.now()) return res.status(400).json({error:'Token reset sudah kedaluwarsa. Silakan minta tautan baru.'})
+  db.prepare('UPDATE users SET password_hash=?,reset_token=NULL,reset_expires=NULL,active=1,email_verified=1,updated_at=? WHERE id=?').run(bcrypt.hashSync(String(password),10),now(),row.id)
+  db.prepare('DELETE FROM sessions WHERE user_id=?').run(row.id)
+  auditLog(row.id,'account.reset_password','user',row.id,{})
+  queueEmail(row.email,'Password ikrarku berhasil diubah',`<h2>Password diperbarui</h2><p>Password akun ${escapeHtml(row.email)} baru saja diubah melalui fitur lupa password. Jika bukan Anda, segera hubungi Customer Service.</p>`)
+  res.json({ ok:true })
+})
+app.get('/api/me', auth, (req,res) => res.json({ user:req.user, sessionIdleMinutes: SESSION_IDLE_MINUTES }))
 app.patch('/api/me', auth, (req,res) => {
   const { firstName,lastName,email,password,currentPassword,settings } = req.body || {}
   const current = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id)
@@ -556,7 +610,7 @@ app.patch('/api/me', auth, (req,res) => {
 })
 app.post('/api/auth/logout', auth, (req,res) => { db.prepare('DELETE FROM sessions WHERE token=?').run(req.token); res.json({ok:true}) })
 
-function mapTemplate(row) { return { id:row.id,name:row.name,category:row.category,description:row.description,price:row.price,currency:row.currency,status:row.status,preview:row.preview_url,accent:row.accent,bg:row.background,premium:Boolean(row.premium),preset:row.preset,createdBy:row.created_by,approvedBy:row.approved_by,createdAt:row.created_at,canvasSections:parseJson(row.canvas_json,[]) } }
+function mapTemplate(row) { return { id:row.id,name:row.name,category:row.category,description:row.description,price:row.price,currency:row.currency,status:row.status,preview:row.preview_url,sampleImage:row.sample_image_url||row.preview_url||null,headerImage:row.header_image_url||row.sample_image_url||row.preview_url||null,unpublishedAt:row.unpublished_at||null,accent:row.accent,bg:row.background,premium:Boolean(row.premium),preset:row.preset,createdBy:row.created_by,approvedBy:row.approved_by,createdAt:row.created_at,canvasSections:parseJson(row.canvas_json,[]) } }
 function mapArticle(row) { return { id:row.id,title:row.title,slug:row.slug,category:row.category,excerpt:row.excerpt,content:row.content,status:row.status,author:row.author || '',tags:parseJson(row.tags_json,[]),coverUrl:row.cover_url,date:row.published_at || row.created_at,views:'0' } }
 function mapPayment(row) { return { id:row.id,code:row.code,label:row.label,enabled:Boolean(row.enabled),config:parseJson(row.config_json,{}) } }
 function queueEmail(toEmail, subject, html, attachmentPath=null) {
@@ -581,11 +635,12 @@ app.get('/api/templates', auth, (req,res) => {
   res.json(rows.map(mapTemplate))
 })
 app.post('/api/templates', auth, permit('templates.create'), (req,res) => {
-  const { name,category='Elegant',description='',price=0,accent='#125946',bg='#f7f2e8',premium=false,preset='classic',preview=null,canvasJson=[] } = req.body || {}
+  const { name,category='Elegant',description='',price=0,accent='#125946',bg='#f7f2e8',premium=false,preset='classic',preview=null,sampleImage=null,headerImage=null,canvasJson=[] } = req.body || {}
   if (!name) return res.status(400).json({error:'Nama template wajib diisi'})
   const templateId=id('tpl')
   const status=req.user.permissions.includes('*')?'Published':'Pending'
-  db.prepare(`INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(templateId,name,category,description,Number(price)||0,'IDR',status,preview,accent,bg,premium?1:0,preset,req.user.id,status==='Published'?req.user.id:null,JSON.stringify(canvasJson||[]),now(),now())
+  const sample=sampleImage||preview||null
+  db.prepare(`INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,sample_image_url,header_image_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(templateId,name,category,description,Number(price)||0,'IDR',status,sample,sample,headerImage||sample,accent,bg,premium?1:0,preset,req.user.id,status==='Published'?req.user.id:null,JSON.stringify(canvasJson||[]),now(),now())
   if(status==='Pending') {
     db.prepare(`INSERT INTO tasks(id,title,description,status,priority,assigned_role_id,task_type,template_id,requestor_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(id('task'),`Approval template: ${name}`,`Review harga, deskripsi, dan kelayakan template ${name}.`,'Open','High','role_admin','Approval',templateId,req.user.id,now(),now())
     queueEmail(req.user.email,`Template ${name} menunggu approval`,`<h2>Pengajuan template diterima</h2><p>Template <strong>${name}</strong> telah masuk ke antrean approval Superadmin.</p><p>Status saat ini: Pending.</p>`)
@@ -601,7 +656,9 @@ app.patch('/api/templates/:id', auth, (req,res) => {
   const requestedStatus=req.body.status==='Approved'?'Published':req.body.status
   const status=canAll && requestedStatus ? requestedStatus : row.status
   saveTemplateRevision(row,req.user.id,'Before save')
-  db.prepare(`UPDATE templates SET name=?,category=?,description=?,price=?,status=?,preview_url=?,accent=?,background=?,premium=?,preset=?,approved_by=?,canvas_json=?,updated_at=? WHERE id=?`).run(next.name,next.category,next.description,Number(next.price)||0,status,next.preview ?? next.preview_url,next.accent,next.bg ?? next.background,next.premium?1:0,next.preset,status==='Published'?req.user.id:row.approved_by,next.canvas_json,now(),row.id)
+  const nextSample = req.body.sampleImage !== undefined ? req.body.sampleImage : (next.preview ?? row.sample_image_url ?? row.preview_url)
+  const nextHeader = req.body.headerImage !== undefined ? req.body.headerImage : (row.header_image_url ?? nextSample)
+  db.prepare(`UPDATE templates SET name=?,category=?,description=?,price=?,status=?,preview_url=?,sample_image_url=?,header_image_url=?,accent=?,background=?,premium=?,preset=?,approved_by=?,canvas_json=?,updated_at=? WHERE id=?`).run(next.name,next.category,next.description,Number(next.price)||0,status,nextSample ?? next.preview_url,nextSample,nextHeader,next.accent,next.bg ?? next.background,next.premium?1:0,next.preset,status==='Published'?req.user.id:row.approved_by,next.canvas_json,now(),row.id)
   db.prepare('DELETE FROM template_autosaves WHERE template_id=?').run(row.id)
   res.json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(row.id)))
 })
@@ -616,6 +673,34 @@ app.get('/api/templates/:id/revisions', auth, (req,res) => {
   const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id); if(!row)return res.status(404).json({error:'Template tidak ditemukan'})
   if(!req.user.permissions.includes('*') && row.created_by!==req.user.id)return res.status(403).json({error:'Tidak dapat melihat revisi template ini'})
   res.json(db.prepare(`SELECT r.*,u.first_name||' '||u.last_name actor_name FROM template_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.template_id=? ORDER BY r.created_at DESC LIMIT 30`).all(row.id).map(r=>({...r,metadata:parseJson(r.metadata_json,{}),sections:parseJson(r.canvas_json,[])})))
+})
+// QA TC-075 & TC-076: takedown dan republish template yang sudah live.
+app.post('/api/templates/:id/takedown', auth, (req,res) => {
+  const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id)
+  if(!row) return res.status(404).json({error:'Template tidak ditemukan'})
+  const canAll=req.user.permissions.includes('*')
+  if(!canAll && row.created_by!==req.user.id) return res.status(403).json({error:'Hanya pembuat template atau Administrator yang dapat melakukan takedown'})
+  if(!['Published','Approved'].includes(row.status)) return res.status(400).json({error:'Hanya template berstatus Published yang dapat di-takedown'})
+  const reason=String(req.body?.reason||'')
+  db.prepare("UPDATE templates SET status='Unpublished',unpublished_at=?,updated_at=? WHERE id=?").run(now(),now(),row.id)
+  auditLog(req.user.id,'template.takedown','template',row.id,{reason})
+  const creator=db.prepare('SELECT email,first_name FROM users WHERE id=?').get(row.created_by)
+  if(creator?.email) queueEmail(creator.email,`Template ${row.name} ditarik dari publikasi`,`<h2>Template di-takedown</h2><p>Template <strong>${escapeHtml(row.name)}</strong> ditarik dari landing page dan tidak dapat dipesan customer.</p>${reason?`<p>Alasan: ${escapeHtml(reason)}</p>`:''}<p>Silakan revisi lalu ajukan republish.</p>`)
+  res.json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(row.id)))
+})
+app.post('/api/templates/:id/republish', auth, (req,res) => {
+  const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id)
+  if(!row) return res.status(404).json({error:'Template tidak ditemukan'})
+  const canAll=req.user.permissions.includes('*')
+  if(!canAll && row.created_by!==req.user.id) return res.status(403).json({error:'Tidak dapat mengubah template ini'})
+  const status=canAll?'Published':'Pending'
+  db.prepare('UPDATE templates SET status=?,approved_by=?,unpublished_at=NULL,updated_at=? WHERE id=?').run(status,status==='Published'?req.user.id:null,now(),row.id)
+  if(status==='Pending'){
+    const existing=db.prepare("SELECT id FROM tasks WHERE template_id=? AND task_type='Approval' AND status='Open'").get(row.id)
+    if(!existing) db.prepare(`INSERT INTO tasks(id,title,description,status,priority,assigned_role_id,task_type,template_id,requestor_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(id('task'),`Approval republish: ${row.name}`,`Review ulang template ${row.name} setelah revisi Web Designer.`,'Open','High','role_admin','Approval',row.id,req.user.id,now(),now())
+  }
+  auditLog(req.user.id,'template.republish','template',row.id,{status})
+  res.json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(row.id)))
 })
 app.post('/api/templates/:id/review', auth, (req,res) => {
   if(!(req.user.permissions.includes('*') || req.user.permissions.includes('templates.approve'))) return res.status(403).json({error:'Permission denied'})
@@ -688,6 +773,30 @@ app.get('/api/users', auth, permit('users.manage'), (_req,res) => {
 app.post('/api/users', auth, permit('users.manage'), (req,res) => {
   const {firstName,lastName='',email,username,password,roleId}=req.body||{}; if(!firstName||!email||!username||!password||!roleId)return res.status(400).json({error:'Data belum lengkap'}); const userId=id('usr')
   try{db.prepare(`INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(userId,firstName,lastName,email,username,bcrypt.hashSync(password,10),roleId,1,now(),now()); if(roleId==='role_user')db.prepare(`INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).run(id('site'),userId,`${firstName} ${lastName}`.trim(),username,'[]','Draft',now(),now()); auditLog(req.user.id,'user.create','user',userId,{email,username,roleId}); res.status(201).json({id:userId})}catch{res.status(409).json({error:'Email atau username sudah digunakan'})}
+})
+// QA TC-102: Administrator dapat mengubah data diri dan mereset password user lain.
+app.patch('/api/users/:id', auth, permit('users.manage'), (req,res) => {
+  const row=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id)
+  if(!row) return res.status(404).json({error:'Akun tidak ditemukan'})
+  const { firstName, lastName, email, username, password, active, emailVerified, roleId } = req.body || {}
+  if(password!==undefined && password!==null && password!=='' && String(password).length<8) return res.status(400).json({error:'Password minimal 8 karakter'})
+  const nextEmail=String(email ?? row.email).trim().toLowerCase()
+  const nextUsername=String(username ?? row.username).trim()
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) return res.status(400).json({error:'Format email tidak valid'})
+  if(!nextUsername) return res.status(400).json({error:'Username wajib diisi'})
+  if(db.prepare('SELECT id FROM users WHERE lower(email)=? AND id<>?').get(nextEmail,row.id)) return res.status(409).json({error:'Email sudah digunakan akun lain'})
+  if(db.prepare('SELECT id FROM users WHERE username=? AND id<>?').get(nextUsername,row.id)) return res.status(409).json({error:'Username sudah digunakan akun lain'})
+  const nextActive = active===undefined ? row.active : (active?1:0)
+  if(row.role_id==='role_admin' && !nextActive){ const admins=db.prepare("SELECT COUNT(*) c FROM users WHERE role_id='role_admin' AND active=1").get().c; if(admins<=1) return res.status(400).json({error:'Minimal harus ada satu Administrator aktif.'}) }
+  const hash = password ? bcrypt.hashSync(String(password),10) : row.password_hash
+  db.prepare(`UPDATE users SET first_name=?,last_name=?,email=?,username=?,password_hash=?,role_id=?,active=?,email_verified=?,updated_at=? WHERE id=?`)
+    .run(firstName ?? row.first_name, lastName ?? row.last_name, nextEmail, nextUsername, hash, roleId ?? row.role_id, nextActive, emailVerified===undefined?row.email_verified:(emailVerified?1:0), now(), row.id)
+  if(password) db.prepare('DELETE FROM sessions WHERE user_id=?').run(row.id)
+  auditLog(req.user.id,'user.update','user',row.id,{ emailChanged:nextEmail!==String(row.email).toLowerCase(), passwordReset:Boolean(password), usernameChanged:nextUsername!==row.username })
+  if(password) queueEmail(nextEmail,'Password akun ikrarku direset Administrator',`<h2>Password direset</h2><p>Administrator ikrarku telah mereset password akun Anda. Silakan login kembali dan segera ubah password melalui menu Settings.</p>`)
+  else queueEmail(nextEmail,'Data akun ikrarku diperbarui',`<h2>Data akun diperbarui</h2><p>Administrator memperbarui data akun Anda. Jika ada yang tidak sesuai, hubungi Customer Service.</p>`)
+  const fresh=db.prepare(`SELECT u.*,r.id role_id,r.name role_name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=?`).get(row.id)
+  res.json({ ok:true, user:{ id:fresh.id, firstName:fresh.first_name, lastName:fresh.last_name, name:`${fresh.first_name} ${fresh.last_name}`.trim(), email:fresh.email, username:fresh.username, active:Boolean(fresh.active), emailVerified:Boolean(fresh.email_verified), roleId:fresh.role_id, role:fresh.role_name } })
 })
 app.patch('/api/users/:id/role', auth, permit('users.manage'), (req,res) => { db.prepare('UPDATE users SET role_id=?,updated_at=? WHERE id=?').run(req.body.roleId,now(),req.params.id); auditLog(req.user.id,'user.role.change','user',req.params.id,{roleId:req.body.roleId}); res.json({ok:true}) })
 app.delete('/api/users/:id', auth, permit('users.manage'), (req,res) => {
@@ -891,7 +1000,10 @@ app.post('/api/orders', rateLimit('orders',20,60_000), (req,res) => {
 })
 // Shared fulfilment used by both simulation payments and the Mayar payment webhook.
 async function fulfillPaidOrder(order, methodCode){
-  const csId=chooseAssignee('role_cs'); const editorId=chooseAssignee('role_editor')
+  const csId=chooseAssignee('role_cs')
+  // QA TC-099: order otomatis ter-assign ke Web Designer pembuat template bila masih aktif.
+  const templateOwner=db.prepare("SELECT u.id FROM templates t JOIN users u ON u.id=t.created_by WHERE t.id=? AND u.active=1 AND u.role_id='role_editor'").get(order.template_id)
+  const editorId=templateOwner?.id || chooseAssignee('role_editor')
   if(!csId || !editorId){ const err=new Error('Pembayaran belum dapat diterima. Admin harus menambahkan minimal satu Customer Service dan satu Editor aktif.'); err.status=409; throw err }
   const paidAt=now()
   db.prepare(`UPDATE orders SET payment_method=?,payment_status='Paid',order_status='Paid - Onboarding',assigned_cs_id=?,assigned_editor_id=?,paid_at=? WHERE id=?`).run(methodCode,csId,editorId,paidAt,order.id)
@@ -899,7 +1011,7 @@ async function fulfillPaidOrder(order, methodCode){
   db.prepare('UPDATE orders SET receipt_no=?,receipt_path=? WHERE id=?').run(receipt.receiptNo,receipt.filepath,order.id)
   const taskInsert=db.prepare(`INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
   taskInsert.run(id('task'),order.id,`Onboarding order ${order.order_no}`,`Hubungi ${order.customer_name} dan konfirmasi channel Email/Web/WhatsApp.`,'Open','High',csId,'role_cs',now(),now())
-  taskInsert.run(id('task'),order.id,`Build website ${template.name}`,`Siapkan Canvas dan konfigurasi template untuk ${order.customer_name}.`,'Open','Normal',editorId,'role_editor',now(),now())
+  taskInsert.run(id('task'),order.id,`Build website ${template.name}`,`Siapkan Canvas dan konfigurasi template untuk ${order.customer_name}.${templateOwner?' Auto-assign ke Web Designer pembuat template.':' Auto-assign berdasarkan workload (pembuat template tidak aktif).'}`,'Open','Normal',editorId,'role_editor',now(),now())
   const conversationId=id('conv'); db.prepare(`INSERT INTO conversations(id,order_id,customer_name,customer_email,customer_phone,status,assigned_cs_id,channel,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(conversationId,order.id,order.customer_name,order.email,order.phone,'Open',csId,'Web',now(),now())
   db.prepare(`INSERT INTO messages(id,conversation_id,sender_type,body,created_at) VALUES(?,?,?,?,?)`).run(id('msg'),conversationId,'system',`Order ${order.order_no} telah dibayar. Hubungi customer untuk onboarding.`,now())
   const html=`<h2>Pembayaran diterima</h2><p>Halo ${order.customer_name}, pembayaran untuk template <strong>${template.name}</strong> telah kami terima.</p><p>Order: ${order.order_no}<br>Jumlah: Rp ${Number(order.amount).toLocaleString('id-ID')}</p><p>Tim Customer Service dan Web Designer ikrarku akan menghubungi Anda.</p>`
@@ -1040,9 +1152,19 @@ app.get('/api/cs/metrics', auth, (req,res) => {
 
 app.get('/api/email-outbox', auth, permit('orders.view'), (_req,res) => res.json(db.prepare('SELECT id,to_email,subject,status,created_at,sent_at,error FROM email_outbox ORDER BY created_at DESC').all()))
 
+// QA TC-073: Administrator dapat mengirim ulang email yang gagal terkirim.
+app.post('/api/email-outbox/:id/retry', auth, permit('orders.view'), async (req,res) => {
+  const mail=db.prepare('SELECT * FROM email_outbox WHERE id=?').get(req.params.id)
+  if(!mail) return res.status(404).json({error:'Email tidak ditemukan'})
+  if(!process.env.SMTP_HOST) return res.status(503).json({error:'SMTP belum dikonfigurasi. Isi SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM pada environment server.'})
+  await deliverEmail(req.params.id)
+  res.json(db.prepare('SELECT * FROM email_outbox WHERE id=?').get(req.params.id))
+})
+app.get('/api/mailer-status', auth, (_req,res) => res.json({ configured:Boolean(process.env.SMTP_HOST), host:process.env.SMTP_HOST?String(process.env.SMTP_HOST):null, failed:db.prepare("SELECT COUNT(*) c FROM email_outbox WHERE status='Failed'").get().c, pending:db.prepare("SELECT COUNT(*) c FROM email_outbox WHERE status IN ('Queued','Ready for SMTP')").get().c }))
+
 if (NODE_ENV === 'production' && fs.existsSync(DIST_DIR)) {
   app.use(express.static(DIST_DIR))
-  app.get(/^(?!\/api|\/uploads|\/receipts).*/, (_req,res)=>res.sendFile(path.join(DIST_DIR,'index.html')))
+app.get(/^(?!\/api|\/uploads|\/receipts).*/, (_req,res)=>res.sendFile(path.join(DIST_DIR,'index.html')))
 }
 
 app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({error:err.message || 'Server error'}) })

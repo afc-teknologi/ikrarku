@@ -458,3 +458,185 @@ html,body,#root{min-width:0!important}
 .confirm-dialog p{font-size:12px;color:#72807b;line-height:1.6;margin-bottom:20px}
 .confirm-dialog .confirm-actions{display:flex;gap:10px;justify-content:center}
 .confirm-dialog .confirm-actions .secondary-btn,.confirm-dialog .confirm-actions .danger-btn{padding:11px 18px;font-size:11px}
+
+/* =====================================================================
+   QA REMEDIATION BATCH — TC-072..TC-106
+   ===================================================================== */
+
+/* TC-091: animasi entrance dijalankan saat section masuk viewport */
+.feature-block.await-reveal{opacity:0;animation-play-state:paused!important}
+.feature-block.await-reveal.revealed{opacity:1;animation-play-state:running!important}
+@media (prefers-reduced-motion:reduce){.feature-block.await-reveal{opacity:1;animation:none!important}}
+
+/* TC-098: layer background bergerak */
+.background-video-layer{position:absolute;inset:-5px;width:calc(100% + 10px);height:calc(100% + 10px);object-fit:cover;z-index:0;pointer-events:none}
+
+/* TC-103: posisi bebas (drag & resize) */
+.canvas-column{position:relative}
+.feature-block.free-positioned{box-shadow:0 6px 22px rgba(16,47,39,.12)}
+.free-move-handle{position:absolute;top:-19px;left:0;background:#0f4a3b;color:#fff;border-radius:5px 5px 0 0;padding:3px 8px;font-size:7px;display:flex;align-items:center;gap:4px;cursor:grab;z-index:32;user-select:none}
+.free-resize-handle{position:absolute;right:-6px;bottom:-6px;width:14px;height:14px;border-radius:4px;background:#0f4a3b;border:2px solid #fff;cursor:nwse-resize;z-index:32}
+
+/* TC-078: varian style Save The Date */
+.save-the-date-wrap{display:flex;flex-direction:column;align-items:center;gap:8px}
+.save-the-date-wrap.std-card{background:rgba(255,255,255,.72);border:1px solid rgba(22,77,62,.16);border-radius:16px;padding:22px 18px;box-shadow:0 8px 24px rgba(16,47,39,.08)}
+.save-the-date-wrap.std-ribbon{position:relative;padding:24px 18px 18px}
+.save-the-date-wrap.std-ribbon:before{content:'SAVE THE DATE';position:absolute;top:0;left:50%;transform:translate(-50%,-50%);background:var(--accent,#125946);color:#fff;font-size:7px;letter-spacing:3px;padding:5px 14px;border-radius:20px}
+.save-the-date-wrap.std-minimal .countdown-grid,.save-the-date-wrap.std-minimal .countdown-feature{opacity:.9}
+.save-the-date-wrap.std-minimal{gap:4px;border-top:1px solid rgba(22,77,62,.18);border-bottom:1px solid rgba(22,77,62,.18);padding:16px 0}
+.save-the-date-wrap.std-circle{border:2px solid var(--accent,#125946);border-radius:50%;aspect-ratio:1;justify-content:center;padding:26px;max-width:340px;margin:auto}
+
+/* TC-079: catatan tambahan lokasi */
+.location-extra-note{font-size:9px;line-height:1.6;opacity:.8;margin:10px 0 0;white-space:pre-wrap}
+
+/* TC-080/090 & teks tambahan */
+.extra-text-stack{display:flex;flex-direction:column}
+.extra-text-line{outline:none;min-height:1em}
+.extra-text-line:focus{box-shadow:0 0 0 2px rgba(39,137,105,.3);border-radius:4px}
+.extra-text-editor,.heading-body-editor,.free-position-controls,.gift-account-editor,.icon-list-editor,.image-style-group,.video-playback-group,.sound-catalog-preview{border-top:1px solid #e5e9e6;margin-top:14px;padding-top:13px}
+.extra-text-row,.form-spec-row,.gift-account-row,.icon-row{border:1px solid #e6eae7;border-radius:9px;padding:9px;margin-bottom:9px;background:#fafcfb;display:flex;flex-direction:column;gap:7px}
+.extra-text-row-head,.form-spec-head{display:flex;align-items:center;justify-content:space-between;font-size:8px;color:#5d7169;font-weight:700}
+.extra-text-row-head button,.form-spec-head button{border:0;background:#f0e1e0;color:#8c3a32;border-radius:5px;padding:3px 5px;display:inline-flex;align-items:center}
+.form-spec-head>div{display:flex;gap:4px}
+.form-spec-head button:disabled{opacity:.4}
+.extra-text-editor textarea,.extra-text-row textarea{min-height:52px;resize:vertical}
+
+/* TC-081: form dinamis */
+.canvas-form-grid{display:grid;grid-template-columns:1fr;gap:9px}
+.canvas-form.cols-2 .canvas-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.canvas-form.cols-2 .canvas-form-grid .field-full{grid-column:1/-1}
+.canvas-form textarea{min-height:70px;border:1px solid rgba(22,77,62,.2);border-radius:7px;padding:8px 10px;background:rgba(255,255,255,.82);font-size:9px;font-family:inherit;resize:vertical}
+.canvas-form select{height:36px;border:1px solid rgba(22,77,62,.2);border-radius:7px;padding:0 8px;background:rgba(255,255,255,.82);font-size:9px}
+@media(max-width:900px){.canvas-form.cols-2 .canvas-form-grid{grid-template-columns:1fr}}
+
+/* TC-082: bingkai gambar */
+.image-feature{overflow:hidden;display:flex}
+.image-feature img{width:100%;height:100%;object-fit:cover;transition:.35s}
+.image-feature.frame-rounded img{border-radius:18px}
+.image-feature.frame-circle{border-radius:50%;aspect-ratio:1;max-width:420px;margin:auto}
+.image-feature.frame-circle img{border-radius:50%}
+.image-feature.frame-arch{border-radius:999px 999px 14px 14px;overflow:hidden}
+.image-feature.frame-arch img{border-radius:999px 999px 14px 14px}
+.image-feature.frame-polaroid{background:#fff;padding:10px 10px 34px;box-shadow:0 8px 22px rgba(16,47,39,.16);border-radius:4px}
+.image-feature.frame-leaf{border-radius:999px 14px 999px 14px;overflow:hidden}
+.image-feature.frame-leaf img{border-radius:999px 14px 999px 14px}
+.image-feature.frame-diamond{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+
+/* TC-084: template layout gallery */
+.gallery-grid.layout-masonry{display:block;column-count:3;column-gap:9px}
+.gallery-grid.layout-masonry img{width:100%;height:auto;margin-bottom:9px;break-inside:avoid;border-radius:inherit}
+.gallery-grid.layout-hero-left{grid-template-columns:1.6fr 1fr 1fr}
+.gallery-grid.layout-hero-left img:first-child{grid-row:span 2;height:100%;min-height:280px}
+.gallery-grid.layout-hero-top{grid-template-columns:repeat(3,1fr)}
+.gallery-grid.layout-hero-top img:first-child{grid-column:1/-1;height:300px}
+.gallery-grid.layout-mosaic{grid-template-columns:repeat(4,1fr);grid-auto-rows:120px}
+.gallery-grid.layout-mosaic img{height:100%}
+.gallery-grid.layout-mosaic img:nth-child(4n+1){grid-column:span 2;grid-row:span 2}
+@media(max-width:900px){.gallery-grid.layout-masonry{column-count:2}.gallery-grid.layout-hero-left,.gallery-grid.layout-mosaic{grid-template-columns:repeat(2,1fr)}}
+
+/* TC-085: greetings layout column */
+.greetings-heading{grid-column:1/-1;display:flex;flex-direction:column;gap:6px;margin-bottom:10px}
+.greetings-heading strong{font-family:inherit;line-height:1.15}
+.greetings-heading span{font-size:10px;opacity:.78}
+.greetings-widget.layout-column{grid-template-columns:1fr}
+
+/* TC-086: tombol lokasi acara */
+.event-map-button{display:inline-flex;align-items:center;gap:6px;margin-top:12px;padding:9px 16px;border-radius:8px;background:var(--accent,#125946);color:#fff;font-size:9px;text-decoration:none}
+
+/* TC-088: kartu rekening wedding gift */
+.gift-account-list{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-top:14px}
+.gift-account-card{min-width:190px;border:1px solid rgba(22,77,62,.16);background:rgba(255,255,255,.82);border-radius:12px;padding:13px;display:flex;flex-direction:column;gap:4px;align-items:center}
+.gift-account-card .bank-logo{font-size:8px;font-weight:700;letter-spacing:1.5px;padding:4px 10px;border-radius:20px;background:#123f33;color:#fff}
+.gift-account-card strong{font-size:14px;letter-spacing:1px}
+.gift-account-card small{font-size:8px;opacity:.75}
+.gift-account-card em{font-size:8px;font-style:normal;opacity:.6}
+.gift-account-card button{margin-top:6px;border:0;border-radius:7px;background:var(--accent,#125946);color:#fff;padding:7px 11px;font-size:8px;display:inline-flex;align-items:center;gap:5px}
+
+/* TC-095: icon sosial media & dekoratif */
+.icon-feature{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin-top:8px}
+.icon-feature a,.icon-feature>span{display:inline-flex;flex-direction:column;align-items:center;gap:5px;color:inherit;text-decoration:none;font-size:8px}
+.icon-feature.style-circle a,.icon-feature.style-circle>span,.icon-feature.style-outline a,.icon-feature.style-outline>span{padding:10px}
+.icon-feature.style-circle a>svg,.icon-feature.style-circle>span>svg{background:rgba(255,255,255,.7);border-radius:50%;padding:8px;box-sizing:content-box}
+.icon-feature.style-outline a>svg,.icon-feature.style-outline>span>svg{border:1px solid currentColor;border-radius:50%;padding:8px;box-sizing:content-box}
+
+/* TC-089: preview sound library */
+.sound-catalog-status{font-size:8px;display:flex;align-items:center;gap:6px;background:#f3f7f5;border-radius:7px;padding:8px;margin:7px 0;color:#3f5c52}
+
+/* TC-105 & TC-073: recovery + verifikasi */
+.forgot-password-link{border:0;background:transparent;color:#17624e;font-size:9px;display:inline-flex;align-items:center;gap:5px;padding:0;text-decoration:underline;cursor:pointer}
+.resend-verify-btn,.back-to-checkout-btn{margin-top:7px;margin-right:7px;border:1px solid rgba(22,77,62,.25);background:#fff;border-radius:7px;padding:7px 11px;font-size:8px;display:inline-flex;align-items:center;gap:5px}
+.auth-page.simple-auth{grid-template-columns:1fr!important;display:grid;min-height:100vh;background:linear-gradient(150deg,#fffdf8,#eef4f0)}
+.auth-page.simple-auth .auth-form-wrap{display:grid;place-items:center;padding:40px 18px}
+.auth-page.simple-auth .auth-card{max-width:430px;width:100%}
+
+/* TC-072: deteksi akun pada checkout */
+.checkout-account-banner{display:flex;gap:10px;align-items:flex-start;border-radius:10px;padding:11px 12px;font-size:9px;margin:4px 0 10px;border:1px solid}
+.checkout-account-banner div{display:flex;flex-direction:column;gap:3px}
+.checkout-account-banner strong{font-size:9px}
+.checkout-account-banner span{font-size:8px;opacity:.8;line-height:1.5}
+.checkout-account-banner button{margin-top:6px;align-self:flex-start;border:0;border-radius:7px;padding:7px 12px;background:#125946;color:#fff;font-size:8px}
+.checkout-account-banner.registered{background:#eef6f2;border-color:#bcdcd0;color:#14503f}
+.checkout-account-banner.new{background:#fdf5e9;border-color:#e6d3ae;color:#6b4f1d}
+.checkout-account-banner.signed-in{background:#eef6f2;border-color:#bcdcd0;color:#14503f}
+.checkout-account-banner.checking{background:#f4f7f5;border-color:#e0e6e2;color:#5d7169;align-items:center}
+
+/* TC-074: preview template sebelum approve */
+.preview-template-btn{border:1px solid rgba(22,77,62,.24);background:#fff;border-radius:7px;padding:7px 11px;font-size:8px;display:inline-flex;align-items:center;gap:5px;margin-right:auto}
+.preview-template-btn:disabled{opacity:.45}
+.template-preview-dialog.wide{width:min(1120px,94vw);max-height:92vh;display:flex;flex-direction:column}
+.template-preview-dialog.wide header small{display:block;font-size:8px;opacity:.7;margin-top:3px}
+.template-dialog-actual-preview.live{flex:1;overflow:auto;background:#eef1ee;border-radius:12px}
+.template-preview-dialog.wide footer{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.template-preview-dialog.wide footer .preview-hint{margin-right:auto;font-size:8px;color:#6b7d76;display:inline-flex;align-items:center;gap:5px}
+.template-preview-dialog.wide footer .approve{border:0;border-radius:8px;padding:9px 14px;background:#12684f;color:#fff;font-size:9px;display:inline-flex;align-items:center;gap:6px}
+.template-preview-dialog.wide footer .reject{border:0;border-radius:8px;padding:9px 14px;background:#8c3a32;color:#fff;font-size:9px;display:inline-flex;align-items:center;gap:6px}
+
+/* TC-075/076/106: manajemen status template */
+.template-approval-manager{margin:26px 0 30px}
+.template-status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px;margin-top:14px}
+.template-status-card{border:1px solid #e3e8e5;border-radius:14px;overflow:hidden;background:#fff;display:flex;flex-direction:column}
+.template-status-thumb{height:132px;background-size:cover;background-position:center;display:grid;place-items:center}
+.template-status-thumb .thumb-empty{display:inline-flex;align-items:center;gap:6px;font-size:8px;color:#6d7e78;background:rgba(255,255,255,.85);padding:6px 10px;border-radius:20px}
+.template-status-meta{display:flex;justify-content:space-between;align-items:flex-start;gap:9px;padding:11px 12px 6px}
+.template-status-meta strong{display:block;font-size:11px}
+.template-status-meta span{font-size:8px;color:#6f817b}
+.status-chip{font-style:normal;font-size:7px;font-weight:700;letter-spacing:1px;padding:4px 8px;border-radius:20px;background:#eef2f0;color:#4c625a;white-space:nowrap}
+.status-chip.published{background:#e4f2ea;color:#146046}
+.status-chip.pending{background:#fbf1dd;color:#7a5a17}
+.status-chip.rejected{background:#f7e6e4;color:#8c3a32}
+.status-chip.takedown{background:#eceff1;color:#54636b}
+.template-status-actions{display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 8px}
+.template-status-actions button{border:1px solid #e0e6e2;background:#fff;border-radius:7px;padding:6px 9px;font-size:8px;display:inline-flex;align-items:center;gap:5px}
+.template-status-actions button.primary{background:#12684f;color:#fff;border-color:#12684f}
+.template-status-actions button.danger{background:#fff2f0;color:#8c3a32;border-color:#f0d6d2}
+.template-status-hint{display:block;padding:0 12px 12px;font-size:7.5px;color:#7b8b85;line-height:1.5}
+.takedown-reason{display:flex;flex-direction:column;gap:6px;font-size:9px;text-align:left;margin:10px 0}
+.takedown-reason textarea{min-height:64px;border:1px solid #dfe5e2;border-radius:8px;padding:8px;font-size:9px;font-family:inherit;resize:vertical}
+
+/* TC-102: modal ubah akun */
+.account-edit-dialog{width:min(520px,94vw);background:#fff;border-radius:16px;padding:20px;display:flex;flex-direction:column;gap:11px;max-height:92vh;overflow:auto}
+.account-edit-dialog header{display:flex;justify-content:space-between;align-items:flex-start}
+.account-edit-dialog header span{font-size:7px;letter-spacing:2px;color:#7a8c85}
+.account-edit-dialog header h2{margin:4px 0 0;font-size:17px}
+.account-edit-dialog header button{border:0;background:#f1f4f2;border-radius:8px;padding:6px}
+.account-edit-dialog label{display:flex;flex-direction:column;gap:5px;font-size:9px}
+.account-edit-dialog input{height:36px;border:1px solid #dfe5e2;border-radius:8px;padding:0 10px;font-size:9px}
+.account-edit-dialog .two-cols{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.reset-password-block{border:1px dashed #dfe5e2;border-radius:10px;padding:11px;display:flex;flex-direction:column;gap:8px;background:#fafcfb}
+.reset-password-block p{font-size:8px;color:#6f817b;margin:0;line-height:1.5}
+.account-edit-dialog footer{display:flex;justify-content:flex-end;gap:9px;margin-top:4px}
+.row-actions{display:flex;gap:6px;justify-content:flex-end}
+.row-edit{border:1px solid #dfe5e2;background:#fff;border-radius:7px;padding:5px 7px;color:#17624e}
+
+/* TC-094: link personal per tamu */
+.invitee-link-note{display:flex;gap:9px;align-items:flex-start;background:#f2f7f4;border:1px solid #dbe7e1;border-radius:10px;padding:10px 12px;margin:12px 0}
+.invitee-link-note p{margin:0;font-size:8px;line-height:1.6;color:#48605a}
+.invitee-link-note code{background:#fff;border-radius:4px;padding:1px 4px}
+.invitee-table.with-link .invitee-table-head,.invitee-table.with-link>div{grid-template-columns:1.1fr 1.1fr .8fr 1.8fr 40px!important}
+.invitee-link-cell{display:flex;align-items:center;gap:5px;min-width:0}
+.invitee-link-cell input{flex:1;min-width:0;height:28px;border:1px solid #e0e6e2;border-radius:6px;padding:0 7px;font-size:7.5px;background:#fafcfb}
+.invitee-link-cell button,.invitee-link-cell a{border:1px solid #e0e6e2;background:#fff;border-radius:6px;padding:5px;color:#17624e;display:inline-flex;align-items:center}
+.invitee-bulk-actions{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+.invitee-bulk-actions button{border:1px solid #dfe5e2;background:#fff;border-radius:8px;padding:8px 12px;font-size:8px;display:inline-flex;align-items:center;gap:6px}
+.invitee-bulk-actions button:disabled{opacity:.45}
+@media(max-width:900px){.invitee-table.with-link .invitee-table-head,.invitee-table.with-link>div{grid-template-columns:1fr!important}}
