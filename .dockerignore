@@ -1,0 +1,17 @@
+node_modules
+dist
+.npm-cache
+.git
+.github
+*.zip
+*.log
+.env
+.env.*
+!.env.example
+!.env.staging.example
+server/data/*
+server/uploads/*
+server/receipts/*
+!server/data/.gitkeep
+!server/uploads/.gitkeep
+!server/receipts/.gitkeep

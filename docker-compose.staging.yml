@@ -1,0 +1,34 @@
+services:
+  ikrarku:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: /api
+    image: ikrarku-sites:staging
+    restart: unless-stopped
+    env_file:
+      - .env.staging
+    environment:
+      NODE_ENV: production
+      API_PORT: 5180
+      DATA_DIR: /app/data
+      UPLOAD_DIR: /app/uploads
+      RECEIPT_DIR: /app/receipts
+    ports:
+      - "127.0.0.1:5180:5180"
+    volumes:
+      - ikrarku_data:/app/data
+      - ikrarku_uploads:/app/uploads
+      - ikrarku_receipts:/app/receipts
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:5180/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  ikrarku_data:
+  ikrarku_uploads:
+  ikrarku_receipts:

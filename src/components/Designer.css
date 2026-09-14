@@ -1,0 +1,179 @@
+.canvas-section,
+.invitation-cover-screen {
+  position: relative;
+  container-type: inline-size;
+  isolation: isolate;
+}
+.canvas-decoration-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+.canvas-decoration-layer > .feature-block {
+  pointer-events: auto;
+}
+.canvas-column:has(> .free-positioned) {
+  min-height: 400px;
+  position: relative;
+}
+.feature-block.free-positioned {
+  position: absolute !important;
+  left: var(--d-left) !important;
+  right: var(--d-right) !important;
+  top: var(--d-top) !important;
+  bottom: var(--d-bottom) !important;
+  width: var(--d-width) !important;
+  height: var(--d-height) !important;
+  translate: var(--d-translate);
+  rotate: var(--d-rotate);
+  z-index: var(--designer-layer, 4) !important;
+  margin: 0 !important;
+}
+.feature-block {
+  opacity: var(--designer-opacity, 1);
+  animation-duration: var(--motion-duration, 700ms) !important;
+  animation-delay: var(--motion-delay, 0ms) !important;
+  animation-timing-function: var(--motion-easing, ease-out) !important;
+  animation-iteration-count: var(--motion-repeat, 1) !important;
+}
+.free-move-handle,
+.free-resize-handle {
+  touch-action: none;
+}
+.feature-block.designer-hide-desktop {
+  display: none !important;
+}
+.designer-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.designer-grid label {
+  min-width: 0;
+}
+.designer-grid input,
+.designer-grid select {
+  width: 100%;
+  min-width: 0;
+}
+.designer-docks {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin: 10px 0;
+}
+.designer-docks button {
+  border: 1px solid #d6e1d7;
+  border-radius: 4px;
+  background: #fff;
+  min-height: 34px;
+  font-size: 10px;
+}
+.designer-docks button:hover,
+.designer-docks button[aria-pressed="true"] {
+  background: #e7f1ea;
+  border-color: #357b56;
+}
+.designer-motion {
+  border-top: 1px solid #dbe3dd;
+  padding-top: 14px;
+  margin-top: 14px;
+}
+.actual-render-viewport {
+  position: relative;
+  overflow: hidden;
+  background: #f6f4ee;
+  min-height: 120px;
+}
+.actual-render-content {
+  position: absolute;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+}
+.actual-render-content .wedding-site > nav {
+  display: none;
+}
+.actual-render-content .wedding-site {
+  min-width: 0 !important;
+}
+.actual-render-content .invitation-cover-screen {
+  min-height: 1000px !important;
+  height: 1000px !important;
+}
+.actual-render-content .feature-block {
+  animation: none !important;
+  opacity: var(--designer-opacity, 1) !important;
+  transform: none !important;
+}
+.actual-render-content .await-reveal {
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+.actual-render-content .fixed-sound-player {
+  display: none !important;
+}
+.actual-design-preview .template-browser {
+  padding: 9px;
+  font-size: 9px;
+  background: #eef2ed;
+  color: #50634a;
+  display: flex;
+  gap: 5px;
+}
+.actual-design-preview .template-browser em {
+  font-size: 9px;
+}
+.actual-design-preview {
+  overflow: hidden;
+}
+.actual-render-content video {
+  max-width: 100%;
+}
+.editor-shell[inert] {
+  opacity: 0.7;
+}
+.free-position-controls input[type="number"] {
+  min-height: 34px;
+  padding: 6px;
+}
+.free-position-controls select {
+  min-height: 34px;
+}
+@container (max-width:560px) {
+  .feature-block.free-positioned {
+    left: var(--m-left) !important;
+    right: var(--m-right) !important;
+    top: var(--m-top) !important;
+    bottom: var(--m-bottom) !important;
+    width: var(--m-width) !important;
+    height: var(--m-height) !important;
+    translate: var(--m-translate);
+    rotate: var(--m-rotate);
+  }
+  .feature-block.designer-hide-desktop {
+    display: block !important;
+  }
+  .feature-block.designer-hide-mobile {
+    display: none !important;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .feature-block,
+  .feature-effect-layer,
+  .background-layer,
+  .background-video-layer {
+    animation: none !important;
+    transition: none !important;
+  }
+  .feature-block.await-reveal {
+    opacity: var(--designer-opacity, 1) !important;
+    visibility: visible !important;
+    transform: none !important;
+  }
+}
+
+.invitation-cover-screen .canvas-decoration-layer > .feature-block {
+  pointer-events: none;
+}

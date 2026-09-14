@@ -1,0 +1,21 @@
+name: QA v0.17
+on: [pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run qa
+      - run: npx playwright install --with-deps chromium
+      - name: Browser regression
+        run: |
+          npm run dev:web -- --host 127.0.0.1 > /tmp/ikrarku-vite.log 2>&1 &
+          for i in {1..30}; do curl -sf http://127.0.0.1:5173 >/dev/null && break; sleep 1; done
+          npm run qa:browser
