@@ -1,35 +1,50 @@
-import 'dotenv/config'
-import express from 'express'
-import cors from 'cors'
-import { DatabaseSync } from 'node:sqlite'
-import bcrypt from 'bcryptjs'
-import crypto from 'node:crypto'
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import multer from 'multer'
-import PDFDocument from 'pdfkit'
-import nodemailer from 'nodemailer'
+import "dotenv/config";
+import { createPolicies } from "./policies.mjs";
+import express from "express";
+import cors from "cors";
+import { DatabaseSync } from "node:sqlite";
+import bcrypt from "bcryptjs";
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import multer from "multer";
+import PDFDocument from "pdfkit";
+import nodemailer from "nodemailer";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const PORT = Number(process.env.API_PORT || 5180)
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173'
-const NODE_ENV = process.env.NODE_ENV || 'development'
-const DIST_DIR = path.resolve(__dirname, '..', 'dist')
-const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'))
-const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || path.join(__dirname, 'uploads'))
-const RECEIPT_DIR = path.resolve(process.env.RECEIPT_DIR || path.join(__dirname, 'receipts'))
-const DB_FILE = path.resolve(process.env.DB_FILE || path.join(DATA_DIR, 'ikrarku.sqlite'))
-for (const dir of [DATA_DIR, UPLOAD_DIR, RECEIPT_DIR]) fs.mkdirSync(dir, { recursive: true })
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PORT = Number(process.env.API_PORT || 5180);
+const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || "http://localhost:5173";
+const NODE_ENV = process.env.NODE_ENV || "development";
+const DIST_DIR = path.resolve(__dirname, "..", "dist");
+const DATA_DIR = path.resolve(
+  process.env.DATA_DIR || path.join(__dirname, "data"),
+);
+const UPLOAD_DIR = path.resolve(
+  process.env.UPLOAD_DIR || path.join(__dirname, "uploads"),
+);
+const RECEIPT_DIR = path.resolve(
+  process.env.RECEIPT_DIR || path.join(__dirname, "receipts"),
+);
+const DB_FILE = path.resolve(
+  process.env.DB_FILE || path.join(DATA_DIR, "ikrarku.sqlite"),
+);
+for (const dir of [DATA_DIR, UPLOAD_DIR, RECEIPT_DIR])
+  fs.mkdirSync(dir, { recursive: true });
 
-const db = new DatabaseSync(DB_FILE)
-db.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;')
+const db = new DatabaseSync(DB_FILE);
+db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;");
 
-const now = () => new Date().toISOString()
-const id = (prefix) => `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`
+const now = () => new Date().toISOString();
+const id = (prefix) =>
+  `${prefix}_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
 const parseJson = (value, fallback = null) => {
-  try { return value ? JSON.parse(value) : fallback } catch { return fallback }
-}
+  try {
+    return value ? JSON.parse(value) : fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 function initDb() {
   db.exec(`
@@ -276,109 +291,332 @@ function initDb() {
       canvas_json TEXT NOT NULL DEFAULT '[]',
       updated_at TEXT NOT NULL
     );
-  `)
+  `);
 
   const ensureColumn = (table, column, definition) => {
-    const columns = db.prepare(`PRAGMA table_info(${table})`).all().map(item => item.name)
-    if (!columns.includes(column)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
-  }
-  ensureColumn('tasks','task_type',"TEXT NOT NULL DEFAULT 'General'")
-  ensureColumn('tasks','template_id','TEXT')
-  ensureColumn('tasks','requestor_id','TEXT')
-  ensureColumn('tasks','decision_note',"TEXT NOT NULL DEFAULT ''")
-  ensureColumn('users','email_verified',"INTEGER NOT NULL DEFAULT 1")
-  ensureColumn('users','verification_token','TEXT')
-  ensureColumn('users','verification_expires','TEXT')
-  ensureColumn('users','settings_json',"TEXT NOT NULL DEFAULT '{}'")
-  ensureColumn('templates','canvas_json',"TEXT NOT NULL DEFAULT '[]'")
-  ensureColumn('conversations','public_token','TEXT')
-  ensureColumn('orders','user_id','TEXT')
-  ensureColumn('orders','gateway_ref','TEXT')
+    const columns = db
+      .prepare(`PRAGMA table_info(${table})`)
+      .all()
+      .map((item) => item.name);
+    if (!columns.includes(column))
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  };
+  ensureColumn("tasks", "task_type", "TEXT NOT NULL DEFAULT 'General'");
+  ensureColumn("tasks", "template_id", "TEXT");
+  ensureColumn("tasks", "requestor_id", "TEXT");
+  ensureColumn("tasks", "decision_note", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("users", "email_verified", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn("users", "verification_token", "TEXT");
+  ensureColumn("users", "verification_expires", "TEXT");
+  ensureColumn("users", "settings_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn("templates", "canvas_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn("conversations", "public_token", "TEXT");
+  ensureColumn("orders", "user_id", "TEXT");
+  ensureColumn("orders", "gateway_ref", "TEXT");
   // QA TC-101 idle session, TC-105 reset password, TC-075/076 takedown, TC-106 sample image
-  ensureColumn('users','reset_token','TEXT')
-  ensureColumn('users','reset_expires','TEXT')
-  ensureColumn('sessions','last_seen_at','TEXT')
-  ensureColumn('templates','sample_image_url','TEXT')
-  ensureColumn('templates','header_image_url','TEXT')
-  ensureColumn('templates','unpublished_at','TEXT')
-  try { db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_slug_unique ON sites(slug) WHERE slug <> ''") } catch { /* legacy duplicate slug can be corrected in CMS */ }
-  db.exec("UPDATE templates SET status='Published' WHERE status IN ('Published','Approved')")
-  db.exec("UPDATE users SET email_verified=1 WHERE email_verified IS NULL OR role_id!='role_user'")
+  ensureColumn("users", "reset_token", "TEXT");
+  ensureColumn("users", "reset_expires", "TEXT");
+  ensureColumn("sessions", "last_seen_at", "TEXT");
+  ensureColumn("templates", "sample_image_url", "TEXT");
+  ensureColumn("templates", "header_image_url", "TEXT");
+  ensureColumn("templates", "unpublished_at", "TEXT");
+  try {
+    db.exec(
+      "CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_slug_unique ON sites(slug) WHERE slug <> ''",
+    );
+  } catch {
+    /* legacy duplicate slug can be corrected in CMS */
+  }
+  db.exec(
+    "UPDATE templates SET status='Published' WHERE status IN ('Published','Approved')",
+  );
+  db.exec(
+    "UPDATE users SET email_verified=1 WHERE email_verified IS NULL OR role_id!='role_user'",
+  );
 
+  db.exec(`CREATE TABLE IF NOT EXISTS template_drafts (
+    template_id TEXT PRIMARY KEY REFERENCES templates(id) ON DELETE CASCADE,
+    changes_json TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`);
+  ensureColumn("orders", "guest_token", "TEXT");
+  const migrateFulfillment = !db
+    .prepare("PRAGMA table_info(orders)")
+    .all()
+    .some((c) => c.name === "fulfillment_status");
+  ensureColumn(
+    "orders",
+    "fulfillment_status",
+    "TEXT NOT NULL DEFAULT 'Pending'",
+  );
+  ensureColumn("orders", "fulfillment_error", "TEXT");
+  if (migrateFulfillment)
+    db.exec(
+      "UPDATE orders SET fulfillment_status='Complete' WHERE payment_status='Paid' AND receipt_path IS NOT NULL AND (SELECT COUNT(*) FROM tasks WHERE tasks.order_id=orders.id)>=2",
+    );
+  ensureColumn("users", "pending_email", "TEXT");
   const roleSeeds = [
-    ['role_admin', 'Admin', ['*'], 1],
-    ['role_editor', 'Editor', ['dashboard.editor','users.view','sites.manage.assigned','templates.view','templates.create','templates.edit','canvas.manage','tasks.view','tasks.update','articles.view','articles.manage','sounds.view','conversations.view','conversations.reply','conversations.outbound'], 1],
-    ['role_cs', 'Customer Service', ['dashboard.cs','tasks.view','tasks.update','conversations.view','conversations.reply','conversations.outbound','orders.view','articles.view'], 1],
-    ['role_user', 'User', ['dashboard.user','templates.view','canvas.manage','canvas.manage.own','articles.view','orders.create','orders.view.own'], 1],
-  ]
-  const insertRole = db.prepare(`INSERT OR IGNORE INTO roles(id,name,permissions_json,is_system,created_at) VALUES(?,?,?,?,?)`)
-  for (const [rid, name, permissions, system] of roleSeeds) insertRole.run(rid, name, JSON.stringify(permissions), system, now())
-  for (const [rid, _name, permissions] of roleSeeds) db.prepare('UPDATE roles SET permissions_json=? WHERE id=?').run(JSON.stringify(permissions), rid)
+    ["role_admin", "Admin", ["*"], 1],
+    [
+      "role_editor",
+      "Editor",
+      [
+        "dashboard.editor",
+        "users.view",
+        "sites.manage.assigned",
+        "templates.view",
+        "templates.create",
+        "templates.edit",
+        "canvas.manage",
+        "tasks.view",
+        "tasks.update",
+        "articles.view",
+        "articles.manage",
+        "sounds.view",
+        "conversations.view",
+        "conversations.reply",
+        "conversations.outbound",
+      ],
+      1,
+    ],
+    [
+      "role_cs",
+      "Customer Service",
+      [
+        "dashboard.cs",
+        "tasks.view",
+        "tasks.update",
+        "conversations.view",
+        "conversations.reply",
+        "conversations.outbound",
+        "orders.view",
+        "articles.view",
+      ],
+      1,
+    ],
+    [
+      "role_user",
+      "User",
+      [
+        "dashboard.user",
+        "templates.view",
+        "canvas.manage",
+        "canvas.manage.own",
+        "articles.view",
+        "orders.create",
+        "orders.view.own",
+      ],
+      1,
+    ],
+  ];
+  const insertRole = db.prepare(
+    `INSERT OR IGNORE INTO roles(id,name,permissions_json,is_system,created_at) VALUES(?,?,?,?,?)`,
+  );
+  for (const [rid, name, permissions, system] of roleSeeds)
+    insertRole.run(rid, name, JSON.stringify(permissions), system, now());
+  // Seed defaults only; preserve administrator permission customizations across restarts.
 
-  const userCount = db.prepare('SELECT COUNT(*) count FROM users').get().count
+  const userCount = db.prepare("SELECT COUNT(*) count FROM users").get().count;
   if (!userCount) {
-    const bootstrapPassword = process.env.ADMIN_BOOTSTRAP_PASSWORD || (NODE_ENV === 'production' ? '' : 'admin')
-    if (!bootstrapPassword) throw new Error('ADMIN_BOOTSTRAP_PASSWORD wajib di-set untuk deployment production/staging.')
-    const bootstrapUsername = process.env.ADMIN_BOOTSTRAP_USERNAME || 'admin'
-    const bootstrapEmail = process.env.ADMIN_BOOTSTRAP_EMAIL || 'admin@ikrarku.local'
-    const insertUser = db.prepare(`INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
-    insertUser.run('user_admin','Platform','Admin',bootstrapEmail,bootstrapUsername,bcrypt.hashSync(bootstrapPassword,10),'role_admin',1,now(),now())
+    const bootstrapPassword =
+      process.env.ADMIN_BOOTSTRAP_PASSWORD ||
+      (NODE_ENV === "production" ? "" : "admin");
+    if (!bootstrapPassword)
+      throw new Error(
+        "ADMIN_BOOTSTRAP_PASSWORD wajib di-set untuk deployment production/staging.",
+      );
+    const bootstrapUsername = process.env.ADMIN_BOOTSTRAP_USERNAME || "admin";
+    const bootstrapEmail =
+      process.env.ADMIN_BOOTSTRAP_EMAIL || "admin@ikrarku.local";
+    const insertUser = db.prepare(
+      `INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    );
+    insertUser.run(
+      "user_admin",
+      "Platform",
+      "Admin",
+      bootstrapEmail,
+      bootstrapUsername,
+      bcrypt.hashSync(bootstrapPassword, 10),
+      "role_admin",
+      1,
+      now(),
+      now(),
+    );
   }
 
   // Ensure at least one active Customer Service and one active Editor exist so paid orders
   // can be assigned (payment is rejected otherwise). Idempotent: only seeds when missing.
-  const domain=(process.env.ADMIN_BOOTSTRAP_EMAIL||'admin@ikrarku.local').split('@')[1]||'ikrarku.local'
-  const staffPassword=process.env.STAFF_BOOTSTRAP_PASSWORD||process.env.ADMIN_BOOTSTRAP_PASSWORD||(NODE_ENV==='production'?crypto.randomBytes(18).toString('base64'):'staff')
-  const ensureStaff=(roleId,uname,fname)=>{
-    const existing=db.prepare('SELECT COUNT(*) count FROM users WHERE role_id=? AND active=1').get(roleId).count
-    if(existing) return
-    try{
-      db.prepare(`INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`)
-        .run(id('usr'),fname,'ikrarku',`${uname}@${domain}`,uname,bcrypt.hashSync(staffPassword,10),roleId,1,1,now(),now())
-    }catch{/* username/email may already exist */}
-  }
-  ensureStaff('role_cs','cs','Customer Service')
-  ensureStaff('role_editor','editor','Web Designer')
+  const domain =
+    (process.env.ADMIN_BOOTSTRAP_EMAIL || "admin@ikrarku.local").split(
+      "@",
+    )[1] || "ikrarku.local";
+  const staffPassword =
+    process.env.STAFF_BOOTSTRAP_PASSWORD ||
+    process.env.ADMIN_BOOTSTRAP_PASSWORD ||
+    (NODE_ENV === "production"
+      ? crypto.randomBytes(18).toString("base64")
+      : "staff");
+  const ensureStaff = (roleId, uname, fname) => {
+    const existing = db
+      .prepare("SELECT COUNT(*) count FROM users WHERE role_id=? AND active=1")
+      .get(roleId).count;
+    if (existing) return;
+    try {
+      db.prepare(
+        `INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        id("usr"),
+        fname,
+        "ikrarku",
+        `${uname}@${domain}`,
+        uname,
+        bcrypt.hashSync(staffPassword, 10),
+        roleId,
+        1,
+        1,
+        now(),
+        now(),
+      );
+    } catch {
+      /* username/email may already exist */
+    }
+  };
+  ensureStaff("role_cs", "cs", "Customer Service");
+  ensureStaff("role_editor", "editor", "Web Designer");
 
   // Backfill preview images for templates that have none, so template detail / checkout / showcase
   // never render an empty (looks-broken) hero. Idempotent — only touches empty preview_url.
-  const templateCount = db.prepare('SELECT COUNT(*) count FROM templates').get().count
+  const templateCount = db
+    .prepare("SELECT COUNT(*) count FROM templates")
+    .get().count;
   if (!templateCount) {
-    const insert = db.prepare(`INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+    const insert = db.prepare(
+      `INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    );
     const rows = [
-      ['split-serenity','Split Serenity','Editorial','Layout editorial dua kolom dengan panel fixed dan area cerita yang dapat di-scroll.',499000,'IDR','Published','/themes/split-reference.png','#f4eadc','#17241f',0,'split'],
-      ['cinematic-story','Cinema Night','Cinematic','Pengalaman undangan sinematik dengan kontras gelap, scene-based storytelling, dan motion premium.',699000,'IDR','Published','/themes/cover-reference.png','#e11d2e','#090909',1,'cinematic'],
-      ['storybook-magic','Storybook Magic','Fairytale','Tema fairytale modern dengan chapter storytelling, warna lembut, dan aksen champagne gold.',649000,'IDR','Published','/themes/split-reference.png','#d7b66f','#dceafa',1,'storybook'],
-    ]
-    for (const row of rows) insert.run(...row,'user_admin','user_admin','[]',now(),now())
+      [
+        "split-serenity",
+        "Split Serenity",
+        "Editorial",
+        "Layout editorial dua kolom dengan panel fixed dan area cerita yang dapat di-scroll.",
+        499000,
+        "IDR",
+        "Published",
+        "/themes/split-reference.png",
+        "#f4eadc",
+        "#17241f",
+        0,
+        "split",
+      ],
+      [
+        "cinematic-story",
+        "Cinema Night",
+        "Cinematic",
+        "Pengalaman undangan sinematik dengan kontras gelap, scene-based storytelling, dan motion premium.",
+        699000,
+        "IDR",
+        "Published",
+        "/themes/cover-reference.png",
+        "#e11d2e",
+        "#090909",
+        1,
+        "cinematic",
+      ],
+      [
+        "storybook-magic",
+        "Storybook Magic",
+        "Fairytale",
+        "Tema fairytale modern dengan chapter storytelling, warna lembut, dan aksen champagne gold.",
+        649000,
+        "IDR",
+        "Published",
+        "/themes/split-reference.png",
+        "#d7b66f",
+        "#dceafa",
+        1,
+        "storybook",
+      ],
+    ];
+    for (const row of rows)
+      insert.run(...row, "user_admin", "user_admin", "[]", now(), now());
   }
   // Backfill preview images for any existing templates that have none (existing staging DBs).
-  try{
-    db.prepare(`UPDATE templates SET preview_url='/themes/cover-reference.png' WHERE (preview_url IS NULL OR preview_url='') AND preset IN ('cinematic','classic')`).run()
-    db.prepare(`UPDATE templates SET preview_url='/themes/split-reference.png' WHERE (preview_url IS NULL OR preview_url='')`).run()
-  }catch{/* ignore */}
-
-  const methodCount = db.prepare('SELECT COUNT(*) count FROM payment_methods').get().count
-  if (!methodCount) {
-    const insert = db.prepare(`INSERT INTO payment_methods(id,code,label,enabled,config_json,updated_at) VALUES(?,?,?,?,?,?)`)
-    insert.run('pay_qris','QRIS','QRIS',1,JSON.stringify({merchantName:'ikrarku Sites', instructions:'Scan QR melalui aplikasi pembayaran.'}),now())
-    insert.run('pay_gopay','GOPAY','GoPay',1,JSON.stringify({merchantName:'ikrarku Sites', instructions:'Lanjutkan ke aplikasi GoPay.'}),now())
-    insert.run('pay_card','CARD','Debit / Credit Card',1,JSON.stringify({merchantName:'ikrarku Sites', instructions:'Masukkan informasi kartu melalui payment gateway.'}),now())
+  try {
+    db.prepare(
+      `UPDATE templates SET preview_url='/themes/cover-reference.png' WHERE (preview_url IS NULL OR preview_url='') AND preset IN ('cinematic','classic')`,
+    ).run();
+    db.prepare(
+      `UPDATE templates SET preview_url='/themes/split-reference.png' WHERE (preview_url IS NULL OR preview_url='')`,
+    ).run();
+  } catch {
+    /* ignore */
   }
 
-  const settingInsert=db.prepare(`INSERT OR IGNORE INTO platform_settings(key,value_json,updated_at) VALUES(?,?,?)`)
-  settingInsert.run('staging',JSON.stringify({appName:'ikrarku Sites',maintenanceMode:false}),now())
-}
-initDb()
+  const methodCount = db
+    .prepare("SELECT COUNT(*) count FROM payment_methods")
+    .get().count;
+  if (!methodCount) {
+    const insert = db.prepare(
+      `INSERT INTO payment_methods(id,code,label,enabled,config_json,updated_at) VALUES(?,?,?,?,?,?)`,
+    );
+    insert.run(
+      "pay_qris",
+      "QRIS",
+      "QRIS",
+      1,
+      JSON.stringify({
+        merchantName: "ikrarku Sites",
+        instructions: "Scan QR melalui aplikasi pembayaran.",
+      }),
+      now(),
+    );
+    insert.run(
+      "pay_gopay",
+      "GOPAY",
+      "GoPay",
+      1,
+      JSON.stringify({
+        merchantName: "ikrarku Sites",
+        instructions: "Lanjutkan ke aplikasi GoPay.",
+      }),
+      now(),
+    );
+    insert.run(
+      "pay_card",
+      "CARD",
+      "Debit / Credit Card",
+      1,
+      JSON.stringify({
+        merchantName: "ikrarku Sites",
+        instructions: "Masukkan informasi kartu melalui payment gateway.",
+      }),
+      now(),
+    );
+  }
 
-const app = express()
-app.disable('x-powered-by')
-app.set('trust proxy', 1)
-app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }))
-app.use(express.json({ limit: '25mb' }))
-app.use('/uploads', express.static(UPLOAD_DIR))
-app.use('/receipts', express.static(RECEIPT_DIR))
-const upload = multer({ dest: UPLOAD_DIR, limits: { fileSize: 25 * 1024 * 1024 } })
+  const settingInsert = db.prepare(
+    `INSERT OR IGNORE INTO platform_settings(key,value_json,updated_at) VALUES(?,?,?)`,
+  );
+  settingInsert.run(
+    "staging",
+    JSON.stringify({ appName: "ikrarku Sites", maintenanceMode: false }),
+    now(),
+  );
+}
+initDb();
+const policy = createPolicies(db);
+
+const app = express();
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
+app.use(express.json({ limit: "25mb" }));
+app.use("/uploads", express.static(UPLOAD_DIR));
+// Receipts are downloaded through authenticated API, never served as public static files.
+const upload = multer({
+  dest: UPLOAD_DIR,
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
 
 function userPayload(user) {
   return {
@@ -393,779 +631,3337 @@ function userPayload(user) {
     permissions: parseJson(user.permissions_json, []),
     emailVerified: Boolean(user.email_verified),
     settings: parseJson(user.settings_json, {}),
-  }
+  };
 }
 // QA TC-101: sesi otomatis berakhir setelah idle (default 120 menit, 0 = nonaktif).
-const SESSION_IDLE_MINUTES = Number(process.env.SESSION_IDLE_MINUTES ?? 120)
+const SESSION_IDLE_MINUTES = Number(process.env.SESSION_IDLE_MINUTES ?? 120);
 function auth(req, res, next) {
-  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  if (!token) return res.status(401).json({ error: 'Authentication required' })
-  const row = db.prepare(`SELECT s.token,s.expires_at,s.last_seen_at,u.*,r.name role_name,r.permissions_json FROM sessions s JOIN users u ON u.id=s.user_id JOIN roles r ON r.id=u.role_id WHERE s.token=?`).get(token)
-  if (!row || new Date(row.expires_at) < new Date()) return res.status(401).json({ error: 'Session expired', code:'session_expired' })
+  const token = String(req.headers.authorization || "").replace(
+    /^Bearer\s+/i,
+    "",
+  );
+  if (!token) return res.status(401).json({ error: "Authentication required" });
+  const row = db
+    .prepare(
+      `SELECT s.token,s.expires_at,s.last_seen_at,u.*,r.name role_name,r.permissions_json FROM sessions s JOIN users u ON u.id=s.user_id JOIN roles r ON r.id=u.role_id WHERE s.token=?`,
+    )
+    .get(token);
+  if (!row || new Date(row.expires_at) < new Date())
+    return res
+      .status(401)
+      .json({ error: "Session expired", code: "session_expired" });
   if (SESSION_IDLE_MINUTES > 0) {
-    const last = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0
+    const last = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0;
     if (last && Date.now() - last > SESSION_IDLE_MINUTES * 60_000) {
-      db.prepare('DELETE FROM sessions WHERE token=?').run(token)
-      return res.status(401).json({ error: `Sesi berakhir karena tidak ada aktivitas selama ${SESSION_IDLE_MINUTES} menit. Silakan login kembali.`, code:'idle_timeout' })
+      db.prepare("DELETE FROM sessions WHERE token=?").run(token);
+      return res.status(401).json({
+        error: `Sesi berakhir karena tidak ada aktivitas selama ${SESSION_IDLE_MINUTES} menit. Silakan login kembali.`,
+        code: "idle_timeout",
+      });
     }
-    db.prepare('UPDATE sessions SET last_seen_at=? WHERE token=?').run(now(), token)
+    db.prepare("UPDATE sessions SET last_seen_at=? WHERE token=?").run(
+      now(),
+      token,
+    );
   }
-  req.user = userPayload(row)
-  req.token = token
-  next()
+  if (!row.active || !row.email_verified)
+    return res.status(401).json({
+      error: "Akun tidak aktif atau belum diverifikasi",
+      code: "session_expired",
+    });
+  req.user = userPayload(row);
+  req.token = token;
+  next();
 }
 function permit(permission) {
-  return (req,res,next) => {
-    const permissions = req.user?.permissions || []
-    if (permissions.includes('*') || permissions.includes(permission)) return next()
-    res.status(403).json({ error: 'Permission denied' })
-  }
+  return (req, res, next) => {
+    const permissions = req.user?.permissions || [];
+    if (permissions.includes("*") || permissions.includes(permission))
+      return next();
+    res.status(403).json({ error: "Permission denied" });
+  };
 }
 
 function hasPermission(user, permission) {
-  const permissions=user?.permissions || []
-  return permissions.includes('*') || permissions.includes(permission)
+  const permissions = user?.permissions || [];
+  return permissions.includes("*") || permissions.includes(permission);
 }
 function canManageSiteFor(user, targetUserId) {
-  if (!user) return false
-  if (user.id === targetUserId) return true
-  if (hasPermission(user,'*')) return true
-  if (!hasPermission(user,'sites.manage.assigned')) return false
-  const assignment=db.prepare('SELECT editor_id FROM site_assignments WHERE user_id=?').get(targetUserId)
-  return assignment?.editor_id === user.id
+  if (!user) return false;
+  if (user.id === targetUserId) return true;
+  if (hasPermission(user, "*")) return true;
+  if (!hasPermission(user, "sites.manage.assigned")) return false;
+  const assignment = db
+    .prepare("SELECT editor_id FROM site_assignments WHERE user_id=?")
+    .get(targetUserId);
+  return assignment?.editor_id === user.id;
 }
-function normalizeSlug(value='') { return String(value).toLowerCase().trim().replace(/[^a-z0-9-]/g,'').replace(/^-+|-+$/g,'') }
-function escapeHtml(value='') { return String(value).replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char])) }
+function normalizeSlug(value = "") {
+  return String(value)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]/g, "")
+    .replace(/^-+|-+$/g, "");
+}
+function escapeHtml(value = "") {
+  return String(value).replace(
+    /[&<>"']/g,
+    (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        char
+      ],
+  );
+}
 
-function auditLog(actorUserId, action, entityType, entityId='', details={}) {
-  try { db.prepare('INSERT INTO audit_logs(id,actor_user_id,action,entity_type,entity_id,details_json,created_at) VALUES(?,?,?,?,?,?,?)').run(id('audit'),actorUserId||null,action,entityType,entityId||null,JSON.stringify(details||{}),now()) } catch { /* audit failure should not break the business transaction */ }
+function auditLog(
+  actorUserId,
+  action,
+  entityType,
+  entityId = "",
+  details = {},
+) {
+  try {
+    db.prepare(
+      "INSERT INTO audit_logs(id,actor_user_id,action,entity_type,entity_id,details_json,created_at) VALUES(?,?,?,?,?,?,?)",
+    ).run(
+      id("audit"),
+      actorUserId || null,
+      action,
+      entityType,
+      entityId || null,
+      JSON.stringify(details || {}),
+      now(),
+    );
+  } catch {
+    /* audit failure should not break the business transaction */
+  }
 }
-function saveSiteRevision(site, actorUserId, reason='Save') {
-  if(!site) return
-  db.prepare('INSERT INTO site_revisions(id,site_id,actor_user_id,title,slug,template_id,canvas_json,status,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)').run(id('srev'),site.id,actorUserId||null,site.title||'',site.slug||'',site.template_id||null,site.canvas_json||'[]',site.status||'Draft',reason,now())
+function saveSiteRevision(site, actorUserId, reason = "Save") {
+  if (!site) return;
+  db.prepare(
+    "INSERT INTO site_revisions(id,site_id,actor_user_id,title,slug,template_id,canvas_json,status,reason,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+  ).run(
+    id("srev"),
+    site.id,
+    actorUserId || null,
+    site.title || "",
+    site.slug || "",
+    site.template_id || null,
+    site.canvas_json || "[]",
+    site.status || "Draft",
+    reason,
+    now(),
+  );
 }
-function saveTemplateRevision(template, actorUserId, reason='Save') {
-  if(!template) return
-  const metadata={name:template.name,category:template.category,description:template.description,price:template.price,currency:template.currency,status:template.status,accent:template.accent,background:template.background,premium:template.premium,preset:template.preset}
-  db.prepare('INSERT INTO template_revisions(id,template_id,actor_user_id,metadata_json,canvas_json,reason,created_at) VALUES(?,?,?,?,?,?,?)').run(id('trev'),template.id,actorUserId||null,JSON.stringify(metadata),template.canvas_json||'[]',reason,now())
+function saveTemplateRevision(template, actorUserId, reason = "Save") {
+  if (!template) return;
+  const metadata = {
+    name: template.name,
+    category: template.category,
+    description: template.description,
+    price: template.price,
+    currency: template.currency,
+    status: template.status,
+    accent: template.accent,
+    background: template.background,
+    premium: template.premium,
+    preset: template.preset,
+  };
+  db.prepare(
+    "INSERT INTO template_revisions(id,template_id,actor_user_id,metadata_json,canvas_json,reason,created_at) VALUES(?,?,?,?,?,?,?)",
+  ).run(
+    id("trev"),
+    template.id,
+    actorUserId || null,
+    JSON.stringify(metadata),
+    template.canvas_json || "[]",
+    reason,
+    now(),
+  );
 }
 function optionalUser(req) {
-  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
-  if(!token) return null
-  const row=db.prepare(`SELECT s.token,s.expires_at,u.*,r.name role_name,r.permissions_json FROM sessions s JOIN users u ON u.id=s.user_id JOIN roles r ON r.id=u.role_id WHERE s.token=?`).get(token)
-  if(!row || new Date(row.expires_at)<new Date()) return null
-  return userPayload(row)
+  const token = String(req.headers.authorization || "").replace(
+    /^Bearer\s+/i,
+    "",
+  );
+  if (!token) return null;
+  const row = db
+    .prepare(
+      `SELECT s.token,s.expires_at,s.last_seen_at,u.*,r.name role_name,r.permissions_json FROM sessions s JOIN users u ON u.id=s.user_id JOIN roles r ON r.id=u.role_id WHERE s.token=?`,
+    )
+    .get(token);
+  if (
+    !row ||
+    !row.active ||
+    !row.email_verified ||
+    new Date(row.expires_at) < new Date() ||
+    (SESSION_IDLE_MINUTES > 0 &&
+      row.last_seen_at &&
+      Date.now() - new Date(row.last_seen_at).getTime() >
+        SESSION_IDLE_MINUTES * 60000)
+  )
+    return null;
+  return userPayload(row);
 }
 
-const rateBuckets = new Map()
+const rateBuckets = new Map();
 function rateLimit(name, max, windowMs) {
-  return (req,res,next) => {
-    const key=`${name}:${req.ip || req.socket.remoteAddress || 'unknown'}`
-    const timestamp=Date.now(); const bucket=rateBuckets.get(key) || {count:0,reset:timestamp+windowMs}
-    if(timestamp>bucket.reset){bucket.count=0;bucket.reset=timestamp+windowMs}
-    bucket.count += 1; rateBuckets.set(key,bucket)
-    if(bucket.count>max){res.setHeader('Retry-After',String(Math.ceil((bucket.reset-timestamp)/1000)));return res.status(429).json({error:'Terlalu banyak permintaan. Silakan coba lagi beberapa saat.'})}
-    next()
-  }
+  return (req, res, next) => {
+    const key = `${name}:${req.ip || req.socket.remoteAddress || "unknown"}`;
+    const timestamp = Date.now();
+    const bucket = rateBuckets.get(key) || {
+      count: 0,
+      reset: timestamp + windowMs,
+    };
+    if (timestamp > bucket.reset) {
+      bucket.count = 0;
+      bucket.reset = timestamp + windowMs;
+    }
+    bucket.count += 1;
+    rateBuckets.set(key, bucket);
+    if (bucket.count > max) {
+      res.setHeader(
+        "Retry-After",
+        String(Math.ceil((bucket.reset - timestamp) / 1000)),
+      );
+      return res.status(429).json({
+        error: "Terlalu banyak permintaan. Silakan coba lagi beberapa saat.",
+      });
+    }
+    next();
+  };
 }
 
-app.get('/api/health', (_req,res) => res.json({ ok:true, database:'sqlite', time:now() }))
+app.get("/api/health", (_req, res) =>
+  res.json({ ok: true, database: "sqlite", time: now() }),
+);
 
-app.get('/api/public/bootstrap', (_req,res) => {
-  const templates = db.prepare(`SELECT * FROM templates WHERE status IN ('Published','Approved') ORDER BY created_at DESC`).all().map(mapTemplate)
-  const articles = db.prepare(`SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.status='Published' ORDER BY COALESCE(a.published_at,a.created_at) DESC`).all().map(mapArticle)
-  const paymentMethods = db.prepare(`SELECT * FROM payment_methods WHERE enabled=1 ORDER BY label`).all().map(mapPayment)
-  res.json({ templates, articles, paymentMethods, environment: NODE_ENV === 'production' ? 'production' : 'staging' })
-})
+app.get("/api/public/bootstrap", (_req, res) => {
+  const templates = db
+    .prepare(
+      `SELECT * FROM templates WHERE status IN ('Published','Approved') ORDER BY created_at DESC`,
+    )
+    .all()
+    .map(mapTemplate);
+  const articles = db
+    .prepare(
+      `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.status='Published' ORDER BY COALESCE(a.published_at,a.created_at) DESC`,
+    )
+    .all()
+    .map(mapArticle);
+  const paymentMethods = db
+    .prepare(`SELECT * FROM payment_methods WHERE enabled=1 ORDER BY label`)
+    .all()
+    .map(mapPayment);
+  res.json({
+    templates,
+    articles,
+    paymentMethods,
+    environment: NODE_ENV === "production" ? "production" : "staging",
+  });
+});
 
-app.get('/api/public/sites/:slug', (_req,res) => {
-  const row=db.prepare(`SELECT s.*,t.name template_name,t.preset template_preset,t.accent template_accent,t.background template_background FROM sites s LEFT JOIN templates t ON t.id=s.template_id WHERE s.slug=? AND s.status='Published'`).get(_req.params.slug)
-  if(!row)return res.status(404).json({error:'Website tidak ditemukan'})
-  res.json({id:row.id,title:row.title,slug:row.slug,templateId:row.template_id,template:{name:row.template_name,preset:row.template_preset,accent:row.template_accent,bg:row.template_background},sections:parseJson(row.canvas_json,[]),status:row.status})
-})
-app.post('/api/public/sites/:slug/rsvp', (req,res) => {
-  const site=db.prepare(`SELECT id FROM sites WHERE slug=? AND status='Published'`).get(req.params.slug); if(!site)return res.status(404).json({error:'Website tidak ditemukan'})
-  const responseId=id('rsvp'); const {canvasId='',name,status='Menunggu',pax=0,email=''}=req.body||{}; if(!name)return res.status(400).json({error:'Nama tamu wajib diisi'})
-  db.prepare('INSERT INTO rsvp_responses(id,site_id,canvas_id,guest_name,email,status,pax,created_at) VALUES(?,?,?,?,?,?,?,?)').run(responseId,site.id,canvasId,name,email,status,Number(pax)||0,now()); res.status(201).json({id:responseId})
-})
-app.post('/api/public/sites/:slug/greetings', (req,res) => {
-  const site=db.prepare(`SELECT id FROM sites WHERE slug=? AND status='Published'`).get(req.params.slug); if(!site)return res.status(404).json({error:'Website tidak ditemukan'})
-  const greetingId=id('greeting'); const {canvasId='',name,message}=req.body||{}; if(!name||!message)return res.status(400).json({error:'Nama dan pesan wajib diisi'})
-  db.prepare('INSERT INTO greetings(id,site_id,canvas_id,guest_name,message,created_at) VALUES(?,?,?,?,?,?)').run(greetingId,site.id,canvasId,name,message,now()); res.status(201).json({id:greetingId})
-})
-app.post('/api/public/chat', rateLimit('public-chat',30,60_000), (req,res) => {
-  const {name='Website Visitor',email='',phone='',body,channel='Web',conversationToken=''}=req.body||{}; if(!String(body).trim())return res.status(400).json({error:'Pesan wajib diisi'})
-  const existingConversation=conversationToken?db.prepare('SELECT * FROM conversations WHERE public_token=?').get(conversationToken):null
-  const conversation=existingConversation||createOrFindConversation({customerName:name,customerEmail:email,customerPhone:phone,channel})
-  const messageId=id('msg'); db.prepare(`INSERT INTO messages(id,conversation_id,sender_type,body,created_at) VALUES(?,?,?,?,?)`).run(messageId,conversation.id,'customer',String(body).trim(),now()); db.prepare('UPDATE conversations SET updated_at=? WHERE id=?').run(now(),conversation.id)
-  res.status(201).json({conversationId:conversation.id,conversationToken:conversation.public_token,messageId,assignedCsId:conversation.assigned_cs_id})
-})
+app.get("/api/public/sites/:slug", (_req, res) => {
+  const row = db
+    .prepare(
+      `SELECT s.*,t.name template_name,t.preset template_preset,t.accent template_accent,t.background template_background FROM sites s LEFT JOIN templates t ON t.id=s.template_id WHERE s.slug=? AND s.status='Published'`,
+    )
+    .get(_req.params.slug);
+  if (!row) return res.status(404).json({ error: "Website tidak ditemukan" });
+  res.json({
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    templateId: row.template_id,
+    template: {
+      name: row.template_name,
+      preset: row.template_preset,
+      accent: row.template_accent,
+      bg: row.template_background,
+    },
+    sections: parseJson(row.canvas_json, []),
+    status: row.status,
+  });
+});
+app.post("/api/public/sites/:slug/rsvp", (req, res) => {
+  const site = db
+    .prepare(`SELECT id FROM sites WHERE slug=? AND status='Published'`)
+    .get(req.params.slug);
+  if (!site) return res.status(404).json({ error: "Website tidak ditemukan" });
+  const responseId = id("rsvp");
+  const {
+    canvasId = "",
+    name,
+    status = "Menunggu",
+    pax = 0,
+    email = "",
+  } = req.body || {};
+  if (!name) return res.status(400).json({ error: "Nama tamu wajib diisi" });
+  db.prepare(
+    "INSERT INTO rsvp_responses(id,site_id,canvas_id,guest_name,email,status,pax,created_at) VALUES(?,?,?,?,?,?,?,?)",
+  ).run(
+    responseId,
+    site.id,
+    canvasId,
+    name,
+    email,
+    status,
+    Number(pax) || 0,
+    now(),
+  );
+  res.status(201).json({ id: responseId });
+});
+app.post("/api/public/sites/:slug/greetings", (req, res) => {
+  const site = db
+    .prepare(`SELECT id FROM sites WHERE slug=? AND status='Published'`)
+    .get(req.params.slug);
+  if (!site) return res.status(404).json({ error: "Website tidak ditemukan" });
+  const greetingId = id("greeting");
+  const { canvasId = "", name, message } = req.body || {};
+  if (!name || !message)
+    return res.status(400).json({ error: "Nama dan pesan wajib diisi" });
+  db.prepare(
+    "INSERT INTO greetings(id,site_id,canvas_id,guest_name,message,created_at) VALUES(?,?,?,?,?,?)",
+  ).run(greetingId, site.id, canvasId, name, message, now());
+  res.status(201).json({ id: greetingId });
+});
+app.post(
+  "/api/public/chat",
+  rateLimit("public-chat", 30, 60_000),
+  (req, res) => {
+    const {
+      name = "Website Visitor",
+      email = "",
+      phone = "",
+      body,
+      channel = "Web",
+      conversationToken = "",
+    } = req.body || {};
+    if (!String(body).trim())
+      return res.status(400).json({ error: "Pesan wajib diisi" });
+    const existingConversation = conversationToken
+      ? db
+          .prepare("SELECT * FROM conversations WHERE public_token=?")
+          .get(conversationToken)
+      : null;
+    if (conversationToken && !existingConversation)
+      return res.status(403).json({ error: "Conversation token tidak valid" });
+    const conversation =
+      existingConversation ||
+      createOrFindConversation({
+        customerName: name,
+        customerEmail: email,
+        customerPhone: phone,
+        channel,
+      });
+    const messageId = id("msg");
+    db.prepare(
+      `INSERT INTO messages(id,conversation_id,sender_type,body,created_at) VALUES(?,?,?,?,?)`,
+    ).run(messageId, conversation.id, "customer", String(body).trim(), now());
+    db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+      now(),
+      conversation.id,
+    );
+    res.status(201).json({
+      conversationId: conversation.id,
+      conversationToken: conversation.public_token,
+      messageId,
+      assignedCsId: conversation.assigned_cs_id,
+    });
+  },
+);
 
 // Guest widget polls this to receive support/admin replies (matched by the public token issued above).
-app.get('/api/public/chat', rateLimit('public-chat-read',120,60_000), (req,res) => {
-  const token=String(req.query.token||'')
-  if(!token) return res.json({conversation:null,messages:[]})
-  const conversation=db.prepare('SELECT * FROM conversations WHERE public_token=?').get(token)
-  if(!conversation) return res.json({conversation:null,messages:[]})
-  const messages=db.prepare('SELECT id,sender_type,body,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC').all(conversation.id)
-  res.json({conversation:{id:conversation.id,status:conversation.status},messages})
-})
+app.get(
+  "/api/public/chat",
+  rateLimit("public-chat-read", 120, 60_000),
+  (req, res) => {
+    const token = String(req.query.token || "");
+    if (!token) return res.json({ conversation: null, messages: [] });
+    const conversation = db
+      .prepare("SELECT * FROM conversations WHERE public_token=?")
+      .get(token);
+    if (!conversation) return res.json({ conversation: null, messages: [] });
+    const messages = db
+      .prepare(
+        "SELECT id,sender_type,body,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC",
+      )
+      .all(conversation.id);
+    res.json({
+      conversation: { id: conversation.id, status: conversation.status },
+      messages,
+    });
+  },
+);
 
-app.post('/api/auth/login', rateLimit('login',12,60_000), (req,res) => {
-  const { username, password } = req.body || {}
-  const row = db.prepare(`SELECT u.*,r.name role_name,r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id WHERE u.username=?`).get(username)
-  if (!row || !bcrypt.compareSync(String(password || ''), row.password_hash)) return res.status(401).json({ error:'Username atau password tidak valid' })
-  if (!row.active || !row.email_verified) return res.status(403).json({ error:'Email belum diverifikasi. Silakan cek email konfirmasi Anda.' })
-  const token = crypto.randomBytes(32).toString('hex')
-  const expires = new Date(Date.now() + 7*24*60*60*1000).toISOString()
-  db.prepare(`INSERT INTO sessions(token,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`).run(token,row.id,expires,now(),now())
-  res.json({ token, user:userPayload(row), sessionIdleMinutes: SESSION_IDLE_MINUTES })
-})
-app.post('/api/auth/signup', rateLimit('signup',8,60_000), (req,res) => {
-  const { firstName, lastName='', email, username, password, passwordConfirm } = req.body || {}
-  if (!firstName || !email || !username || !password || !passwordConfirm) return res.status(400).json({ error:'Data registrasi belum lengkap' })
-  if (String(password).length < 8) return res.status(400).json({ error:'Password minimal 8 karakter' })
-  if (password !== passwordConfirm) return res.status(400).json({ error:'Konfirmasi password tidak sama' })
-  if (db.prepare('SELECT 1 FROM users WHERE email=? OR username=?').get(email,username)) return res.status(409).json({ error:'Email atau username sudah digunakan' })
-  const userId=id('usr')
-  const verificationToken=crypto.randomBytes(32).toString('hex')
-  const verificationExpires=new Date(Date.now()+24*60*60*1000).toISOString()
-  db.prepare(`INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,verification_token,verification_expires,settings_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(userId,firstName,lastName,email,username,bcrypt.hashSync(password,10),'role_user',0,0,verificationToken,verificationExpires,JSON.stringify({notificationSoundMuted:false}),now(),now())
-  db.prepare(`INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).run(id('site'),userId,`${firstName} ${lastName}`.trim(),username,'[]','Draft',now(),now())
-  const verifyUrl=`${CLIENT_ORIGIN.replace(/\/$/,'')}/verify-email?token=${verificationToken}`
-  queueEmail(email,'Konfirmasi akun ikrarku',`<h2>Konfirmasi email Anda</h2><p>Halo ${firstName}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`)
-  const mailerReady=Boolean(process.env.SMTP_HOST)
-  res.status(201).json({ ok:true, verificationRequired:true, emailQueued:mailerReady, mailerReady, ...((NODE_ENV!=='production'||!mailerReady)?{devVerificationUrl:verifyUrl}:{}) })
-})
-app.post('/api/auth/verify-email', (req,res) => {
-  const token=String(req.body?.token||'')
-  const row=db.prepare('SELECT * FROM users WHERE verification_token=?').get(token)
-  if(!row) return res.status(400).json({error:'Token verifikasi tidak valid'})
-  if(!row.verification_expires || new Date(row.verification_expires).getTime()<Date.now()) return res.status(400).json({error:'Token verifikasi telah kedaluwarsa'})
-  db.prepare(`UPDATE users SET active=1,email_verified=1,verification_token=NULL,verification_expires=NULL,updated_at=? WHERE id=?`).run(now(),row.id)
-  queueEmail(row.email,'Akun ikrarku aktif',`<h2>Akun berhasil diverifikasi</h2><p>Halo ${row.first_name}, akun Anda sudah aktif dan dapat digunakan untuk login.</p>`)
-  res.json({ok:true})
-})
-app.post('/api/auth/resend-verification', rateLimit('verify-resend',8,60_000), (req,res) => {
-  const email=String(req.body?.email||'').trim().toLowerCase()
-  const row=db.prepare('SELECT * FROM users WHERE email=?').get(email)
-  if(!row || row.email_verified) return res.json({ok:true,message:'Jika akun memerlukan verifikasi, email baru telah dikirim.'})
-  const token=crypto.randomBytes(32).toString('hex'); const expires=new Date(Date.now()+24*60*60*1000).toISOString()
-  db.prepare('UPDATE users SET verification_token=?,verification_expires=?,updated_at=? WHERE id=?').run(token,expires,now(),row.id)
-  const verifyUrl=`${CLIENT_ORIGIN.replace(/\/$/,'')}/verify-email?token=${token}`
-  queueEmail(row.email,'Konfirmasi akun ikrarku',`<h2>Konfirmasi email Anda</h2><p>Halo ${escapeHtml(row.first_name)}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`)
-  res.json({ok:true,message:'Email verifikasi dikirim ulang.',...(NODE_ENV!=='production'||!process.env.SMTP_HOST?{devVerificationUrl:verifyUrl}:{})})
-})
+app.post("/api/auth/login", rateLimit("login", 12, 60_000), (req, res) => {
+  const { username, password } = req.body || {};
+  const row = db
+    .prepare(
+      `SELECT u.*,r.name role_name,r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id WHERE u.username=?`,
+    )
+    .get(username);
+  if (!row || !bcrypt.compareSync(String(password || ""), row.password_hash))
+    return res
+      .status(401)
+      .json({ error: "Username atau password tidak valid" });
+  if (!row.active || !row.email_verified)
+    return res.status(403).json({
+      error: "Email belum diverifikasi. Silakan cek email konfirmasi Anda.",
+    });
+  policy.claimGuestOrders(row.id);
+  const token = crypto.randomBytes(32).toString("hex");
+  const expires = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  db.prepare(
+    `INSERT INTO sessions(token,user_id,expires_at,created_at,last_seen_at) VALUES(?,?,?,?,?)`,
+  ).run(token, row.id, expires, now(), now());
+  res.json({
+    token,
+    user: userPayload(row),
+    sessionIdleMinutes: SESSION_IDLE_MINUTES,
+  });
+});
+app.post("/api/auth/signup", rateLimit("signup", 8, 60_000), (req, res) => {
+  const {
+    firstName,
+    lastName = "",
+    password,
+    passwordConfirm,
+  } = req.body || {};
+  const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase(),
+    username = String(req.body?.username || "")
+      .trim()
+      .toLowerCase();
+  if (
+    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
+    !/^[a-z0-9][a-z0-9-]{2,49}$/.test(username)
+  )
+    return res.status(400).json({
+      error:
+        "Email atau username tidak valid (3-50 huruf kecil, angka, tanda hubung).",
+    });
+  if (db.prepare("SELECT id FROM sites WHERE slug=?").get(username))
+    return res.status(409).json({ error: "URL username sudah digunakan" });
+  if (!firstName || !email || !username || !password || !passwordConfirm)
+    return res.status(400).json({ error: "Data registrasi belum lengkap" });
+  if (String(password).length < 8)
+    return res.status(400).json({ error: "Password minimal 8 karakter" });
+  if (password !== passwordConfirm)
+    return res.status(400).json({ error: "Konfirmasi password tidak sama" });
+  if (
+    db
+      .prepare("SELECT 1 FROM users WHERE email=? OR username=?")
+      .get(email, username)
+  )
+    return res
+      .status(409)
+      .json({ error: "Email atau username sudah digunakan" });
+  const userId = id("usr");
+  const verificationToken = crypto.randomBytes(32).toString("hex");
+  const verificationExpires = new Date(
+    Date.now() + 24 * 60 * 60 * 1000,
+  ).toISOString();
+  policy.transaction(() => {
+    db.prepare(
+      `INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,verification_token,verification_expires,settings_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      userId,
+      firstName,
+      lastName,
+      email,
+      username,
+      bcrypt.hashSync(password, 10),
+      "role_user",
+      0,
+      0,
+      verificationToken,
+      verificationExpires,
+      JSON.stringify({ notificationSoundMuted: false }),
+      now(),
+      now(),
+    );
+    db.prepare(
+      `INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+    ).run(
+      id("site"),
+      userId,
+      `${firstName} ${lastName}`.trim(),
+      username,
+      "[]",
+      "Draft",
+      now(),
+      now(),
+    );
+  });
+  const verifyUrl = `${CLIENT_ORIGIN.replace(/\/$/, "")}/verify-email?token=${verificationToken}`;
+  queueEmail(
+    email,
+    "Konfirmasi akun ikrarku",
+    `<h2>Konfirmasi email Anda</h2><p>Halo ${firstName}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`,
+  );
+  const mailerReady = Boolean(process.env.SMTP_HOST);
+  res.status(201).json({
+    ok: true,
+    verificationRequired: true,
+    emailQueued: mailerReady,
+    mailerReady,
+    ...(NODE_ENV !== "production" ? { devVerificationUrl: verifyUrl } : {}),
+  });
+});
+app.post("/api/auth/verify-email", (req, res) => {
+  const token = String(req.body?.token || "");
+  const row = db
+    .prepare("SELECT * FROM users WHERE verification_token=?")
+    .get(token);
+  if (!row)
+    return res.status(400).json({ error: "Token verifikasi tidak valid" });
+  if (
+    !row.verification_expires ||
+    new Date(row.verification_expires).getTime() < Date.now()
+  )
+    return res
+      .status(400)
+      .json({ error: "Token verifikasi telah kedaluwarsa" });
+  if (
+    row.pending_email &&
+    db
+      .prepare("SELECT id FROM users WHERE lower(email)=? AND id<>?")
+      .get(row.pending_email, row.id)
+  )
+    return res.status(409).json({ error: "Email sudah digunakan" });
+  policy.transaction(() => {
+    db.prepare(
+      `UPDATE users SET email=COALESCE(pending_email,email),pending_email=NULL,active=CASE WHEN email_verified=0 THEN 1 ELSE active END,email_verified=1,verification_token=NULL,verification_expires=NULL,updated_at=? WHERE id=?`,
+    ).run(now(), row.id);
+    policy.claimGuestOrders(row.id);
+    db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
+  });
+  queueEmail(
+    row.email,
+    "Akun ikrarku aktif",
+    `<h2>Akun berhasil diverifikasi</h2><p>Halo ${row.first_name}, akun Anda sudah aktif dan dapat digunakan untuk login.</p>`,
+  );
+  res.json({ ok: true });
+});
+app.post(
+  "/api/auth/resend-verification",
+  rateLimit("verify-resend", 8, 60_000),
+  (req, res) => {
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
+    const row = db.prepare("SELECT * FROM users WHERE email=?").get(email);
+    if (!row || row.email_verified)
+      return res.json({
+        ok: true,
+        message: "Jika akun memerlukan verifikasi, email baru telah dikirim.",
+      });
+    const token = crypto.randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    db.prepare(
+      "UPDATE users SET verification_token=?,verification_expires=?,updated_at=? WHERE id=?",
+    ).run(token, expires, now(), row.id);
+    const verifyUrl = `${CLIENT_ORIGIN.replace(/\/$/, "")}/verify-email?token=${token}`;
+    queueEmail(
+      row.email,
+      "Konfirmasi akun ikrarku",
+      `<h2>Konfirmasi email Anda</h2><p>Halo ${escapeHtml(row.first_name)}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`,
+    );
+    res.json({
+      ok: true,
+      message: "Email verifikasi dikirim ulang.",
+      ...(NODE_ENV !== "production" ? { devVerificationUrl: verifyUrl } : {}),
+    });
+  },
+);
 // QA TC-072: checkout mengenali apakah email pemesan sudah punya akun ikrarku.
-app.post('/api/auth/check-email', rateLimit('check-email',40,60_000), (req,res) => {
-  const email=String(req.body?.email||'').trim().toLowerCase()
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:'Format email tidak valid'})
-  const row=db.prepare('SELECT id,email_verified FROM users WHERE lower(email)=?').get(email)
-  res.json({ registered:Boolean(row), verified:Boolean(row&&row.email_verified) })
-})
+app.post(
+  "/api/auth/check-email",
+  rateLimit("check-email", 40, 60_000),
+  (req, res) => {
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ error: "Format email tidak valid" });
+    const row = db
+      .prepare("SELECT id,email_verified FROM users WHERE lower(email)=?")
+      .get(email);
+    res.json({
+      registered: Boolean(row),
+      verified: Boolean(row && row.email_verified),
+    });
+  },
+);
 // QA TC-105: lupa password.
-app.post('/api/auth/forgot-password', rateLimit('forgot-password',8,60_000), (req,res) => {
-  const email=String(req.body?.email||'').trim().toLowerCase()
-  const generic={ ok:true, message:'Jika email terdaftar, tautan reset password sudah dikirim. Cek inbox dan folder spam.' }
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return res.status(400).json({error:'Format email tidak valid'})
-  const row=db.prepare('SELECT * FROM users WHERE lower(email)=?').get(email)
-  if(!row) return res.json(generic)
-  const token=crypto.randomBytes(32).toString('hex')
-  const expires=new Date(Date.now()+60*60*1000).toISOString()
-  db.prepare('UPDATE users SET reset_token=?,reset_expires=?,updated_at=? WHERE id=?').run(token,expires,now(),row.id)
-  const resetUrl=`${CLIENT_ORIGIN.replace(/\/$/,'')}/reset-password?token=${token}`
-  queueEmail(row.email,'Reset password ikrarku',`<h2>Reset password</h2><p>Halo ${escapeHtml(row.first_name||'')}, klik tautan berikut untuk membuat password baru:</p><p><a href="${resetUrl}">Reset Password</a></p><p>Tautan berlaku 1 jam. Abaikan email ini jika Anda tidak meminta reset.</p>`)
-  auditLog(row.id,'account.forgot_password','user',row.id,{})
-  const mailerReady=Boolean(process.env.SMTP_HOST)
-  res.json({ ...generic, mailerReady, ...((NODE_ENV!=='production'||!mailerReady)?{devResetUrl:resetUrl}:{}) })
-})
-app.post('/api/auth/reset-password', rateLimit('reset-password',12,60_000), (req,res) => {
-  const { token, password, passwordConfirm } = req.body || {}
-  if(String(password||'').length<8) return res.status(400).json({error:'Password minimal 8 karakter'})
-  if(password!==passwordConfirm) return res.status(400).json({error:'Konfirmasi password tidak sama'})
-  const row=db.prepare('SELECT * FROM users WHERE reset_token=?').get(String(token||''))
-  if(!row) return res.status(400).json({error:'Token reset tidak valid'})
-  if(!row.reset_expires || new Date(row.reset_expires).getTime()<Date.now()) return res.status(400).json({error:'Token reset sudah kedaluwarsa. Silakan minta tautan baru.'})
-  db.prepare('UPDATE users SET password_hash=?,reset_token=NULL,reset_expires=NULL,active=1,email_verified=1,updated_at=? WHERE id=?').run(bcrypt.hashSync(String(password),10),now(),row.id)
-  db.prepare('DELETE FROM sessions WHERE user_id=?').run(row.id)
-  auditLog(row.id,'account.reset_password','user',row.id,{})
-  queueEmail(row.email,'Password ikrarku berhasil diubah',`<h2>Password diperbarui</h2><p>Password akun ${escapeHtml(row.email)} baru saja diubah melalui fitur lupa password. Jika bukan Anda, segera hubungi Customer Service.</p>`)
-  res.json({ ok:true })
-})
-app.get('/api/me', auth, (req,res) => res.json({ user:req.user, sessionIdleMinutes: SESSION_IDLE_MINUTES }))
-app.patch('/api/me', auth, (req,res) => {
-  const { firstName,lastName,email,password,currentPassword,settings } = req.body || {}
-  const current = db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id)
-  if(password && String(password).length < 8) return res.status(400).json({error:'Password minimal 8 karakter'})
-  const nextEmail=String(email ?? current.email).trim().toLowerCase()
-  const sensitiveChange = Boolean(password) || nextEmail !== String(current.email).toLowerCase()
-  if(sensitiveChange && (!currentPassword || !bcrypt.compareSync(String(currentPassword), current.password_hash))) return res.status(401).json({error:'Password saat ini diperlukan untuk mengubah email atau password'})
-  const duplicate=db.prepare('SELECT id FROM users WHERE email=? AND id<>?').get(nextEmail,req.user.id)
-  if(duplicate) return res.status(409).json({error:'Email sudah digunakan akun lain'})
-  const hash = password ? bcrypt.hashSync(String(password),10) : current.password_hash
-  const nextSettings={...parseJson(current.settings_json,{}),...(settings||{})}
-  db.prepare(`UPDATE users SET first_name=?,last_name=?,email=?,password_hash=?,settings_json=?,updated_at=? WHERE id=?`).run(firstName ?? current.first_name,lastName ?? current.last_name,nextEmail,hash,JSON.stringify(nextSettings),now(),req.user.id)
-  auditLog(req.user.id,'account.update','user',req.user.id,{emailChanged:nextEmail!==String(current.email).toLowerCase(),passwordChanged:Boolean(password)})
-  res.json({ ok:true, settings:nextSettings })
-})
-app.post('/api/auth/logout', auth, (req,res) => { db.prepare('DELETE FROM sessions WHERE token=?').run(req.token); res.json({ok:true}) })
-
-function mapTemplate(row) { return { id:row.id,name:row.name,category:row.category,description:row.description,price:row.price,currency:row.currency,status:row.status,preview:row.preview_url,sampleImage:row.sample_image_url||row.preview_url||null,headerImage:row.header_image_url||row.sample_image_url||row.preview_url||null,unpublishedAt:row.unpublished_at||null,accent:row.accent,bg:row.background,premium:Boolean(row.premium),preset:row.preset,createdBy:row.created_by,approvedBy:row.approved_by,createdAt:row.created_at,canvasSections:parseJson(row.canvas_json,[]) } }
-function mapArticle(row) { return { id:row.id,title:row.title,slug:row.slug,category:row.category,excerpt:row.excerpt,content:row.content,status:row.status,author:row.author || '',tags:parseJson(row.tags_json,[]),coverUrl:row.cover_url,date:row.published_at || row.created_at,views:'0' } }
-function mapPayment(row) { return { id:row.id,code:row.code,label:row.label,enabled:Boolean(row.enabled),config:parseJson(row.config_json,{}) } }
-function queueEmail(toEmail, subject, html, attachmentPath=null) {
-  const outboxId=id('mail')
-  db.prepare(`INSERT INTO email_outbox(id,to_email,subject,html,status,attachment_path,created_at) VALUES(?,?,?,?,?,?,?)`).run(outboxId,toEmail,subject,html,process.env.SMTP_HOST?'Queued':'Ready for SMTP',attachmentPath,now())
-  void deliverEmail(outboxId)
-  return outboxId
-}
-function createOrFindConversation({customerName,customerEmail,customerPhone='',assignedCsId=null,channel='Web',orderId=null}) {
-  let row = customerEmail ? db.prepare(`SELECT * FROM conversations WHERE customer_email=? AND status IN ('Open','Pending') ORDER BY updated_at DESC LIMIT 1`).get(customerEmail) : null
-  if (row) return row
-  const conversationId=id('conv')
-  const csId=assignedCsId || chooseAssignee('role_cs')
-  const publicToken=crypto.randomBytes(24).toString('hex')
-  db.prepare(`INSERT INTO conversations(id,order_id,customer_name,customer_email,customer_phone,status,assigned_cs_id,channel,created_at,updated_at,public_token) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(conversationId,orderId,customerName||'Website Visitor',customerEmail||'',customerPhone,'Open',csId,channel,now(),now(),publicToken)
-  return db.prepare('SELECT * FROM conversations WHERE id=?').get(conversationId)
-}
-
-app.get('/api/templates', auth, (req,res) => {
-  const isAdmin = req.user.permissions.includes('*')
-  const rows = isAdmin ? db.prepare('SELECT * FROM templates ORDER BY created_at DESC').all() : db.prepare(`SELECT * FROM templates WHERE status IN ('Published','Approved') OR created_by=? ORDER BY created_at DESC`).all(req.user.id)
-  res.json(rows.map(mapTemplate))
-})
-app.post('/api/templates', auth, permit('templates.create'), (req,res) => {
-  const { name,category='Elegant',description='',price=0,accent='#125946',bg='#f7f2e8',premium=false,preset='classic',preview=null,sampleImage=null,headerImage=null,canvasJson=[] } = req.body || {}
-  if (!name) return res.status(400).json({error:'Nama template wajib diisi'})
-  const templateId=id('tpl')
-  const status=req.user.permissions.includes('*')?'Published':'Pending'
-  const sample=sampleImage||preview||null
-  db.prepare(`INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,sample_image_url,header_image_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(templateId,name,category,description,Number(price)||0,'IDR',status,sample,sample,headerImage||sample,accent,bg,premium?1:0,preset,req.user.id,status==='Published'?req.user.id:null,JSON.stringify(canvasJson||[]),now(),now())
-  if(status==='Pending') {
-    db.prepare(`INSERT INTO tasks(id,title,description,status,priority,assigned_role_id,task_type,template_id,requestor_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(id('task'),`Approval template: ${name}`,`Review harga, deskripsi, dan kelayakan template ${name}.`,'Open','High','role_admin','Approval',templateId,req.user.id,now(),now())
-    queueEmail(req.user.email,`Template ${name} menunggu approval`,`<h2>Pengajuan template diterima</h2><p>Template <strong>${name}</strong> telah masuk ke antrean approval Superadmin.</p><p>Status saat ini: Pending.</p>`)
+app.post(
+  "/api/auth/forgot-password",
+  rateLimit("forgot-password", 8, 60_000),
+  (req, res) => {
+    const email = String(req.body?.email || "")
+      .trim()
+      .toLowerCase();
+    const generic = {
+      ok: true,
+      message:
+        "Jika email terdaftar, tautan reset password sudah dikirim. Cek inbox dan folder spam.",
+    };
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+      return res.status(400).json({ error: "Format email tidak valid" });
+    const row = db
+      .prepare("SELECT * FROM users WHERE lower(email)=?")
+      .get(email);
+    if (!row) return res.json(generic);
+    const token = crypto.randomBytes(32).toString("hex");
+    const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    db.prepare(
+      "UPDATE users SET reset_token=?,reset_expires=?,updated_at=? WHERE id=?",
+    ).run(token, expires, now(), row.id);
+    const resetUrl = `${CLIENT_ORIGIN.replace(/\/$/, "")}/reset-password?token=${token}`;
+    queueEmail(
+      row.email,
+      "Reset password ikrarku",
+      `<h2>Reset password</h2><p>Halo ${escapeHtml(row.first_name || "")}, klik tautan berikut untuk membuat password baru:</p><p><a href="${resetUrl}">Reset Password</a></p><p>Tautan berlaku 1 jam. Abaikan email ini jika Anda tidak meminta reset.</p>`,
+    );
+    auditLog(row.id, "account.forgot_password", "user", row.id, {});
+    const mailerReady = Boolean(process.env.SMTP_HOST);
+    res.json({
+      ...generic,
+      mailerReady,
+      ...(NODE_ENV !== "production" ? { devResetUrl: resetUrl } : {}),
+    });
+  },
+);
+app.post(
+  "/api/auth/reset-password",
+  rateLimit("reset-password", 12, 60_000),
+  (req, res) => {
+    const { token, password, passwordConfirm } = req.body || {};
+    if (String(password || "").length < 8)
+      return res.status(400).json({ error: "Password minimal 8 karakter" });
+    if (password !== passwordConfirm)
+      return res.status(400).json({ error: "Konfirmasi password tidak sama" });
+    const row = db
+      .prepare("SELECT * FROM users WHERE reset_token=?")
+      .get(String(token || ""));
+    if (!row) return res.status(400).json({ error: "Token reset tidak valid" });
+    if (
+      !row.reset_expires ||
+      new Date(row.reset_expires).getTime() < Date.now()
+    )
+      return res.status(400).json({
+        error: "Token reset sudah kedaluwarsa. Silakan minta tautan baru.",
+      });
+    db.prepare(
+      "UPDATE users SET password_hash=?,reset_token=NULL,reset_expires=NULL,updated_at=? WHERE id=?",
+    ).run(bcrypt.hashSync(String(password), 10), now(), row.id);
+    db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
+    auditLog(row.id, "account.reset_password", "user", row.id, {});
+    queueEmail(
+      row.email,
+      "Password ikrarku berhasil diubah",
+      `<h2>Password diperbarui</h2><p>Password akun ${escapeHtml(row.email)} baru saja diubah melalui fitur lupa password. Jika bukan Anda, segera hubungi Customer Service.</p>`,
+    );
+    res.json({ ok: true });
+  },
+);
+app.get("/api/me", auth, (req, res) =>
+  res.json({ user: req.user, sessionIdleMinutes: SESSION_IDLE_MINUTES }),
+);
+app.patch("/api/me", auth, (req, res) => {
+  const { firstName, lastName, email, password, currentPassword, settings } =
+    req.body || {};
+  const current = db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id);
+  if (password && String(password).length < 8)
+    return res.status(400).json({ error: "Password minimal 8 karakter" });
+  const nextEmail = String(email ?? current.email)
+    .trim()
+    .toLowerCase();
+  const sensitiveChange =
+    Boolean(password) || nextEmail !== String(current.email).toLowerCase();
+  if (
+    sensitiveChange &&
+    (!currentPassword ||
+      !bcrypt.compareSync(String(currentPassword), current.password_hash))
+  )
+    return res.status(401).json({
+      error: "Password saat ini diperlukan untuk mengubah email atau password",
+    });
+  const duplicate = db
+    .prepare("SELECT id FROM users WHERE email=? AND id<>?")
+    .get(nextEmail, req.user.id);
+  if (duplicate)
+    return res.status(409).json({ error: "Email sudah digunakan akun lain" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail))
+    return res.status(400).json({ error: "Format email tidak valid" });
+  let pendingEmailUrl;
+  if (nextEmail !== String(current.email).toLowerCase()) {
+    const verificationToken = crypto.randomBytes(32).toString("hex");
+    db.prepare(
+      "UPDATE users SET pending_email=?,verification_token=?,verification_expires=? WHERE id=?",
+    ).run(
+      nextEmail,
+      verificationToken,
+      new Date(Date.now() + 86400000).toISOString(),
+      current.id,
+    );
+    pendingEmailUrl = `${CLIENT_ORIGIN.replace(/\/$/, "")}/verify-email?token=${verificationToken}`;
+    queueEmail(
+      nextEmail,
+      "Verifikasi perubahan email ikrarku",
+      `<p><a href="${pendingEmailUrl}">Verifikasi email baru</a></p>`,
+    );
   }
-  res.status(201).json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(templateId)))
-})
-app.patch('/api/templates/:id', auth, (req,res) => {
-  const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id)
-  if(!row) return res.status(404).json({error:'Template tidak ditemukan'})
-  const canAll=req.user.permissions.includes('*')
-  if(!canAll && row.created_by!==req.user.id) return res.status(403).json({error:'Tidak dapat mengubah template ini'})
-  const next={...row,...req.body,canvas_json:req.body.canvasJson!==undefined?JSON.stringify(req.body.canvasJson):row.canvas_json}
-  const requestedStatus=req.body.status==='Approved'?'Published':req.body.status
-  const status=canAll && requestedStatus ? requestedStatus : row.status
-  saveTemplateRevision(row,req.user.id,'Before save')
-  const nextSample = req.body.sampleImage !== undefined ? req.body.sampleImage : (next.preview ?? row.sample_image_url ?? row.preview_url)
-  const nextHeader = req.body.headerImage !== undefined ? req.body.headerImage : (row.header_image_url ?? nextSample)
-  db.prepare(`UPDATE templates SET name=?,category=?,description=?,price=?,status=?,preview_url=?,sample_image_url=?,header_image_url=?,accent=?,background=?,premium=?,preset=?,approved_by=?,canvas_json=?,updated_at=? WHERE id=?`).run(next.name,next.category,next.description,Number(next.price)||0,status,nextSample ?? next.preview_url,nextSample,nextHeader,next.accent,next.bg ?? next.background,next.premium?1:0,next.preset,status==='Published'?req.user.id:row.approved_by,next.canvas_json,now(),row.id)
-  db.prepare('DELETE FROM template_autosaves WHERE template_id=?').run(row.id)
-  res.json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(row.id)))
-})
+  const hash = password
+    ? bcrypt.hashSync(String(password), 10)
+    : current.password_hash;
+  const nextSettings = {
+    ...parseJson(current.settings_json, {}),
+    ...(settings || {}),
+  };
+  db.prepare(
+    `UPDATE users SET first_name=?,last_name=?,email=?,password_hash=?,settings_json=?,updated_at=? WHERE id=?`,
+  ).run(
+    firstName ?? current.first_name,
+    lastName ?? current.last_name,
+    current.email,
+    hash,
+    JSON.stringify(nextSettings),
+    now(),
+    req.user.id,
+  );
+  auditLog(req.user.id, "account.update", "user", req.user.id, {
+    emailChanged: nextEmail !== String(current.email).toLowerCase(),
+    passwordChanged: Boolean(password),
+  });
+  if (password)
+    db.prepare("DELETE FROM sessions WHERE user_id=? AND token<>?").run(
+      current.id,
+      req.token,
+    );
+  res.json({
+    ok: true,
+    settings: nextSettings,
+    emailVerificationRequired: Boolean(pendingEmailUrl),
+    ...(NODE_ENV !== "production" && pendingEmailUrl
+      ? { devVerificationUrl: pendingEmailUrl }
+      : {}),
+  });
+});
+app.post("/api/auth/logout", auth, (req, res) => {
+  db.prepare("DELETE FROM sessions WHERE token=?").run(req.token);
+  res.json({ ok: true });
+});
 
-app.put('/api/templates/:id/autosave', auth, permit('templates.edit'), (req,res) => {
-  const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id); if(!row)return res.status(404).json({error:'Template tidak ditemukan'})
-  if(!req.user.permissions.includes('*') && row.created_by!==req.user.id)return res.status(403).json({error:'Tidak dapat mengubah template ini'})
-  db.prepare(`INSERT INTO template_autosaves(template_id,actor_user_id,canvas_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(template_id) DO UPDATE SET actor_user_id=excluded.actor_user_id,canvas_json=excluded.canvas_json,updated_at=excluded.updated_at`).run(row.id,req.user.id,JSON.stringify(req.body.canvasJson||[]),now())
-  res.json({ok:true,updatedAt:now()})
-})
-app.get('/api/templates/:id/revisions', auth, (req,res) => {
-  const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id); if(!row)return res.status(404).json({error:'Template tidak ditemukan'})
-  if(!req.user.permissions.includes('*') && row.created_by!==req.user.id)return res.status(403).json({error:'Tidak dapat melihat revisi template ini'})
-  res.json(db.prepare(`SELECT r.*,u.first_name||' '||u.last_name actor_name FROM template_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.template_id=? ORDER BY r.created_at DESC LIMIT 30`).all(row.id).map(r=>({...r,metadata:parseJson(r.metadata_json,{}),sections:parseJson(r.canvas_json,[])})))
-})
+function mapTemplate(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    description: row.description,
+    price: row.price,
+    currency: row.currency,
+    status: row.status,
+    preview: row.preview_url,
+    sampleImage: row.sample_image_url || row.preview_url || null,
+    headerImage:
+      row.header_image_url || row.sample_image_url || row.preview_url || null,
+    unpublishedAt: row.unpublished_at || null,
+    accent: row.accent,
+    bg: row.background,
+    premium: Boolean(row.premium),
+    preset: row.preset,
+    createdBy: row.created_by,
+    approvedBy: row.approved_by,
+    createdAt: row.created_at,
+    canvasSections: parseJson(row.canvas_json, []),
+  };
+}
+function mapArticle(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    slug: row.slug,
+    category: row.category,
+    excerpt: row.excerpt,
+    content: row.content,
+    status: row.status,
+    author: row.author || "",
+    tags: parseJson(row.tags_json, []),
+    coverUrl: row.cover_url,
+    date: row.published_at || row.created_at,
+    views: "0",
+  };
+}
+function mapPayment(row) {
+  return {
+    id: row.id,
+    code: row.code,
+    label: row.label,
+    enabled: Boolean(row.enabled),
+    config: parseJson(row.config_json, {}),
+  };
+}
+function queueEmail(toEmail, subject, html, attachmentPath = null) {
+  const outboxId = id("mail");
+  db.prepare(
+    `INSERT INTO email_outbox(id,to_email,subject,html,status,attachment_path,created_at) VALUES(?,?,?,?,?,?,?)`,
+  ).run(
+    outboxId,
+    toEmail,
+    subject,
+    html,
+    process.env.SMTP_HOST ? "Queued" : "Ready for SMTP",
+    attachmentPath,
+    now(),
+  );
+  void deliverEmail(outboxId);
+  return outboxId;
+}
+function createOrFindConversation({
+  customerName,
+  customerEmail,
+  customerPhone = "",
+  assignedCsId = null,
+  channel = "Web",
+  orderId = null,
+  trusted = false,
+}) {
+  let row =
+    trusted && customerEmail
+      ? db
+          .prepare(
+            `SELECT * FROM conversations WHERE customer_email=? AND status IN ('Open','Pending') ORDER BY updated_at DESC LIMIT 1`,
+          )
+          .get(customerEmail)
+      : null;
+  if (row) return row;
+  const conversationId = id("conv");
+  const csId = assignedCsId || chooseAssignee("role_cs");
+  const publicToken = crypto.randomBytes(24).toString("hex");
+  db.prepare(
+    `INSERT INTO conversations(id,order_id,customer_name,customer_email,customer_phone,status,assigned_cs_id,channel,created_at,updated_at,public_token) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    conversationId,
+    orderId,
+    customerName || "Website Visitor",
+    customerEmail || "",
+    customerPhone,
+    "Open",
+    csId,
+    channel,
+    now(),
+    now(),
+    publicToken,
+  );
+  return db
+    .prepare("SELECT * FROM conversations WHERE id=?")
+    .get(conversationId);
+}
+
+app.get("/api/templates", auth, (req, res) => {
+  const isAdmin = req.user.permissions.includes("*");
+  const rows = isAdmin
+    ? db.prepare("SELECT * FROM templates ORDER BY created_at DESC").all()
+    : db
+        .prepare(
+          `SELECT * FROM templates WHERE status IN ('Published','Approved') OR created_by=? ORDER BY created_at DESC`,
+        )
+        .all(req.user.id);
+  res.json(
+    rows.map((row) => {
+      const draft =
+        req.user.permissions.includes("*") || row.created_by === req.user.id
+          ? db
+              .prepare(
+                "SELECT changes_json FROM template_drafts WHERE template_id=?",
+              )
+              .get(row.id)
+          : null;
+      return {
+        ...mapTemplate(
+          draft ? { ...row, ...parseJson(draft.changes_json, {}) } : row,
+        ),
+        pendingReview: Boolean(draft),
+      };
+    }),
+  );
+});
+app.post("/api/templates", auth, permit("templates.create"), (req, res) => {
+  const {
+    name,
+    category = "Elegant",
+    description = "",
+    price = 0,
+    accent = "#125946",
+    bg = "#f7f2e8",
+    premium = false,
+    preset = "classic",
+    preview = null,
+    sampleImage = null,
+    headerImage = null,
+    canvasJson = [],
+  } = req.body || {};
+  if (!name)
+    return res.status(400).json({ error: "Nama template wajib diisi" });
+  const templateId = id("tpl");
+  const status = req.user.permissions.includes("*") ? "Published" : "Pending";
+  const sample = sampleImage || preview || null;
+  db.prepare(
+    `INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,sample_image_url,header_image_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    templateId,
+    name,
+    category,
+    description,
+    Number(price) || 0,
+    "IDR",
+    status,
+    sample,
+    sample,
+    headerImage || sample,
+    accent,
+    bg,
+    premium ? 1 : 0,
+    preset,
+    req.user.id,
+    status === "Published" ? req.user.id : null,
+    JSON.stringify(canvasJson || []),
+    now(),
+    now(),
+  );
+  if (status === "Pending") {
+    db.prepare(
+      `INSERT INTO tasks(id,title,description,status,priority,assigned_role_id,task_type,template_id,requestor_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      id("task"),
+      `Approval template: ${name}`,
+      `Review harga, deskripsi, dan kelayakan template ${name}.`,
+      "Open",
+      "High",
+      "role_admin",
+      "Approval",
+      templateId,
+      req.user.id,
+      now(),
+      now(),
+    );
+    queueEmail(
+      req.user.email,
+      `Template ${name} menunggu approval`,
+      `<h2>Pengajuan template diterima</h2><p>Template <strong>${name}</strong> telah masuk ke antrean approval Superadmin.</p><p>Status saat ini: Pending.</p>`,
+    );
+  }
+  res
+    .status(201)
+    .json(
+      mapTemplate(
+        db.prepare("SELECT * FROM templates WHERE id=?").get(templateId),
+      ),
+    );
+});
+app.patch("/api/templates/:id", auth, (req, res) => {
+  const row = db
+    .prepare("SELECT * FROM templates WHERE id=?")
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
+  const canAll = req.user.permissions.includes("*");
+  if (!canAll && row.created_by !== req.user.id)
+    return res.status(403).json({ error: "Tidak dapat mengubah template ini" });
+  const pending = db
+    .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
+    .get(row.id);
+  const draftBase = pending
+    ? { ...row, ...parseJson(pending.changes_json, {}) }
+    : row;
+  const next = {
+    ...draftBase,
+    ...req.body,
+    canvas_json:
+      req.body.canvasJson !== undefined
+        ? JSON.stringify(req.body.canvasJson)
+        : draftBase.canvas_json,
+  };
+  const requestedStatus =
+    req.body.status === "Approved" ? "Published" : req.body.status;
+  const status = canAll && requestedStatus ? requestedStatus : row.status;
+  saveTemplateRevision(row, req.user.id, "Before save");
+  const nextSample =
+    req.body.sampleImage !== undefined
+      ? req.body.sampleImage
+      : (next.preview ?? row.sample_image_url ?? row.preview_url);
+  const nextHeader =
+    req.body.headerImage !== undefined
+      ? req.body.headerImage
+      : (row.header_image_url ?? nextSample);
+  if (!canAll && ["Published", "Approved"].includes(row.status)) {
+    const changes = {
+      name: next.name,
+      category: next.category,
+      description: next.description,
+      price: Number(next.price) || 0,
+      preview_url: nextSample,
+      sample_image_url: nextSample,
+      header_image_url: nextHeader,
+      accent: next.accent,
+      background: next.bg ?? next.background,
+      premium: next.premium ? 1 : 0,
+      preset: next.preset,
+      canvas_json: next.canvas_json,
+    };
+    db.prepare(
+      "INSERT INTO template_drafts(template_id,changes_json,updated_at) VALUES(?,?,?) ON CONFLICT(template_id) DO UPDATE SET changes_json=excluded.changes_json,updated_at=excluded.updated_at",
+    ).run(row.id, JSON.stringify(changes), now());
+    if (
+      !db
+        .prepare(
+          "SELECT id FROM tasks WHERE template_id=? AND task_type='Approval' AND status='Open'",
+        )
+        .get(row.id)
+    )
+      db.prepare(
+        `INSERT INTO tasks(id,title,description,status,priority,assigned_role_id,task_type,template_id,requestor_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        id("task"),
+        `Approval revisi: ${row.name}`,
+        "Review revisi tanpa mengubah versi live.",
+        "Open",
+        "High",
+        "role_admin",
+        "Approval",
+        row.id,
+        req.user.id,
+        now(),
+        now(),
+      );
+    db.prepare("DELETE FROM template_autosaves WHERE template_id=?").run(
+      row.id,
+    );
+    return res.json({
+      ...mapTemplate({ ...row, ...changes }),
+      pendingReview: true,
+    });
+  }
+  db.prepare(
+    `UPDATE templates SET name=?,category=?,description=?,price=?,status=?,preview_url=?,sample_image_url=?,header_image_url=?,accent=?,background=?,premium=?,preset=?,approved_by=?,canvas_json=?,updated_at=? WHERE id=?`,
+  ).run(
+    next.name,
+    next.category,
+    next.description,
+    Number(next.price) || 0,
+    status,
+    nextSample ?? next.preview_url,
+    nextSample,
+    nextHeader,
+    next.accent,
+    next.bg ?? next.background,
+    next.premium ? 1 : 0,
+    next.preset,
+    status === "Published" ? req.user.id : row.approved_by,
+    next.canvas_json,
+    now(),
+    row.id,
+  );
+  db.prepare("DELETE FROM template_autosaves WHERE template_id=?").run(row.id);
+  if (canAll)
+    db.prepare("DELETE FROM template_drafts WHERE template_id=?").run(row.id);
+  res.json(
+    mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
+  );
+});
+
+app.put(
+  "/api/templates/:id/autosave",
+  auth,
+  permit("templates.edit"),
+  (req, res) => {
+    const row = db
+      .prepare("SELECT * FROM templates WHERE id=?")
+      .get(req.params.id);
+    if (!row)
+      return res.status(404).json({ error: "Template tidak ditemukan" });
+    if (!req.user.permissions.includes("*") && row.created_by !== req.user.id)
+      return res
+        .status(403)
+        .json({ error: "Tidak dapat mengubah template ini" });
+    db.prepare(
+      `INSERT INTO template_autosaves(template_id,actor_user_id,canvas_json,updated_at) VALUES(?,?,?,?) ON CONFLICT(template_id) DO UPDATE SET actor_user_id=excluded.actor_user_id,canvas_json=excluded.canvas_json,updated_at=excluded.updated_at`,
+    ).run(
+      row.id,
+      req.user.id,
+      JSON.stringify(req.body.canvasJson || []),
+      now(),
+    );
+    res.json({ ok: true, updatedAt: now() });
+  },
+);
+app.get("/api/templates/:id/revisions", auth, (req, res) => {
+  const row = db
+    .prepare("SELECT * FROM templates WHERE id=?")
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
+  if (!req.user.permissions.includes("*") && row.created_by !== req.user.id)
+    return res
+      .status(403)
+      .json({ error: "Tidak dapat melihat revisi template ini" });
+  res.json(
+    db
+      .prepare(
+        `SELECT r.*,u.first_name||' '||u.last_name actor_name FROM template_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.template_id=? ORDER BY r.created_at DESC LIMIT 30`,
+      )
+      .all(row.id)
+      .map((r) => ({
+        ...r,
+        metadata: parseJson(r.metadata_json, {}),
+        sections: parseJson(r.canvas_json, []),
+      })),
+  );
+});
 // QA TC-075 & TC-076: takedown dan republish template yang sudah live.
-app.post('/api/templates/:id/takedown', auth, (req,res) => {
-  const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id)
-  if(!row) return res.status(404).json({error:'Template tidak ditemukan'})
-  const canAll=req.user.permissions.includes('*')
-  if(!canAll && row.created_by!==req.user.id) return res.status(403).json({error:'Hanya pembuat template atau Administrator yang dapat melakukan takedown'})
-  if(!['Published','Approved'].includes(row.status)) return res.status(400).json({error:'Hanya template berstatus Published yang dapat di-takedown'})
-  const reason=String(req.body?.reason||'')
-  db.prepare("UPDATE templates SET status='Unpublished',unpublished_at=?,updated_at=? WHERE id=?").run(now(),now(),row.id)
-  auditLog(req.user.id,'template.takedown','template',row.id,{reason})
-  const creator=db.prepare('SELECT email,first_name FROM users WHERE id=?').get(row.created_by)
-  if(creator?.email) queueEmail(creator.email,`Template ${row.name} ditarik dari publikasi`,`<h2>Template di-takedown</h2><p>Template <strong>${escapeHtml(row.name)}</strong> ditarik dari landing page dan tidak dapat dipesan customer.</p>${reason?`<p>Alasan: ${escapeHtml(reason)}</p>`:''}<p>Silakan revisi lalu ajukan republish.</p>`)
-  res.json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(row.id)))
-})
-app.post('/api/templates/:id/republish', auth, (req,res) => {
-  const row=db.prepare('SELECT * FROM templates WHERE id=?').get(req.params.id)
-  if(!row) return res.status(404).json({error:'Template tidak ditemukan'})
-  const canAll=req.user.permissions.includes('*')
-  if(!canAll && row.created_by!==req.user.id) return res.status(403).json({error:'Tidak dapat mengubah template ini'})
-  const status=canAll?'Published':'Pending'
-  db.prepare('UPDATE templates SET status=?,approved_by=?,unpublished_at=NULL,updated_at=? WHERE id=?').run(status,status==='Published'?req.user.id:null,now(),row.id)
-  if(status==='Pending'){
-    const existing=db.prepare("SELECT id FROM tasks WHERE template_id=? AND task_type='Approval' AND status='Open'").get(row.id)
-    if(!existing) db.prepare(`INSERT INTO tasks(id,title,description,status,priority,assigned_role_id,task_type,template_id,requestor_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(id('task'),`Approval republish: ${row.name}`,`Review ulang template ${row.name} setelah revisi Web Designer.`,'Open','High','role_admin','Approval',row.id,req.user.id,now(),now())
+app.post("/api/templates/:id/takedown", auth, (req, res) => {
+  const row = db
+    .prepare("SELECT * FROM templates WHERE id=?")
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
+  const canAll = req.user.permissions.includes("*");
+  if (!canAll && row.created_by !== req.user.id)
+    return res.status(403).json({
+      error:
+        "Hanya pembuat template atau Administrator yang dapat melakukan takedown",
+    });
+  if (!["Published", "Approved"].includes(row.status))
+    return res.status(400).json({
+      error: "Hanya template berstatus Published yang dapat di-takedown",
+    });
+  const reason = String(req.body?.reason || "");
+  db.prepare(
+    "UPDATE templates SET status='Unpublished',unpublished_at=?,updated_at=? WHERE id=?",
+  ).run(now(), now(), row.id);
+  auditLog(req.user.id, "template.takedown", "template", row.id, { reason });
+  const creator = db
+    .prepare("SELECT email,first_name FROM users WHERE id=?")
+    .get(row.created_by);
+  if (creator?.email)
+    queueEmail(
+      creator.email,
+      `Template ${row.name} ditarik dari publikasi`,
+      `<h2>Template di-takedown</h2><p>Template <strong>${escapeHtml(row.name)}</strong> ditarik dari landing page dan tidak dapat dipesan customer.</p>${reason ? `<p>Alasan: ${escapeHtml(reason)}</p>` : ""}<p>Silakan revisi lalu ajukan republish.</p>`,
+    );
+  res.json(
+    mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
+  );
+});
+app.post("/api/templates/:id/republish", auth, (req, res) => {
+  const row = db
+    .prepare("SELECT * FROM templates WHERE id=?")
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
+  const canAll = req.user.permissions.includes("*");
+  if (!canAll && row.created_by !== req.user.id)
+    return res.status(403).json({ error: "Tidak dapat mengubah template ini" });
+  const status = canAll ? "Published" : "Pending";
+  db.prepare(
+    "UPDATE templates SET status=?,approved_by=?,unpublished_at=NULL,updated_at=? WHERE id=?",
+  ).run(status, status === "Published" ? req.user.id : null, now(), row.id);
+  if (status === "Pending") {
+    const existing = db
+      .prepare(
+        "SELECT id FROM tasks WHERE template_id=? AND task_type='Approval' AND status='Open'",
+      )
+      .get(row.id);
+    if (!existing)
+      db.prepare(
+        `INSERT INTO tasks(id,title,description,status,priority,assigned_role_id,task_type,template_id,requestor_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        id("task"),
+        `Approval republish: ${row.name}`,
+        `Review ulang template ${row.name} setelah revisi Web Designer.`,
+        "Open",
+        "High",
+        "role_admin",
+        "Approval",
+        row.id,
+        req.user.id,
+        now(),
+        now(),
+      );
   }
-  auditLog(req.user.id,'template.republish','template',row.id,{status})
-  res.json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(row.id)))
-})
-app.post('/api/templates/:id/review', auth, (req,res) => {
-  if(!(req.user.permissions.includes('*') || req.user.permissions.includes('templates.approve'))) return res.status(403).json({error:'Permission denied'})
-  const row=db.prepare(`SELECT t.*,u.email requestor_email,u.first_name||' '||u.last_name requestor_name FROM templates t LEFT JOIN users u ON u.id=t.created_by WHERE t.id=?`).get(req.params.id)
-  if(!row)return res.status(404).json({error:'Template tidak ditemukan'})
-  const decision=String(req.body.decision||'').toLowerCase()
-  if(!['approved','published','rejected','reject'].includes(decision))return res.status(400).json({error:'Decision harus Approved atau Reject'})
-  const status=['approved','published'].includes(decision)?'Published':'Rejected'
-  const feedback=String(req.body.feedback||'')
-  db.prepare(`UPDATE templates SET status=?,approved_by=?,updated_at=? WHERE id=?`).run(status,status==='Published'?req.user.id:null,now(),row.id)
-  db.prepare(`UPDATE tasks SET status=?,decision_note=?,updated_at=? WHERE template_id=? AND task_type='Approval'`).run(status==='Published'?'Approved':'Rejected',feedback,now(),row.id)
-  if(row.requestor_email) queueEmail(row.requestor_email,`Status template ${row.name}: ${status}`,`<h2>${status==='Published'?'Template disetujui':'Template ditolak'}</h2><p>Halo ${row.requestor_name||'Creator'}, status template <strong>${row.name}</strong> kini <strong>${status}</strong>.</p>${feedback?`<p>Feedback: ${escapeHtml(feedback)}</p>`:''}`)
-  res.json(mapTemplate(db.prepare('SELECT * FROM templates WHERE id=?').get(row.id)))
-})
+  auditLog(req.user.id, "template.republish", "template", row.id, { status });
+  res.json(
+    mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
+  );
+});
+app.post("/api/templates/:id/review", auth, (req, res) => {
+  if (
+    !(
+      req.user.permissions.includes("*") ||
+      req.user.permissions.includes("templates.approve")
+    )
+  )
+    return res.status(403).json({ error: "Permission denied" });
+  const row = db
+    .prepare(
+      `SELECT t.*,u.email requestor_email,u.first_name||' '||u.last_name requestor_name FROM templates t LEFT JOIN users u ON u.id=t.created_by WHERE t.id=?`,
+    )
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
+  const decision = String(req.body.decision || "").toLowerCase();
+  if (!["approved", "published", "rejected", "reject"].includes(decision))
+    return res
+      .status(400)
+      .json({ error: "Decision harus Approved atau Reject" });
+  const status = ["approved", "published"].includes(decision)
+    ? "Published"
+    : "Rejected";
+  const feedback = String(req.body.feedback || "");
+  const pending = db
+    .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
+    .get(row.id);
+  if (pending && status === "Published") {
+    const changes = parseJson(pending.changes_json, {});
+    const keys = [
+      "name",
+      "category",
+      "description",
+      "price",
+      "preview_url",
+      "sample_image_url",
+      "header_image_url",
+      "accent",
+      "background",
+      "premium",
+      "preset",
+      "canvas_json",
+    ].filter((k) => k in changes);
+    if (keys.length)
+      db.prepare(
+        `UPDATE templates SET ${keys.map((k) => k + "=?").join(",")} WHERE id=?`,
+      ).run(...keys.map((k) => changes[k]), row.id);
+  }
+  // Rejected revision leaves the previously published version live.
+  const liveStatus = pending && status === "Rejected" ? row.status : status;
+  db.prepare(
+    `UPDATE templates SET status=?,approved_by=?,updated_at=? WHERE id=?`,
+  ).run(
+    liveStatus,
+    liveStatus === "Published" ? req.user.id : null,
+    now(),
+    row.id,
+  );
+  db.prepare("DELETE FROM template_drafts WHERE template_id=?").run(row.id);
+  db.prepare(
+    `UPDATE tasks SET status=?,decision_note=?,updated_at=? WHERE template_id=? AND task_type='Approval'`,
+  ).run(
+    status === "Published" ? "Approved" : "Rejected",
+    feedback,
+    now(),
+    row.id,
+  );
+  if (row.requestor_email)
+    queueEmail(
+      row.requestor_email,
+      `Status template ${row.name}: ${status}`,
+      `<h2>${status === "Published" ? "Template disetujui" : "Template ditolak"}</h2><p>Halo ${row.requestor_name || "Creator"}, status template <strong>${row.name}</strong> kini <strong>${status}</strong>.</p>${feedback ? `<p>Feedback: ${escapeHtml(feedback)}</p>` : ""}`,
+    );
+  res.json(
+    mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
+  );
+});
 
-app.get('/api/articles', auth, (req,res) => {
-  const rows = req.user.permissions.includes('articles.manage') || req.user.permissions.includes('*') ? db.prepare(`SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id ORDER BY a.created_at DESC`).all() : db.prepare(`SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.status='Published' ORDER BY COALESCE(a.published_at,a.created_at) DESC`).all()
-  res.json(rows.map(mapArticle))
-})
-app.post('/api/articles', auth, permit('articles.manage'), (req,res) => {
-  const { title,slug,category='Planning',excerpt='',content='',status='Draft',tags=[],coverUrl=null }=req.body||{}
-  if(!title) return res.status(400).json({error:'Judul wajib diisi'})
-  const articleId=id('art'); let finalSlug=(slug||title).toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'')||'article'
-  if(db.prepare('SELECT 1 FROM articles WHERE slug=?').get(finalSlug)) finalSlug=`${finalSlug}-${Date.now().toString().slice(-5)}`
-  db.prepare(`INSERT INTO articles(id,title,slug,category,excerpt,content,status,author_id,tags_json,cover_url,published_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(articleId,title,finalSlug,category,excerpt,content,status,req.user.id,JSON.stringify(tags),coverUrl,status==='Published'?now():null,now(),now())
-  const row=db.prepare(`SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.id=?`).get(articleId)
-  auditLog(req.user.id,'article.create','article',articleId,{title,status}); res.status(201).json(mapArticle(row))
-})
-app.patch('/api/articles/:id', auth, permit('articles.manage'), (req,res) => {
-  const row=db.prepare('SELECT * FROM articles WHERE id=?').get(req.params.id); if(!row)return res.status(404).json({error:'Article tidak ditemukan'})
-  const next={...row,...req.body,canvas_json:req.body.canvasJson!==undefined?JSON.stringify(req.body.canvasJson):row.canvas_json}
-  db.prepare(`UPDATE articles SET title=?,slug=?,category=?,excerpt=?,content=?,status=?,tags_json=?,cover_url=?,published_at=?,updated_at=? WHERE id=?`).run(next.title,next.slug,next.category,next.excerpt,next.content,next.status,JSON.stringify(next.tags || parseJson(row.tags_json,[])),next.coverUrl ?? row.cover_url,next.status==='Published'?(row.published_at||now()):null,now(),row.id)
-  const updated=db.prepare(`SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.id=?`).get(row.id)
-  auditLog(req.user.id,'article.update','article',row.id,{title:next.title,status:next.status}); res.json(mapArticle(updated))
-})
+app.get("/api/articles", auth, (req, res) => {
+  const rows =
+    req.user.permissions.includes("articles.manage") ||
+    req.user.permissions.includes("*")
+      ? db
+          .prepare(
+            `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id ORDER BY a.created_at DESC`,
+          )
+          .all()
+      : db
+          .prepare(
+            `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.status='Published' ORDER BY COALESCE(a.published_at,a.created_at) DESC`,
+          )
+          .all();
+  res.json(rows.map(mapArticle));
+});
+app.post("/api/articles", auth, permit("articles.manage"), (req, res) => {
+  const {
+    title,
+    slug,
+    category = "Planning",
+    excerpt = "",
+    content = "",
+    status = "Draft",
+    tags = [],
+    coverUrl = null,
+  } = req.body || {};
+  if (!title) return res.status(400).json({ error: "Judul wajib diisi" });
+  const articleId = id("art");
+  let finalSlug =
+    (slug || title)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "article";
+  if (db.prepare("SELECT 1 FROM articles WHERE slug=?").get(finalSlug))
+    finalSlug = `${finalSlug}-${Date.now().toString().slice(-5)}`;
+  db.prepare(
+    `INSERT INTO articles(id,title,slug,category,excerpt,content,status,author_id,tags_json,cover_url,published_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    articleId,
+    title,
+    finalSlug,
+    category,
+    excerpt,
+    content,
+    status,
+    req.user.id,
+    JSON.stringify(tags),
+    coverUrl,
+    status === "Published" ? now() : null,
+    now(),
+    now(),
+  );
+  const row = db
+    .prepare(
+      `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.id=?`,
+    )
+    .get(articleId);
+  auditLog(req.user.id, "article.create", "article", articleId, {
+    title,
+    status,
+  });
+  res.status(201).json(mapArticle(row));
+});
+app.patch("/api/articles/:id", auth, permit("articles.manage"), (req, res) => {
+  const row = db
+    .prepare("SELECT * FROM articles WHERE id=?")
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Article tidak ditemukan" });
+  const pending = db
+    .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
+    .get(row.id);
+  const draftBase = pending
+    ? { ...row, ...parseJson(pending.changes_json, {}) }
+    : row;
+  const next = {
+    ...draftBase,
+    ...req.body,
+    canvas_json:
+      req.body.canvasJson !== undefined
+        ? JSON.stringify(req.body.canvasJson)
+        : draftBase.canvas_json,
+  };
+  db.prepare(
+    `UPDATE articles SET title=?,slug=?,category=?,excerpt=?,content=?,status=?,tags_json=?,cover_url=?,published_at=?,updated_at=? WHERE id=?`,
+  ).run(
+    next.title,
+    next.slug,
+    next.category,
+    next.excerpt,
+    next.content,
+    next.status,
+    JSON.stringify(next.tags || parseJson(row.tags_json, [])),
+    next.coverUrl ?? row.cover_url,
+    next.status === "Published" ? row.published_at || now() : null,
+    now(),
+    row.id,
+  );
+  const updated = db
+    .prepare(
+      `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.id=?`,
+    )
+    .get(row.id);
+  auditLog(req.user.id, "article.update", "article", row.id, {
+    title: next.title,
+    status: next.status,
+  });
+  res.json(mapArticle(updated));
+});
 
-app.get('/api/audit-logs', auth, (req,res) => {
-  if(!req.user.permissions.includes('*')) return res.status(403).json({error:'Permission denied'})
-  const rows=db.prepare(`SELECT a.*,u.first_name||' '||u.last_name actor_name,u.email actor_email FROM audit_logs a LEFT JOIN users u ON u.id=a.actor_user_id ORDER BY a.created_at DESC LIMIT 500`).all()
-  res.json(rows.map(row=>({...row,details:parseJson(row.details_json,{})})))
-})
+app.get("/api/audit-logs", auth, (req, res) => {
+  if (!req.user.permissions.includes("*"))
+    return res.status(403).json({ error: "Permission denied" });
+  const rows = db
+    .prepare(
+      `SELECT a.*,u.first_name||' '||u.last_name actor_name,u.email actor_email FROM audit_logs a LEFT JOIN users u ON u.id=a.actor_user_id ORDER BY a.created_at DESC LIMIT 500`,
+    )
+    .all();
+  res.json(
+    rows.map((row) => ({ ...row, details: parseJson(row.details_json, {}) })),
+  );
+});
 
-app.get('/api/payment-methods', auth, permit('settings.payment'), (_req,res) => res.json(db.prepare('SELECT * FROM payment_methods ORDER BY label').all().map(mapPayment)))
-app.put('/api/payment-methods/:id', auth, permit('settings.payment'), (req,res) => {
-  const row=db.prepare('SELECT * FROM payment_methods WHERE id=?').get(req.params.id); if(!row)return res.status(404).json({error:'Metode pembayaran tidak ditemukan'})
-  db.prepare('UPDATE payment_methods SET enabled=?,config_json=?,updated_at=? WHERE id=?').run(req.body.enabled?1:0,JSON.stringify(req.body.config||parseJson(row.config_json,{})),now(),row.id)
-  auditLog(req.user.id,'payment-method.update','payment_method',row.id,{enabled:Boolean(req.body.enabled)})
-  res.json(mapPayment(db.prepare('SELECT * FROM payment_methods WHERE id=?').get(row.id)))
-})
+app.get("/api/payment-methods", auth, permit("settings.payment"), (_req, res) =>
+  res.json(
+    db
+      .prepare("SELECT * FROM payment_methods ORDER BY label")
+      .all()
+      .map(mapPayment),
+  ),
+);
+app.put(
+  "/api/payment-methods/:id",
+  auth,
+  permit("settings.payment"),
+  (req, res) => {
+    const row = db
+      .prepare("SELECT * FROM payment_methods WHERE id=?")
+      .get(req.params.id);
+    if (!row)
+      return res
+        .status(404)
+        .json({ error: "Metode pembayaran tidak ditemukan" });
+    db.prepare(
+      "UPDATE payment_methods SET enabled=?,config_json=?,updated_at=? WHERE id=?",
+    ).run(
+      req.body.enabled ? 1 : 0,
+      JSON.stringify(req.body.config || parseJson(row.config_json, {})),
+      now(),
+      row.id,
+    );
+    auditLog(req.user.id, "payment-method.update", "payment_method", row.id, {
+      enabled: Boolean(req.body.enabled),
+    });
+    res.json(
+      mapPayment(
+        db.prepare("SELECT * FROM payment_methods WHERE id=?").get(row.id),
+      ),
+    );
+  },
+);
 
-app.get('/api/roles', auth, permit('roles.manage'), (_req,res) => res.json(db.prepare(`SELECT r.*,COUNT(u.id) user_count FROM roles r LEFT JOIN users u ON u.role_id=r.id GROUP BY r.id ORDER BY r.name`).all().map(r=>({id:r.id,name:r.name,permissions:parseJson(r.permissions_json,[]),isSystem:Boolean(r.is_system),userCount:Number(r.user_count)||0}))))
-app.post('/api/roles', auth, permit('roles.manage'), (req,res) => {
-  const roleId=id('role'); db.prepare('INSERT INTO roles(id,name,permissions_json,is_system,created_at) VALUES(?,?,?,?,?)').run(roleId,req.body.name,JSON.stringify(req.body.permissions||[]),0,now()); auditLog(req.user.id,'role.create','role',roleId,{name:req.body.name,permissions:req.body.permissions||[]}); res.status(201).json({id:roleId,name:req.body.name,permissions:req.body.permissions||[],isSystem:false,userCount:0})
-})
-app.patch('/api/roles/:id', auth, permit('roles.manage'), (req,res) => {
-  const row=db.prepare('SELECT * FROM roles WHERE id=?').get(req.params.id); if(!row)return res.status(404).json({error:'Role tidak ditemukan'})
-  const nextPermissions=req.body.permissions||parseJson(row.permissions_json,[]); db.prepare('UPDATE roles SET name=?,permissions_json=? WHERE id=?').run(req.body.name||row.name,JSON.stringify(nextPermissions),row.id); auditLog(req.user.id,'role.update','role',row.id,{name:req.body.name||row.name,permissions:nextPermissions}); res.json({ok:true})
-})
-app.delete('/api/roles/:id', auth, permit('roles.manage'), (req,res) => {
-  const row=db.prepare('SELECT * FROM roles WHERE id=?').get(req.params.id); if(!row)return res.status(404).json({error:'Role tidak ditemukan'}); if(row.is_system)return res.status(400).json({error:'System role tidak dapat dihapus'})
-  const used=db.prepare('SELECT COUNT(*) count FROM users WHERE role_id=?').get(row.id).count
-  if(used) return res.status(409).json({error:`Role masih digunakan oleh ${used} akun. Pindahkan role user terlebih dahulu.`})
-  db.prepare('DELETE FROM roles WHERE id=?').run(row.id); auditLog(req.user.id,'role.delete','role',row.id,{name:row.name}); res.json({ok:true})
-})
+app.get("/api/roles", auth, permit("roles.manage"), (_req, res) =>
+  res.json(
+    db
+      .prepare(
+        `SELECT r.*,COUNT(u.id) user_count FROM roles r LEFT JOIN users u ON u.role_id=r.id GROUP BY r.id ORDER BY r.name`,
+      )
+      .all()
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        permissions: parseJson(r.permissions_json, []),
+        isSystem: Boolean(r.is_system),
+        userCount: Number(r.user_count) || 0,
+      })),
+  ),
+);
+app.post("/api/roles", auth, permit("roles.manage"), (req, res) => {
+  const roleId = id("role");
+  db.prepare(
+    "INSERT INTO roles(id,name,permissions_json,is_system,created_at) VALUES(?,?,?,?,?)",
+  ).run(
+    roleId,
+    req.body.name,
+    JSON.stringify(req.body.permissions || []),
+    0,
+    now(),
+  );
+  auditLog(req.user.id, "role.create", "role", roleId, {
+    name: req.body.name,
+    permissions: req.body.permissions || [],
+  });
+  res.status(201).json({
+    id: roleId,
+    name: req.body.name,
+    permissions: req.body.permissions || [],
+    isSystem: false,
+    userCount: 0,
+  });
+});
+app.patch("/api/roles/:id", auth, permit("roles.manage"), (req, res) => {
+  const row = db.prepare("SELECT * FROM roles WHERE id=?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Role tidak ditemukan" });
+  if (
+    row.id === "role_admin" &&
+    req.body.permissions &&
+    !req.body.permissions.includes("*")
+  )
+    return res.status(400).json({
+      error: "Role Administrator harus mempertahankan hak pengelolaan",
+    });
+  const nextPermissions =
+    req.body.permissions || parseJson(row.permissions_json, []);
+  db.prepare("UPDATE roles SET name=?,permissions_json=? WHERE id=?").run(
+    req.body.name || row.name,
+    JSON.stringify(nextPermissions),
+    row.id,
+  );
+  auditLog(req.user.id, "role.update", "role", row.id, {
+    name: req.body.name || row.name,
+    permissions: nextPermissions,
+  });
+  res.json({ ok: true });
+});
+app.delete("/api/roles/:id", auth, permit("roles.manage"), (req, res) => {
+  const row = db.prepare("SELECT * FROM roles WHERE id=?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Role tidak ditemukan" });
+  if (row.is_system)
+    return res.status(400).json({ error: "System role tidak dapat dihapus" });
+  const used = db
+    .prepare("SELECT COUNT(*) count FROM users WHERE role_id=?")
+    .get(row.id).count;
+  if (used)
+    return res.status(409).json({
+      error: `Role masih digunakan oleh ${used} akun. Pindahkan role user terlebih dahulu.`,
+    });
+  db.prepare("DELETE FROM roles WHERE id=?").run(row.id);
+  auditLog(req.user.id, "role.delete", "role", row.id, { name: row.name });
+  res.json({ ok: true });
+});
 
-app.get('/api/users', auth, permit('users.manage'), (_req,res) => {
-  const rows=db.prepare(`SELECT u.id,u.first_name,u.last_name,u.email,u.username,u.active,u.email_verified,u.settings_json,u.created_at,r.id role_id,r.name role_name,r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id ORDER BY u.created_at DESC`).all()
-  res.json(rows.map(r=>({id:r.id,firstName:r.first_name,lastName:r.last_name,name:`${r.first_name} ${r.last_name}`.trim(),email:r.email,username:r.username,active:Boolean(r.active),emailVerified:Boolean(r.email_verified),settings:parseJson(r.settings_json,{}),roleId:r.role_id,role:r.role_name,permissions:parseJson(r.permissions_json,[]),createdAt:r.created_at})))
-})
-app.post('/api/users', auth, permit('users.manage'), (req,res) => {
-  const {firstName,lastName='',email,username,password,roleId}=req.body||{}; if(!firstName||!email||!username||!password||!roleId)return res.status(400).json({error:'Data belum lengkap'}); const userId=id('usr')
-  try{db.prepare(`INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(userId,firstName,lastName,email,username,bcrypt.hashSync(password,10),roleId,1,now(),now()); if(roleId==='role_user')db.prepare(`INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`).run(id('site'),userId,`${firstName} ${lastName}`.trim(),username,'[]','Draft',now(),now()); auditLog(req.user.id,'user.create','user',userId,{email,username,roleId}); res.status(201).json({id:userId})}catch{res.status(409).json({error:'Email atau username sudah digunakan'})}
-})
+app.get("/api/users", auth, permit("users.manage"), (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT u.id,u.first_name,u.last_name,u.email,u.username,u.active,u.email_verified,u.settings_json,u.created_at,r.id role_id,r.name role_name,r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id ORDER BY u.created_at DESC`,
+    )
+    .all();
+  res.json(
+    rows.map((r) => ({
+      id: r.id,
+      firstName: r.first_name,
+      lastName: r.last_name,
+      name: `${r.first_name} ${r.last_name}`.trim(),
+      email: r.email,
+      username: r.username,
+      active: Boolean(r.active),
+      emailVerified: Boolean(r.email_verified),
+      settings: parseJson(r.settings_json, {}),
+      roleId: r.role_id,
+      role: r.role_name,
+      permissions: parseJson(r.permissions_json, []),
+      createdAt: r.created_at,
+    })),
+  );
+});
+app.post("/api/users", auth, permit("users.manage"), (req, res) => {
+  const {
+    firstName,
+    lastName = "",
+    email,
+    username,
+    password,
+    roleId,
+  } = req.body || {};
+  if (!firstName || !email || !username || !password || !roleId)
+    return res.status(400).json({ error: "Data belum lengkap" });
+  const userId = id("usr");
+  try {
+    db.prepare(
+      `INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      userId,
+      firstName,
+      lastName,
+      email,
+      username,
+      bcrypt.hashSync(password, 10),
+      roleId,
+      1,
+      now(),
+      now(),
+    );
+    if (roleId === "role_user")
+      db.prepare(
+        `INSERT INTO sites(id,user_id,title,slug,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)`,
+      ).run(
+        id("site"),
+        userId,
+        `${firstName} ${lastName}`.trim(),
+        username,
+        "[]",
+        "Draft",
+        now(),
+        now(),
+      );
+    auditLog(req.user.id, "user.create", "user", userId, {
+      email,
+      username,
+      roleId,
+    });
+    res.status(201).json({ id: userId });
+  } catch {
+    res.status(409).json({ error: "Email atau username sudah digunakan" });
+  }
+});
 // QA TC-102: Administrator dapat mengubah data diri dan mereset password user lain.
-app.patch('/api/users/:id', auth, permit('users.manage'), (req,res) => {
-  const row=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id)
-  if(!row) return res.status(404).json({error:'Akun tidak ditemukan'})
-  const { firstName, lastName, email, username, password, active, emailVerified, roleId } = req.body || {}
-  if(password!==undefined && password!==null && password!=='' && String(password).length<8) return res.status(400).json({error:'Password minimal 8 karakter'})
-  const nextEmail=String(email ?? row.email).trim().toLowerCase()
-  const nextUsername=String(username ?? row.username).trim()
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) return res.status(400).json({error:'Format email tidak valid'})
-  if(!nextUsername) return res.status(400).json({error:'Username wajib diisi'})
-  if(db.prepare('SELECT id FROM users WHERE lower(email)=? AND id<>?').get(nextEmail,row.id)) return res.status(409).json({error:'Email sudah digunakan akun lain'})
-  if(db.prepare('SELECT id FROM users WHERE username=? AND id<>?').get(nextUsername,row.id)) return res.status(409).json({error:'Username sudah digunakan akun lain'})
-  const nextActive = active===undefined ? row.active : (active?1:0)
-  if(row.role_id==='role_admin' && !nextActive){ const admins=db.prepare("SELECT COUNT(*) c FROM users WHERE role_id='role_admin' AND active=1").get().c; if(admins<=1) return res.status(400).json({error:'Minimal harus ada satu Administrator aktif.'}) }
-  const hash = password ? bcrypt.hashSync(String(password),10) : row.password_hash
-  db.prepare(`UPDATE users SET first_name=?,last_name=?,email=?,username=?,password_hash=?,role_id=?,active=?,email_verified=?,updated_at=? WHERE id=?`)
-    .run(firstName ?? row.first_name, lastName ?? row.last_name, nextEmail, nextUsername, hash, roleId ?? row.role_id, nextActive, emailVerified===undefined?row.email_verified:(emailVerified?1:0), now(), row.id)
-  if(password) db.prepare('DELETE FROM sessions WHERE user_id=?').run(row.id)
-  auditLog(req.user.id,'user.update','user',row.id,{ emailChanged:nextEmail!==String(row.email).toLowerCase(), passwordReset:Boolean(password), usernameChanged:nextUsername!==row.username })
-  if(password) queueEmail(nextEmail,'Password akun ikrarku direset Administrator',`<h2>Password direset</h2><p>Administrator ikrarku telah mereset password akun Anda. Silakan login kembali dan segera ubah password melalui menu Settings.</p>`)
-  else queueEmail(nextEmail,'Data akun ikrarku diperbarui',`<h2>Data akun diperbarui</h2><p>Administrator memperbarui data akun Anda. Jika ada yang tidak sesuai, hubungi Customer Service.</p>`)
-  const fresh=db.prepare(`SELECT u.*,r.id role_id,r.name role_name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=?`).get(row.id)
-  res.json({ ok:true, user:{ id:fresh.id, firstName:fresh.first_name, lastName:fresh.last_name, name:`${fresh.first_name} ${fresh.last_name}`.trim(), email:fresh.email, username:fresh.username, active:Boolean(fresh.active), emailVerified:Boolean(fresh.email_verified), roleId:fresh.role_id, role:fresh.role_name } })
-})
-app.patch('/api/users/:id/role', auth, permit('users.manage'), (req,res) => { db.prepare('UPDATE users SET role_id=?,updated_at=? WHERE id=?').run(req.body.roleId,now(),req.params.id); auditLog(req.user.id,'user.role.change','user',req.params.id,{roleId:req.body.roleId}); res.json({ok:true}) })
-app.delete('/api/users/:id', auth, permit('users.manage'), (req,res) => {
-  const target=db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id)
-  if(!target) return res.status(404).json({error:'Akun tidak ditemukan'})
-  if(target.id===req.user.id) return res.status(400).json({error:'Tidak dapat menghapus akun Anda sendiri.'})
-  if(target.role_id==='role_admin'){ const admins=db.prepare("SELECT COUNT(*) c FROM users WHERE role_id='role_admin' AND active=1").get().c; if(admins<=1) return res.status(400).json({error:'Minimal harus ada satu Administrator aktif.'}) }
-  db.prepare('DELETE FROM users WHERE id=?').run(req.params.id)
-  auditLog(req.user.id,'user.delete','user',req.params.id,{email:target.email}); res.json({ok:true})
-})
+app.patch("/api/users/:id", auth, permit("users.manage"), (req, res) => {
+  const row = db.prepare("SELECT * FROM users WHERE id=?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Akun tidak ditemukan" });
+  const {
+    firstName,
+    lastName,
+    email,
+    username,
+    password,
+    active,
+    emailVerified,
+    roleId,
+  } = req.body || {};
+  if (
+    password !== undefined &&
+    password !== null &&
+    password !== "" &&
+    String(password).length < 8
+  )
+    return res.status(400).json({ error: "Password minimal 8 karakter" });
+  const nextEmail = String(email ?? row.email)
+    .trim()
+    .toLowerCase();
+  const nextUsername = String(username ?? row.username).trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail))
+    return res.status(400).json({ error: "Format email tidak valid" });
+  if (!nextUsername)
+    return res.status(400).json({ error: "Username wajib diisi" });
+  if (
+    db
+      .prepare("SELECT id FROM users WHERE lower(email)=? AND id<>?")
+      .get(nextEmail, row.id)
+  )
+    return res.status(409).json({ error: "Email sudah digunakan akun lain" });
+  if (
+    db
+      .prepare("SELECT id FROM users WHERE username=? AND id<>?")
+      .get(nextUsername, row.id)
+  )
+    return res
+      .status(409)
+      .json({ error: "Username sudah digunakan akun lain" });
+  const nextActive = active === undefined ? row.active : active ? 1 : 0;
+  policy.requireAdminRemaining(row, roleId ?? row.role_id, nextActive);
+  if (row.role_id === "role_admin" && !nextActive) {
+    const admins = db
+      .prepare(
+        "SELECT COUNT(*) c FROM users WHERE role_id='role_admin' AND active=1",
+      )
+      .get().c;
+    if (admins <= 1)
+      return res
+        .status(400)
+        .json({ error: "Minimal harus ada satu Administrator aktif." });
+  }
+  const hash = password
+    ? bcrypt.hashSync(String(password), 10)
+    : row.password_hash;
+  db.prepare(
+    `UPDATE users SET first_name=?,last_name=?,email=?,username=?,password_hash=?,role_id=?,active=?,email_verified=?,updated_at=? WHERE id=?`,
+  ).run(
+    firstName ?? row.first_name,
+    lastName ?? row.last_name,
+    nextEmail,
+    nextUsername,
+    hash,
+    roleId ?? row.role_id,
+    nextActive,
+    emailVerified === undefined ? row.email_verified : emailVerified ? 1 : 0,
+    now(),
+    row.id,
+  );
+  if (password || !nextActive || emailVerified === false)
+    db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
+  auditLog(req.user.id, "user.update", "user", row.id, {
+    emailChanged: nextEmail !== String(row.email).toLowerCase(),
+    passwordReset: Boolean(password),
+    usernameChanged: nextUsername !== row.username,
+  });
+  if (password)
+    queueEmail(
+      nextEmail,
+      "Password akun ikrarku direset Administrator",
+      `<h2>Password direset</h2><p>Administrator ikrarku telah mereset password akun Anda. Silakan login kembali dan segera ubah password melalui menu Settings.</p>`,
+    );
+  else
+    queueEmail(
+      nextEmail,
+      "Data akun ikrarku diperbarui",
+      `<h2>Data akun diperbarui</h2><p>Administrator memperbarui data akun Anda. Jika ada yang tidak sesuai, hubungi Customer Service.</p>`,
+    );
+  const fresh = db
+    .prepare(
+      `SELECT u.*,r.id role_id,r.name role_name FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=?`,
+    )
+    .get(row.id);
+  res.json({
+    ok: true,
+    user: {
+      id: fresh.id,
+      firstName: fresh.first_name,
+      lastName: fresh.last_name,
+      name: `${fresh.first_name} ${fresh.last_name}`.trim(),
+      email: fresh.email,
+      username: fresh.username,
+      active: Boolean(fresh.active),
+      emailVerified: Boolean(fresh.email_verified),
+      roleId: fresh.role_id,
+      role: fresh.role_name,
+    },
+  });
+});
+app.patch("/api/users/:id/role", auth, permit("users.manage"), (req, res) => {
+  const target = db
+    .prepare("SELECT * FROM users WHERE id=?")
+    .get(req.params.id);
+  if (!target) return res.status(404).json({ error: "User tidak ditemukan" });
+  policy.requireAdminRemaining(target, req.body.roleId, target.active);
+  db.prepare("UPDATE users SET role_id=?,updated_at=? WHERE id=?").run(
+    req.body.roleId,
+    now(),
+    req.params.id,
+  );
+  auditLog(req.user.id, "user.role.change", "user", req.params.id, {
+    roleId: req.body.roleId,
+  });
+  res.json({ ok: true });
+});
+app.delete("/api/users/:id", auth, permit("users.manage"), (req, res) => {
+  const target = db
+    .prepare("SELECT * FROM users WHERE id=?")
+    .get(req.params.id);
+  if (!target) return res.status(404).json({ error: "Akun tidak ditemukan" });
+  if (target.id === req.user.id)
+    return res
+      .status(400)
+      .json({ error: "Tidak dapat menghapus akun Anda sendiri." });
+  if (target.role_id === "role_admin") {
+    const admins = db
+      .prepare(
+        "SELECT COUNT(*) c FROM users WHERE role_id='role_admin' AND active=1",
+      )
+      .get().c;
+    if (admins <= 1)
+      return res
+        .status(400)
+        .json({ error: "Minimal harus ada satu Administrator aktif." });
+  }
+  db.prepare("DELETE FROM users WHERE id=?").run(req.params.id);
+  auditLog(req.user.id, "user.delete", "user", req.params.id, {
+    email: target.email,
+  });
+  res.json({ ok: true });
+});
 
-app.get('/api/clients', auth, permit('users.view'), (req,res) => {
-  const base=`SELECT u.id,u.first_name,u.last_name,u.email,u.username,u.active,u.created_at,s.id site_id,s.title site_title,s.slug,s.status site_status,s.canvas_json,a.editor_id,e.first_name||' '||e.last_name assigned_editor FROM users u JOIN roles r ON r.id=u.role_id LEFT JOIN sites s ON s.user_id=u.id LEFT JOIN site_assignments a ON a.user_id=u.id LEFT JOIN users e ON e.id=a.editor_id WHERE r.name='User'`
-  const rows=hasPermission(req.user,'*') ? db.prepare(`${base} ORDER BY u.created_at DESC`).all() : db.prepare(`${base} AND (a.editor_id=? OR a.editor_id IS NULL) ORDER BY u.created_at DESC`).all(req.user.id)
-  res.json(rows.map(row=>({id:row.id,name:`${row.first_name} ${row.last_name}`.trim(),email:row.email,username:row.username,active:Boolean(row.active),siteId:row.site_id,siteTitle:row.site_title||`${row.first_name} ${row.last_name}`.trim(),slug:row.slug||'',siteStatus:row.site_status||'Draft',canvasIds:parseJson(row.canvas_json,[]).map(section=>section.id),assignedEditorId:row.editor_id||'',assignedTo:row.assigned_editor||'',status:row.editor_id?'Assigned':'Unassigned',plan:'Free'})))
-})
-app.put('/api/clients/:id/assignment', auth, permit('users.view'), (req,res) => {
-  const target=db.prepare(`SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND r.name='User'`).get(req.params.id)
-  if(!target)return res.status(404).json({error:'User client tidak ditemukan'})
-  let editorId=String(req.body.editorId||'') || null
-  if(!hasPermission(req.user,'*')) editorId=req.user.id
-  if(editorId){const editor=db.prepare(`SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND (r.name='Editor' OR r.name='Admin') AND u.active=1`).get(editorId);if(!editor)return res.status(400).json({error:'Editor tidak valid'})}
-  const existing=db.prepare('SELECT id FROM site_assignments WHERE user_id=?').get(target.id)
-  if(existing) db.prepare('UPDATE site_assignments SET editor_id=?,assigned_by=?,updated_at=? WHERE user_id=?').run(editorId,req.user.id,now(),target.id)
-  else db.prepare('INSERT INTO site_assignments(id,user_id,editor_id,assigned_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(id('assign'),target.id,editorId,req.user.id,now(),now())
-  res.json({ok:true,editorId})
-})
-app.get('/api/clients/:id/site', auth, permit('users.view'), (req,res) => {
-  if(!canManageSiteFor(req.user,req.params.id)) return res.status(403).json({error:'User belum di-assign kepada Editor ini'})
-  const row=db.prepare('SELECT * FROM sites WHERE user_id=?').get(req.params.id)
-  res.json(row ? {id:row.id,userId:row.user_id,title:row.title,slug:row.slug,templateId:row.template_id,sections:parseJson(row.canvas_json,[]),status:row.status,updatedAt:row.updated_at} : null)
-})
-app.put('/api/clients/:id/site', auth, permit('users.view'), (req,res) => {
-  if(!canManageSiteFor(req.user,req.params.id)) return res.status(403).json({error:'User belum di-assign kepada Editor ini'})
-  const existing=db.prepare('SELECT * FROM sites WHERE user_id=?').get(req.params.id)
-  const payload={title:String(req.body.title||''),slug:normalizeSlug(req.body.slug||''),templateId:req.body.templateId||null,sections:Array.isArray(req.body.sections)?req.body.sections:[],status:req.body.status||'Draft'}
-  if(!payload.slug)return res.status(400).json({error:'URL slug wajib diisi'})
-  const conflict=db.prepare('SELECT id FROM sites WHERE slug=? AND user_id<>?').get(payload.slug,req.params.id); if(conflict)return res.status(409).json({error:'URL sudah digunakan'})
-  if(existing) saveSiteRevision(existing,req.user.id,'Before client save')
-  if(existing) db.prepare('UPDATE sites SET title=?,slug=?,template_id=?,canvas_json=?,status=?,updated_at=? WHERE user_id=?').run(payload.title,payload.slug,payload.templateId,JSON.stringify(payload.sections),payload.status,now(),req.params.id)
-  else db.prepare(`INSERT INTO sites(id,user_id,title,slug,template_id,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`).run(id('site'),req.params.id,payload.title,payload.slug,payload.templateId,JSON.stringify(payload.sections),payload.status,now(),now())
-  db.prepare('DELETE FROM site_autosaves WHERE user_id=?').run(req.params.id)
-  auditLog(req.user.id,'client-site.save','site',existing?.id||'',{customerUserId:req.params.id,slug:payload.slug,status:payload.status})
-  res.json({ok:true,url:`${CLIENT_ORIGIN.replace(/\/$/,'')}/${payload.slug}`})
-})
+app.get("/api/clients", auth, permit("users.view"), (req, res) => {
+  const base = `SELECT u.id,u.first_name,u.last_name,u.email,u.username,u.active,u.created_at,s.id site_id,s.title site_title,s.slug,s.status site_status,s.canvas_json,a.editor_id,e.first_name||' '||e.last_name assigned_editor FROM users u JOIN roles r ON r.id=u.role_id LEFT JOIN sites s ON s.user_id=u.id LEFT JOIN site_assignments a ON a.user_id=u.id LEFT JOIN users e ON e.id=a.editor_id WHERE r.name='User'`;
+  const rows = hasPermission(req.user, "*")
+    ? db.prepare(`${base} ORDER BY u.created_at DESC`).all()
+    : db
+        .prepare(
+          `${base} AND (a.editor_id=? OR a.editor_id IS NULL) ORDER BY u.created_at DESC`,
+        )
+        .all(req.user.id);
+  res.json(
+    rows.map((row) => ({
+      id: row.id,
+      name: `${row.first_name} ${row.last_name}`.trim(),
+      email: row.email,
+      username: row.username,
+      active: Boolean(row.active),
+      siteId: row.site_id,
+      siteTitle: row.site_title || `${row.first_name} ${row.last_name}`.trim(),
+      slug: row.slug || "",
+      siteStatus: row.site_status || "Draft",
+      canvasIds: parseJson(row.canvas_json, []).map((section) => section.id),
+      assignedEditorId: row.editor_id || "",
+      assignedTo: row.assigned_editor || "",
+      status: row.editor_id ? "Assigned" : "Unassigned",
+      plan: "Free",
+    })),
+  );
+});
+app.put(
+  "/api/clients/:id/assignment",
+  auth,
+  permit("users.view"),
+  (req, res) => {
+    const target = db
+      .prepare(
+        `SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND r.name='User'`,
+      )
+      .get(req.params.id);
+    if (!target)
+      return res.status(404).json({ error: "User client tidak ditemukan" });
+    let editorId = String(req.body.editorId || "") || null;
+    if (!hasPermission(req.user, "*")) editorId = req.user.id;
+    if (editorId) {
+      const editor = db
+        .prepare(
+          `SELECT u.id FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=? AND (r.name='Editor' OR r.name='Admin') AND u.active=1`,
+        )
+        .get(editorId);
+      if (!editor) return res.status(400).json({ error: "Editor tidak valid" });
+    }
+    const existing = db
+      .prepare("SELECT id FROM site_assignments WHERE user_id=?")
+      .get(target.id);
+    if (
+      existing &&
+      !hasPermission(req.user, "*") &&
+      db
+        .prepare("SELECT editor_id FROM site_assignments WHERE user_id=?")
+        .get(target.id)?.editor_id &&
+      !canManageSiteFor(req.user, target.id)
+    )
+      return res
+        .status(403)
+        .json({ error: "Hanya Administrator dapat mengganti assignment" });
+    if (existing)
+      db.prepare(
+        "UPDATE site_assignments SET editor_id=?,assigned_by=?,updated_at=? WHERE user_id=?",
+      ).run(editorId, req.user.id, now(), target.id);
+    else
+      db.prepare(
+        "INSERT INTO site_assignments(id,user_id,editor_id,assigned_by,created_at,updated_at) VALUES(?,?,?,?,?,?)",
+      ).run(id("assign"), target.id, editorId, req.user.id, now(), now());
+    res.json({ ok: true, editorId });
+  },
+);
+app.get("/api/clients/:id/site", auth, permit("users.view"), (req, res) => {
+  if (!canManageSiteFor(req.user, req.params.id))
+    return res
+      .status(403)
+      .json({ error: "User belum di-assign kepada Editor ini" });
+  const row = db
+    .prepare("SELECT * FROM sites WHERE user_id=?")
+    .get(req.params.id);
+  res.json(
+    row
+      ? {
+          id: row.id,
+          userId: row.user_id,
+          title: row.title,
+          slug: row.slug,
+          templateId: row.template_id,
+          sections: parseJson(row.canvas_json, []),
+          status: row.status,
+          updatedAt: row.updated_at,
+        }
+      : null,
+  );
+});
+app.put("/api/clients/:id/site", auth, permit("users.view"), (req, res) => {
+  if (!canManageSiteFor(req.user, req.params.id))
+    return res
+      .status(403)
+      .json({ error: "User belum di-assign kepada Editor ini" });
+  policy.requireEntitlement(
+    req.user,
+    req.params.id,
+    req.body.templateId,
+    req.body.sections,
+  );
+  const existing = db
+    .prepare("SELECT * FROM sites WHERE user_id=?")
+    .get(req.params.id);
+  const payload = {
+    title: String(req.body.title || ""),
+    slug: normalizeSlug(req.body.slug || ""),
+    templateId: req.body.templateId || null,
+    sections: Array.isArray(req.body.sections) ? req.body.sections : [],
+    status: req.body.status || "Draft",
+  };
+  if (!payload.slug)
+    return res.status(400).json({ error: "URL slug wajib diisi" });
+  const conflict = db
+    .prepare("SELECT id FROM sites WHERE slug=? AND user_id<>?")
+    .get(payload.slug, req.params.id);
+  if (conflict) return res.status(409).json({ error: "URL sudah digunakan" });
+  if (existing) saveSiteRevision(existing, req.user.id, "Before client save");
+  if (existing)
+    db.prepare(
+      "UPDATE sites SET title=?,slug=?,template_id=?,canvas_json=?,status=?,updated_at=? WHERE user_id=?",
+    ).run(
+      payload.title,
+      payload.slug,
+      payload.templateId,
+      JSON.stringify(payload.sections),
+      payload.status,
+      now(),
+      req.params.id,
+    );
+  else
+    db.prepare(
+      `INSERT INTO sites(id,user_id,title,slug,template_id,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      id("site"),
+      req.params.id,
+      payload.title,
+      payload.slug,
+      payload.templateId,
+      JSON.stringify(payload.sections),
+      payload.status,
+      now(),
+      now(),
+    );
+  db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.params.id);
+  auditLog(req.user.id, "client-site.save", "site", existing?.id || "", {
+    customerUserId: req.params.id,
+    slug: payload.slug,
+    status: payload.status,
+  });
+  res.json({
+    ok: true,
+    url: `${CLIENT_ORIGIN.replace(/\/$/, "")}/${payload.slug}`,
+  });
+});
 
-app.put('/api/clients/:id/site/autosave', auth, permit('users.view'), (req,res) => {
-  if(!canManageSiteFor(req.user,req.params.id)) return res.status(403).json({error:'Customer belum di-assign kepada Web Designer ini'})
-  const payload={title:String(req.body.title||''),slug:normalizeSlug(req.body.slug||''),templateId:req.body.templateId||null,sections:Array.isArray(req.body.sections)?req.body.sections:[]}
-  db.prepare(`INSERT INTO site_autosaves(user_id,actor_user_id,title,slug,template_id,canvas_json,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET actor_user_id=excluded.actor_user_id,title=excluded.title,slug=excluded.slug,template_id=excluded.template_id,canvas_json=excluded.canvas_json,updated_at=excluded.updated_at`).run(req.params.id,req.user.id,payload.title,payload.slug,payload.templateId,JSON.stringify(payload.sections),now())
-  res.json({ok:true,updatedAt:now()})
-})
-app.get('/api/clients/:id/site/revisions', auth, permit('users.view'), (req,res) => {
-  if(!canManageSiteFor(req.user,req.params.id)) return res.status(403).json({error:'Customer belum di-assign kepada Web Designer ini'})
-  const site=db.prepare('SELECT id FROM sites WHERE user_id=?').get(req.params.id); if(!site)return res.json([])
-  res.json(db.prepare(`SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30`).all(site.id).map(r=>({...r,sections:parseJson(r.canvas_json,[])})))
-})
-app.get('/api/contactable-users', auth, permit('conversations.outbound'), (_req,res) => {
-  const rows=db.prepare(`SELECT u.id,u.first_name,u.last_name,u.email,u.username,r.name role FROM users u JOIN roles r ON r.id=u.role_id WHERE r.name='User' AND u.active=1 ORDER BY u.first_name,u.last_name`).all()
-  res.json(rows.map(row=>({id:row.id,name:`${row.first_name} ${row.last_name}`.trim(),email:row.email,username:row.username,role:row.role})))
-})
-app.get('/api/me/conversation', auth, (req,res) => {
-  const conversation=db.prepare(`SELECT * FROM conversations WHERE customer_email=? ORDER BY updated_at DESC LIMIT 1`).get(req.user.email)
-  if(!conversation) return res.json({conversation:null,messages:[]})
-  const messages=db.prepare(`SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at`).all(conversation.id)
-  res.json({conversation,messages})
-})
+app.put(
+  "/api/clients/:id/site/autosave",
+  auth,
+  permit("users.view"),
+  (req, res) => {
+    if (!canManageSiteFor(req.user, req.params.id))
+      return res
+        .status(403)
+        .json({ error: "Customer belum di-assign kepada Web Designer ini" });
+    const payload = {
+      title: String(req.body.title || ""),
+      slug: normalizeSlug(req.body.slug || ""),
+      templateId: req.body.templateId || null,
+      sections: Array.isArray(req.body.sections) ? req.body.sections : [],
+    };
+    db.prepare(
+      `INSERT INTO site_autosaves(user_id,actor_user_id,title,slug,template_id,canvas_json,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET actor_user_id=excluded.actor_user_id,title=excluded.title,slug=excluded.slug,template_id=excluded.template_id,canvas_json=excluded.canvas_json,updated_at=excluded.updated_at`,
+    ).run(
+      req.params.id,
+      req.user.id,
+      payload.title,
+      payload.slug,
+      payload.templateId,
+      JSON.stringify(payload.sections),
+      now(),
+    );
+    res.json({ ok: true, updatedAt: now() });
+  },
+);
+app.get(
+  "/api/clients/:id/site/revisions",
+  auth,
+  permit("users.view"),
+  (req, res) => {
+    if (!canManageSiteFor(req.user, req.params.id))
+      return res
+        .status(403)
+        .json({ error: "Customer belum di-assign kepada Web Designer ini" });
+    const site = db
+      .prepare("SELECT id FROM sites WHERE user_id=?")
+      .get(req.params.id);
+    if (!site) return res.json([]);
+    res.json(
+      db
+        .prepare(
+          `SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30`,
+        )
+        .all(site.id)
+        .map((r) => ({ ...r, sections: parseJson(r.canvas_json, []) })),
+    );
+  },
+);
+app.get(
+  "/api/contactable-users",
+  auth,
+  permit("conversations.outbound"),
+  (_req, res) => {
+    const rows = db
+      .prepare(
+        `SELECT u.id,u.first_name,u.last_name,u.email,u.username,r.name role FROM users u JOIN roles r ON r.id=u.role_id WHERE r.name='User' AND u.active=1 ORDER BY u.first_name,u.last_name`,
+      )
+      .all();
+    res.json(
+      rows.map((row) => ({
+        id: row.id,
+        name: `${row.first_name} ${row.last_name}`.trim(),
+        email: row.email,
+        username: row.username,
+        role: row.role,
+      })),
+    );
+  },
+);
+app.get("/api/me/conversation", auth, (req, res) => {
+  const conversation = db
+    .prepare(
+      `SELECT * FROM conversations WHERE customer_email=? ORDER BY updated_at DESC LIMIT 1`,
+    )
+    .get(req.user.email);
+  if (!conversation) return res.json({ conversation: null, messages: [] });
+  const messages = db
+    .prepare(
+      `SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at`,
+    )
+    .all(conversation.id);
+  res.json({ conversation, messages });
+});
 
-app.post('/api/conversations/inbound', auth, (req,res) => {
-  const body=String(req.body.body||''); if(!body)return res.status(400).json({error:'Pesan wajib diisi'})
-  const conversation=createOrFindConversation({customerName:req.user.name,customerEmail:req.user.email,customerPhone:req.body.phone||'',channel:req.body.channel||'Web'})
-  const messageId=id('msg'); db.prepare(`INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`).run(messageId,conversation.id,'customer',req.user.id,body,now()); db.prepare('UPDATE conversations SET updated_at=? WHERE id=?').run(now(),conversation.id)
-  res.status(201).json({conversationId:conversation.id,messageId})
-})
-app.post('/api/conversations/outbound', auth, permit('conversations.outbound'), (req,res) => {
-  const {userId,email,body,channel='Web'}=req.body||{}; if(!body)return res.status(400).json({error:'Pesan wajib diisi'})
-  const target=userId?db.prepare('SELECT * FROM users WHERE id=?').get(userId):db.prepare('SELECT * FROM users WHERE email=?').get(email)
-  if(!target)return res.status(404).json({error:'User tidak ditemukan'})
-  const assignedCsId=req.user.role==='Customer Service'?req.user.id:chooseAssignee('role_cs')
-  const conversation=createOrFindConversation({customerName:`${target.first_name} ${target.last_name}`.trim(),customerEmail:target.email,assignedCsId,channel})
-  const messageId=id('msg'); db.prepare(`INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`).run(messageId,conversation.id,'support',req.user.id,body,now()); db.prepare('UPDATE conversations SET updated_at=? WHERE id=?').run(now(),conversation.id)
-  queueEmail(target.email,'Pesan baru dari ikrarku',`<h2>Pesan baru</h2><p>${escapeHtml(body)}</p><p>Silakan login ke ikrarku atau balas melalui channel support.</p>`)
-  res.status(201).json({conversationId:conversation.id,messageId})
-})
+app.post("/api/conversations/inbound", auth, (req, res) => {
+  const body = String(req.body.body || "");
+  if (!body) return res.status(400).json({ error: "Pesan wajib diisi" });
+  const conversation = createOrFindConversation({
+    customerName: req.user.name,
+    customerEmail: req.user.email,
+    customerPhone: req.body.phone || "",
+    channel: req.body.channel || "Web",
+    trusted: true,
+  });
+  const messageId = id("msg");
+  db.prepare(
+    `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`,
+  ).run(messageId, conversation.id, "customer", req.user.id, body, now());
+  db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+    now(),
+    conversation.id,
+  );
+  res.status(201).json({ conversationId: conversation.id, messageId });
+});
+app.post(
+  "/api/conversations/outbound",
+  auth,
+  permit("conversations.outbound"),
+  (req, res) => {
+    const { userId, email, body, channel = "Web" } = req.body || {};
+    if (!body) return res.status(400).json({ error: "Pesan wajib diisi" });
+    const target = userId
+      ? db.prepare("SELECT * FROM users WHERE id=?").get(userId)
+      : db.prepare("SELECT * FROM users WHERE email=?").get(email);
+    if (!target) return res.status(404).json({ error: "User tidak ditemukan" });
+    const assignedCsId =
+      req.user.role === "Customer Service"
+        ? req.user.id
+        : chooseAssignee("role_cs");
+    const conversation = createOrFindConversation({
+      customerName: `${target.first_name} ${target.last_name}`.trim(),
+      customerEmail: target.email,
+      assignedCsId,
+      channel,
+    });
+    const messageId = id("msg");
+    db.prepare(
+      `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`,
+    ).run(messageId, conversation.id, "support", req.user.id, body, now());
+    db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+      now(),
+      conversation.id,
+    );
+    queueEmail(
+      target.email,
+      "Pesan baru dari ikrarku",
+      `<h2>Pesan baru</h2><p>${escapeHtml(body)}</p><p>Silakan login ke ikrarku atau balas melalui channel support.</p>`,
+    );
+    res.status(201).json({ conversationId: conversation.id, messageId });
+  },
+);
 
-app.post('/api/media', auth, upload.single('file'), (req,res) => {
-  if(!req.file)return res.status(400).json({error:'File wajib diunggah'})
-  const allowedPrefixes=['image/','video/','audio/']; if(!allowedPrefixes.some(prefix=>String(req.file.mimetype||'').startsWith(prefix))){try{fs.unlinkSync(req.file.path)}catch{};return res.status(415).json({error:'Format file tidak didukung'})}
-  const mediaId=id('media')
-  const original=req.file.originalname || 'file'
-  const finalName=`${mediaId}_${original.replace(/[^a-zA-Z0-9._-]/g,'_')}`
-  const finalPath=path.join(UPLOAD_DIR,finalName)
-  fs.renameSync(req.file.path,finalPath)
-  db.prepare(`INSERT INTO media_assets(id,owner_user_id,category,original_name,file_name,file_path,mime_type,size_bytes,created_at) VALUES(?,?,?,?,?,?,?,?,?)`).run(mediaId,req.user.id,req.body.category||'general',original,finalName,finalPath,req.file.mimetype,req.file.size||0,now())
-  res.status(201).json({id:mediaId,name:original,url:`/uploads/${finalName}`,mimeType:req.file.mimetype,size:req.file.size||0,category:req.body.category||'general'})
-})
+app.post("/api/media", auth, upload.single("file"), (req, res) => {
+  if (!req.file) return res.status(400).json({ error: "File wajib diunggah" });
+  const allowedPrefixes = ["image/", "video/", "audio/"];
+  if (
+    !allowedPrefixes.some((prefix) =>
+      String(req.file.mimetype || "").startsWith(prefix),
+    )
+  ) {
+    try {
+      fs.unlinkSync(req.file.path);
+    } catch {}
+    return res.status(415).json({ error: "Format file tidak didukung" });
+  }
+  const mediaId = id("media");
+  const original = req.file.originalname || "file";
+  const finalName = `${mediaId}_${original.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+  const finalPath = path.join(UPLOAD_DIR, finalName);
+  fs.renameSync(req.file.path, finalPath);
+  db.prepare(
+    `INSERT INTO media_assets(id,owner_user_id,category,original_name,file_name,file_path,mime_type,size_bytes,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    mediaId,
+    req.user.id,
+    req.body.category || "general",
+    original,
+    finalName,
+    finalPath,
+    req.file.mimetype,
+    req.file.size || 0,
+    now(),
+  );
+  res.status(201).json({
+    id: mediaId,
+    name: original,
+    url: `/uploads/${finalName}`,
+    mimeType: req.file.mimetype,
+    size: req.file.size || 0,
+    category: req.body.category || "general",
+  });
+});
 
-app.get('/api/sounds', auth, (_req,res) => res.json(db.prepare('SELECT * FROM sounds ORDER BY created_at DESC').all().map(r=>({id:r.id,name:r.name,category:r.category,description:r.description,fileName:r.file_name,url:r.file_path?`/uploads/${path.basename(r.file_path)}`:null,mimeType:r.mime_type,createdAt:r.created_at}))))
-app.post('/api/sounds', auth, permit('sounds.manage'), upload.single('file'), (req,res) => {
-  if(!req.file)return res.status(400).json({error:'File wajib diunggah'})
-  const mime=String(req.file.mimetype||''); if(!(mime.startsWith('audio/')||mime==='video/mp4')){try{fs.unlinkSync(req.file.path)}catch{};return res.status(415).json({error:'Sound hanya menerima audio atau MP4'})}
-  if((req.file.size||0)>15*1024*1024){try{fs.unlinkSync(req.file.path)}catch{};return res.status(413).json({error:'Sound maksimal 15 MB'})}
-  const soundId=id('snd'); const finalName=`${soundId}_${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g,'_')}`; const finalPath=path.join(UPLOAD_DIR,finalName); fs.renameSync(req.file.path,finalPath)
-  db.prepare(`INSERT INTO sounds(id,name,category,description,file_name,file_path,mime_type,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)`).run(soundId,req.body.name||req.file.originalname,req.body.category||'Wedding',req.body.description||'',req.file.originalname,finalPath,req.file.mimetype,req.user.id,now())
-  res.status(201).json({id:soundId,name:req.body.name||req.file.originalname,url:`/uploads/${finalName}`})
-})
+app.get("/api/sounds", auth, (_req, res) =>
+  res.json(
+    db
+      .prepare("SELECT * FROM sounds ORDER BY created_at DESC")
+      .all()
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        category: r.category,
+        description: r.description,
+        fileName: r.file_name,
+        url: r.file_path ? `/uploads/${path.basename(r.file_path)}` : null,
+        mimeType: r.mime_type,
+        createdAt: r.created_at,
+      })),
+  ),
+);
+app.post(
+  "/api/sounds",
+  auth,
+  permit("sounds.manage"),
+  upload.single("file"),
+  (req, res) => {
+    if (!req.file)
+      return res.status(400).json({ error: "File wajib diunggah" });
+    const mime = String(req.file.mimetype || "");
+    if (!(mime.startsWith("audio/") || mime === "video/mp4")) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch {}
+      return res
+        .status(415)
+        .json({ error: "Sound hanya menerima audio atau MP4" });
+    }
+    if ((req.file.size || 0) > 15 * 1024 * 1024) {
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch {}
+      return res.status(413).json({ error: "Sound maksimal 15 MB" });
+    }
+    const soundId = id("snd");
+    const finalName = `${soundId}_${req.file.originalname.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    const finalPath = path.join(UPLOAD_DIR, finalName);
+    fs.renameSync(req.file.path, finalPath);
+    db.prepare(
+      `INSERT INTO sounds(id,name,category,description,file_name,file_path,mime_type,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      soundId,
+      req.body.name || req.file.originalname,
+      req.body.category || "Wedding",
+      req.body.description || "",
+      req.file.originalname,
+      finalPath,
+      req.file.mimetype,
+      req.user.id,
+      now(),
+    );
+    res.status(201).json({
+      id: soundId,
+      name: req.body.name || req.file.originalname,
+      url: `/uploads/${finalName}`,
+    });
+  },
+);
 
-app.delete('/api/sounds/:id', auth, permit('sounds.manage'), (req,res) => {
-  const row=db.prepare('SELECT * FROM sounds WHERE id=?').get(req.params.id)
-  if(!row)return res.status(404).json({error:'Sound tidak ditemukan'})
-  if(row.file_path && fs.existsSync(row.file_path)) fs.unlinkSync(row.file_path)
-  db.prepare('DELETE FROM sounds WHERE id=?').run(row.id)
-  res.json({ok:true})
-})
+app.delete("/api/sounds/:id", auth, permit("sounds.manage"), (req, res) => {
+  const row = db.prepare("SELECT * FROM sounds WHERE id=?").get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Sound tidak ditemukan" });
+  if (row.file_path && fs.existsSync(row.file_path))
+    fs.unlinkSync(row.file_path);
+  db.prepare("DELETE FROM sounds WHERE id=?").run(row.id);
+  res.json({ ok: true });
+});
 
-app.get('/api/site', auth, (req,res) => {
-  const row=db.prepare('SELECT * FROM sites WHERE user_id=?').get(req.user.id)
-  res.json(row ? {id:row.id,title:row.title,slug:row.slug,templateId:row.template_id,sections:parseJson(row.canvas_json,[]),status:row.status,updatedAt:row.updated_at} : null)
-})
-app.put('/api/site', auth, (req,res) => {
-  const existing=db.prepare('SELECT * FROM sites WHERE user_id=?').get(req.user.id)
-  const payload={title:req.body.title||'',slug:normalizeSlug(req.body.slug||''),templateId:req.body.templateId||null,sections:req.body.sections||[],status:req.body.status||'Draft'}
-  if(!payload.slug)return res.status(400).json({error:'URL slug wajib diisi'})
-  const conflict=db.prepare('SELECT id FROM sites WHERE slug=? AND user_id<>?').get(payload.slug,req.user.id); if(conflict)return res.status(409).json({error:'URL sudah digunakan'})
-  if(existing) saveSiteRevision(existing,req.user.id,'Before publish/save')
-  if(existing) db.prepare('UPDATE sites SET title=?,slug=?,template_id=?,canvas_json=?,status=?,updated_at=? WHERE user_id=?').run(payload.title,payload.slug,payload.templateId,JSON.stringify(payload.sections),payload.status,now(),req.user.id)
-  else db.prepare(`INSERT INTO sites(id,user_id,title,slug,template_id,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`).run(id('site'),req.user.id,payload.title,payload.slug,payload.templateId,JSON.stringify(payload.sections),payload.status,now(),now())
-  db.prepare('DELETE FROM site_autosaves WHERE user_id=?').run(req.user.id)
-  auditLog(req.user.id,'site.save','site',existing?.id||'',{slug:payload.slug,status:payload.status})
-  res.json({ok:true,url:`${CLIENT_ORIGIN}/${payload.slug}`})
-})
+app.get("/api/site", auth, permit("canvas.manage.own"), (req, res) => {
+  const row = db
+    .prepare("SELECT * FROM sites WHERE user_id=?")
+    .get(req.user.id);
+  res.json(
+    row
+      ? {
+          id: row.id,
+          title: row.title,
+          slug: row.slug,
+          templateId: row.template_id,
+          sections: parseJson(row.canvas_json, []),
+          status: row.status,
+          updatedAt: row.updated_at,
+        }
+      : null,
+  );
+});
+app.put("/api/site", auth, permit("canvas.manage.own"), (req, res) => {
+  policy.requireEntitlement(
+    req.user,
+    req.user.id,
+    req.body.templateId,
+    req.body.sections,
+  );
+  const existing = db
+    .prepare("SELECT * FROM sites WHERE user_id=?")
+    .get(req.user.id);
+  const payload = {
+    title: req.body.title || "",
+    slug: normalizeSlug(req.body.slug || ""),
+    templateId: req.body.templateId || null,
+    sections: req.body.sections || [],
+    status: req.body.status || "Draft",
+  };
+  if (!payload.slug)
+    return res.status(400).json({ error: "URL slug wajib diisi" });
+  const conflict = db
+    .prepare("SELECT id FROM sites WHERE slug=? AND user_id<>?")
+    .get(payload.slug, req.user.id);
+  if (conflict) return res.status(409).json({ error: "URL sudah digunakan" });
+  if (existing) saveSiteRevision(existing, req.user.id, "Before publish/save");
+  if (existing)
+    db.prepare(
+      "UPDATE sites SET title=?,slug=?,template_id=?,canvas_json=?,status=?,updated_at=? WHERE user_id=?",
+    ).run(
+      payload.title,
+      payload.slug,
+      payload.templateId,
+      JSON.stringify(payload.sections),
+      payload.status,
+      now(),
+      req.user.id,
+    );
+  else
+    db.prepare(
+      `INSERT INTO sites(id,user_id,title,slug,template_id,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      id("site"),
+      req.user.id,
+      payload.title,
+      payload.slug,
+      payload.templateId,
+      JSON.stringify(payload.sections),
+      payload.status,
+      now(),
+      now(),
+    );
+  db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.user.id);
+  auditLog(req.user.id, "site.save", "site", existing?.id || "", {
+    slug: payload.slug,
+    status: payload.status,
+  });
+  res.json({ ok: true, url: `${CLIENT_ORIGIN}/${payload.slug}` });
+});
 
-app.put('/api/site/autosave', auth, permit('canvas.manage.own'), (req,res) => {
-  const payload={title:req.body.title||'',slug:normalizeSlug(req.body.slug||''),templateId:req.body.templateId||null,sections:req.body.sections||[]}
-  db.prepare(`INSERT INTO site_autosaves(user_id,actor_user_id,title,slug,template_id,canvas_json,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET actor_user_id=excluded.actor_user_id,title=excluded.title,slug=excluded.slug,template_id=excluded.template_id,canvas_json=excluded.canvas_json,updated_at=excluded.updated_at`).run(req.user.id,req.user.id,payload.title,payload.slug,payload.templateId,JSON.stringify(payload.sections),now())
-  res.json({ok:true,updatedAt:now()})
-})
-app.get('/api/site/revisions', auth, permit('canvas.manage.own'), (req,res) => {
-  const site=db.prepare('SELECT id FROM sites WHERE user_id=?').get(req.user.id); if(!site)return res.json([])
-  res.json(db.prepare(`SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30`).all(site.id).map(r=>({...r,sections:parseJson(r.canvas_json,[])})))
-})
-app.get('/api/site/interactions', auth, (req,res) => {
-  const site=db.prepare('SELECT id FROM sites WHERE user_id=?').get(req.user.id)
-  if(!site)return res.json({guests:[],greetings:[]})
-  const guests=db.prepare('SELECT id,canvas_id,guest_name,email,status,pax,created_at FROM rsvp_responses WHERE site_id=? ORDER BY created_at DESC').all(site.id).map(row=>({id:row.id,canvasId:row.canvas_id,name:row.guest_name,email:row.email,status:row.status,pax:row.pax,time:row.created_at,initials:String(row.guest_name).slice(0,2).toUpperCase()}))
-  const greetings=db.prepare('SELECT id,canvas_id,guest_name,message,created_at FROM greetings WHERE site_id=? ORDER BY created_at DESC').all(site.id).map(row=>({id:row.id,canvasId:row.canvas_id,name:row.guest_name,message:row.message,date:row.created_at}))
-  res.json({guests,greetings})
-})
-app.post('/api/site/rsvp', auth, (req,res) => {
-  const site=db.prepare('SELECT id FROM sites WHERE user_id=?').get(req.user.id)
-  if(!site)return res.status(404).json({error:'Website belum tersedia'})
-  const responseId=id('rsvp'); const {canvasId='',name,status='Menunggu',pax=0,email=''}=req.body||{}
-  if(!name)return res.status(400).json({error:'Nama tamu wajib diisi'})
-  db.prepare('INSERT INTO rsvp_responses(id,site_id,canvas_id,guest_name,email,status,pax,created_at) VALUES(?,?,?,?,?,?,?,?)').run(responseId,site.id,canvasId,name,email,status,Number(pax)||0,now())
-  res.status(201).json({id:responseId})
-})
-app.post('/api/site/greetings', auth, (req,res) => {
-  const site=db.prepare('SELECT id FROM sites WHERE user_id=?').get(req.user.id)
-  if(!site)return res.status(404).json({error:'Website belum tersedia'})
-  const greetingId=id('greeting'); const {canvasId='',name,message}=req.body||{}
-  if(!name||!message)return res.status(400).json({error:'Nama dan pesan wajib diisi'})
-  db.prepare('INSERT INTO greetings(id,site_id,canvas_id,guest_name,message,created_at) VALUES(?,?,?,?,?,?)').run(greetingId,site.id,canvasId,name,message,now())
-  res.status(201).json({id:greetingId})
-})
+app.put("/api/site/autosave", auth, permit("canvas.manage.own"), (req, res) => {
+  const payload = {
+    title: req.body.title || "",
+    slug: normalizeSlug(req.body.slug || ""),
+    templateId: req.body.templateId || null,
+    sections: req.body.sections || [],
+  };
+  db.prepare(
+    `INSERT INTO site_autosaves(user_id,actor_user_id,title,slug,template_id,canvas_json,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET actor_user_id=excluded.actor_user_id,title=excluded.title,slug=excluded.slug,template_id=excluded.template_id,canvas_json=excluded.canvas_json,updated_at=excluded.updated_at`,
+  ).run(
+    req.user.id,
+    req.user.id,
+    payload.title,
+    payload.slug,
+    payload.templateId,
+    JSON.stringify(payload.sections),
+    now(),
+  );
+  res.json({ ok: true, updatedAt: now() });
+});
+app.get(
+  "/api/site/revisions",
+  auth,
+  permit("canvas.manage.own"),
+  (req, res) => {
+    const site = db
+      .prepare("SELECT id FROM sites WHERE user_id=?")
+      .get(req.user.id);
+    if (!site) return res.json([]);
+    res.json(
+      db
+        .prepare(
+          `SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30`,
+        )
+        .all(site.id)
+        .map((r) => ({ ...r, sections: parseJson(r.canvas_json, []) })),
+    );
+  },
+);
+app.get("/api/site/autosave", auth, permit("canvas.manage.own"), (req, res) =>
+  res.json(policy.siteDraft(req.user.id)),
+);
+app.delete(
+  "/api/site/autosave",
+  auth,
+  permit("canvas.manage.own"),
+  (req, res) => {
+    db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.user.id);
+    res.json({ ok: true });
+  },
+);
+app.get(
+  "/api/clients/:id/site/autosave",
+  auth,
+  permit("users.view"),
+  (req, res) => {
+    if (!canManageSiteFor(req.user, req.params.id))
+      return res.status(403).json({ error: "Permission denied" });
+    res.json(policy.siteDraft(req.params.id));
+  },
+);
+app.delete(
+  "/api/clients/:id/site/autosave",
+  auth,
+  permit("users.view"),
+  (req, res) => {
+    if (!canManageSiteFor(req.user, req.params.id))
+      return res.status(403).json({ error: "Permission denied" });
+    db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.params.id);
+    res.json({ ok: true });
+  },
+);
+app.get(
+  "/api/templates/:id/autosave",
+  auth,
+  permit("templates.edit"),
+  (req, res) => {
+    policy.requireTemplate(req.user, req.params.id);
+    const row = db
+      .prepare("SELECT * FROM template_autosaves WHERE template_id=?")
+      .get(req.params.id);
+    res.json(
+      row
+        ? {
+            sections: parseJson(row.canvas_json, []),
+            updatedAt: row.updated_at,
+          }
+        : null,
+    );
+  },
+);
+app.delete(
+  "/api/templates/:id/autosave",
+  auth,
+  permit("templates.edit"),
+  (req, res) => {
+    policy.requireTemplate(req.user, req.params.id);
+    db.prepare("DELETE FROM template_autosaves WHERE template_id=?").run(
+      req.params.id,
+    );
+    res.json({ ok: true });
+  },
+);
+app.get(
+  "/api/public/sites/:slug/greetings",
+  rateLimit("greetings-read", 120, 60000),
+  (req, res) => {
+    const site = db
+      .prepare("SELECT id FROM sites WHERE slug=? AND status='Published'")
+      .get(req.params.slug);
+    if (!site)
+      return res.status(404).json({ error: "Website tidak ditemukan" });
+    res.json(
+      db
+        .prepare(
+          "SELECT id,canvas_id canvasId,guest_name name,message,created_at date FROM greetings WHERE site_id=? ORDER BY created_at DESC LIMIT 200",
+        )
+        .all(site.id),
+    );
+  },
+);
+app.get("/api/site/interactions", auth, (req, res) => {
+  const site = db
+    .prepare("SELECT id FROM sites WHERE user_id=?")
+    .get(req.user.id);
+  if (!site) return res.json({ guests: [], greetings: [] });
+  const guests = db
+    .prepare(
+      "SELECT id,canvas_id,guest_name,email,status,pax,created_at FROM rsvp_responses WHERE site_id=? ORDER BY created_at DESC",
+    )
+    .all(site.id)
+    .map((row) => ({
+      id: row.id,
+      canvasId: row.canvas_id,
+      name: row.guest_name,
+      email: row.email,
+      status: row.status,
+      pax: row.pax,
+      time: row.created_at,
+      initials: String(row.guest_name).slice(0, 2).toUpperCase(),
+    }));
+  const greetings = db
+    .prepare(
+      "SELECT id,canvas_id,guest_name,message,created_at FROM greetings WHERE site_id=? ORDER BY created_at DESC",
+    )
+    .all(site.id)
+    .map((row) => ({
+      id: row.id,
+      canvasId: row.canvas_id,
+      name: row.guest_name,
+      message: row.message,
+      date: row.created_at,
+    }));
+  res.json({ guests, greetings });
+});
+app.post("/api/site/rsvp", auth, (req, res) => {
+  const site = db
+    .prepare("SELECT id FROM sites WHERE user_id=?")
+    .get(req.user.id);
+  if (!site) return res.status(404).json({ error: "Website belum tersedia" });
+  const responseId = id("rsvp");
+  const {
+    canvasId = "",
+    name,
+    status = "Menunggu",
+    pax = 0,
+    email = "",
+  } = req.body || {};
+  if (!name) return res.status(400).json({ error: "Nama tamu wajib diisi" });
+  db.prepare(
+    "INSERT INTO rsvp_responses(id,site_id,canvas_id,guest_name,email,status,pax,created_at) VALUES(?,?,?,?,?,?,?,?)",
+  ).run(
+    responseId,
+    site.id,
+    canvasId,
+    name,
+    email,
+    status,
+    Number(pax) || 0,
+    now(),
+  );
+  res.status(201).json({ id: responseId });
+});
+app.post("/api/site/greetings", auth, (req, res) => {
+  const site = db
+    .prepare("SELECT id FROM sites WHERE user_id=?")
+    .get(req.user.id);
+  if (!site) return res.status(404).json({ error: "Website belum tersedia" });
+  const greetingId = id("greeting");
+  const { canvasId = "", name, message } = req.body || {};
+  if (!name || !message)
+    return res.status(400).json({ error: "Nama dan pesan wajib diisi" });
+  db.prepare(
+    "INSERT INTO greetings(id,site_id,canvas_id,guest_name,message,created_at) VALUES(?,?,?,?,?,?)",
+  ).run(greetingId, site.id, canvasId, name, message, now());
+  res.status(201).json({ id: greetingId });
+});
 
-function chooseAssignee(roleId){
-  return db.prepare(`SELECT u.id,COUNT(t.id) workload FROM users u LEFT JOIN tasks t ON t.assigned_user_id=u.id AND t.status NOT IN ('Done','Cancelled') WHERE u.role_id=? AND u.active=1 GROUP BY u.id ORDER BY workload ASC,u.created_at ASC LIMIT 1`).get(roleId)?.id || null
+function chooseAssignee(roleId) {
+  return (
+    db
+      .prepare(
+        `SELECT u.id,COUNT(t.id) workload FROM users u LEFT JOIN tasks t ON t.assigned_user_id=u.id AND t.status NOT IN ('Done','Cancelled') WHERE u.role_id=? AND u.active=1 GROUP BY u.id ORDER BY workload ASC,u.created_at ASC LIMIT 1`,
+      )
+      .get(roleId)?.id || null
+  );
 }
 async function createReceipt(order, template) {
-  const receiptNo=`RCPT-${new Date().getFullYear()}-${order.order_no.split('-').at(-1)}`
-  const filename=`${receiptNo}.pdf`; const filepath=path.join(RECEIPT_DIR,filename)
-  await new Promise((resolve,reject)=>{
-    const stream=fs.createWriteStream(filepath)
-    const doc=new PDFDocument({size:'A4',margin:52})
-    stream.on('finish',resolve);stream.on('error',reject);doc.on('error',reject);doc.pipe(stream)
-    doc.fontSize(22).fillColor('#125946').text('ikrarku Sites'); doc.moveDown(.2); doc.fontSize(10).fillColor('#777').text('Wedding websites, beautifully managed.')
-    doc.moveDown(2); doc.fontSize(18).fillColor('#1c342d').text('Payment Receipt'); doc.moveDown()
-    const lines=[['Receipt No.',receiptNo],['Order No.',order.order_no],['Customer',order.customer_name],['Email',order.email],['Template',template.name],['Payment Method',order.payment_method],['Payment Status','PAID'],['Amount',`Rp ${Number(order.amount).toLocaleString('id-ID')}`],['Paid At',new Date(order.paid_at).toLocaleString('id-ID')]]
-    for(const [label,value] of lines){doc.fontSize(10).fillColor('#777').text(label,52,doc.y,{continued:true,width:160});doc.fillColor('#222').text(value);doc.moveDown(.5)}
-    doc.moveDown(2);doc.fontSize(9).fillColor('#777').text('Receipt ini dibuat otomatis oleh ikrarku Sites. Tim Customer Service dan Web Designer akan menghubungi Anda untuk proses onboarding.');doc.end()
-  })
-  return {receiptNo,filepath,publicUrl:`/receipts/${filename}`}
+  const receiptNo = `RCPT-${new Date().getFullYear()}-${order.order_no.split("-").at(-1)}`;
+  const filename = `${receiptNo}.pdf`;
+  const filepath = path.join(RECEIPT_DIR, filename);
+  await new Promise((resolve, reject) => {
+    const stream = fs.createWriteStream(filepath);
+    const doc = new PDFDocument({ size: "A4", margin: 52 });
+    stream.on("finish", resolve);
+    stream.on("error", reject);
+    doc.on("error", reject);
+    doc.pipe(stream);
+    doc.fontSize(22).fillColor("#125946").text("ikrarku Sites");
+    doc.moveDown(0.2);
+    doc
+      .fontSize(10)
+      .fillColor("#777")
+      .text("Wedding websites, beautifully managed.");
+    doc.moveDown(2);
+    doc.fontSize(18).fillColor("#1c342d").text("Payment Receipt");
+    doc.moveDown();
+    const lines = [
+      ["Receipt No.", receiptNo],
+      ["Order No.", order.order_no],
+      ["Customer", order.customer_name],
+      ["Email", order.email],
+      ["Template", template.name],
+      ["Payment Method", order.payment_method],
+      ["Payment Status", "PAID"],
+      ["Amount", `Rp ${Number(order.amount).toLocaleString("id-ID")}`],
+      ["Paid At", new Date(order.paid_at).toLocaleString("id-ID")],
+    ];
+    for (const [label, value] of lines) {
+      doc
+        .fontSize(10)
+        .fillColor("#777")
+        .text(label, 52, doc.y, { continued: true, width: 160 });
+      doc.fillColor("#222").text(value);
+      doc.moveDown(0.5);
+    }
+    doc.moveDown(2);
+    doc
+      .fontSize(9)
+      .fillColor("#777")
+      .text(
+        "Receipt ini dibuat otomatis oleh ikrarku Sites. Tim Customer Service dan Web Designer akan menghubungi Anda untuk proses onboarding.",
+      );
+    doc.end();
+  });
+  return { receiptNo, filepath, publicUrl: `/receipts/${filename}` };
 }
-async function deliverEmail(outboxId){
-  const mail=db.prepare('SELECT * FROM email_outbox WHERE id=?').get(outboxId); if(!mail)return
-  if(!process.env.SMTP_HOST){return}
-  try{
-    const transporter=nodemailer.createTransport({host:process.env.SMTP_HOST,port:Number(process.env.SMTP_PORT||587),secure:String(process.env.SMTP_SECURE)==='true',auth:process.env.SMTP_USER?{user:process.env.SMTP_USER,pass:process.env.SMTP_PASS}:undefined})
-    await transporter.sendMail({from:process.env.SMTP_FROM||'ikrarku Sites <noreply@ikrarku.local>',to:mail.to_email,subject:mail.subject,html:mail.html,attachments:mail.attachment_path?[{filename:path.basename(mail.attachment_path),path:mail.attachment_path}]:[]})
-    db.prepare("UPDATE email_outbox SET status='Sent',sent_at=? WHERE id=?").run(now(),outboxId)
-  }catch(e){db.prepare("UPDATE email_outbox SET status='Failed',error=? WHERE id=?").run(String(e),outboxId)}
+async function deliverEmail(outboxId) {
+  const mail = db
+    .prepare("SELECT * FROM email_outbox WHERE id=?")
+    .get(outboxId);
+  if (!mail) return;
+  if (!process.env.SMTP_HOST) {
+    return;
+  }
+  try {
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT || 587),
+      secure: String(process.env.SMTP_SECURE) === "true",
+      auth: process.env.SMTP_USER
+        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+        : undefined,
+    });
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || "ikrarku Sites <noreply@ikrarku.local>",
+      to: mail.to_email,
+      subject: mail.subject,
+      html: mail.html,
+      attachments: mail.attachment_path
+        ? [
+            {
+              filename: path.basename(mail.attachment_path),
+              path: mail.attachment_path,
+            },
+          ]
+        : [],
+    });
+    db.prepare(
+      "UPDATE email_outbox SET status='Sent',sent_at=? WHERE id=?",
+    ).run(now(), outboxId);
+  } catch (e) {
+    db.prepare(
+      "UPDATE email_outbox SET status='Failed',error=? WHERE id=?",
+    ).run(String(e), outboxId);
+  }
 }
-app.post('/api/orders', rateLimit('orders',20,60_000), (req,res) => {
-  const viewer=optionalUser(req)
-  const {customerName,email,phone='',templateId}=req.body||{}; const template=db.prepare("SELECT * FROM templates WHERE id=? AND status IN ('Published','Approved')").get(templateId); if(!template)return res.status(404).json({error:'Template tidak tersedia'}); if(!customerName||!email||!phone)return res.status(400).json({error:'Nama, email, dan nomor telepon wajib diisi'})
-  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email)))return res.status(400).json({error:'Format email tidak valid'})
-  if(String(phone).replace(/\D/g,'').length<9)return res.status(400).json({error:'Nomor telepon minimal 9 digit'})
-  const orderId=id('ord'); const orderNo=`IKR-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}${crypto.randomBytes(2).toString('hex').toUpperCase()}`
-  db.prepare(`INSERT INTO orders(id,order_no,customer_name,email,phone,template_id,amount,currency,payment_status,order_status,created_at,user_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(orderId,orderNo,customerName,email,phone,template.id,template.price,template.currency,'Pending','Awaiting Payment',now(),viewer?.id||null)
-  res.status(201).json({id:orderId,orderNo,amount:template.price,currency:template.currency})
-})
+app.post("/api/orders", rateLimit("orders", 20, 60_000), (req, res) => {
+  const viewer = optionalUser(req);
+  const { customerName, email, phone = "", templateId } = req.body || {};
+  const template = db
+    .prepare(
+      "SELECT * FROM templates WHERE id=? AND status IN ('Published','Approved')",
+    )
+    .get(templateId);
+  if (!template)
+    return res.status(404).json({ error: "Template tidak tersedia" });
+  if (!customerName || !email || !phone)
+    return res
+      .status(400)
+      .json({ error: "Nama, email, dan nomor telepon wajib diisi" });
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email)))
+    return res.status(400).json({ error: "Format email tidak valid" });
+  if (String(phone).replace(/\D/g, "").length < 9)
+    return res.status(400).json({ error: "Nomor telepon minimal 9 digit" });
+  if (viewer && String(email).toLowerCase() !== viewer.email.toLowerCase())
+    return res
+      .status(400)
+      .json({ error: "Gunakan email akun Anda untuk checkout" });
+  const guestToken = crypto.randomBytes(32).toString("hex");
+  const orderId = id("ord");
+  const orderNo = `IKR-${new Date().getFullYear()}-${String(Date.now()).slice(-6)}${crypto.randomBytes(2).toString("hex").toUpperCase()}`;
+  db.prepare(
+    `INSERT INTO orders(id,order_no,customer_name,email,phone,template_id,amount,currency,payment_status,order_status,created_at,user_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    orderId,
+    orderNo,
+    customerName,
+    email,
+    phone,
+    template.id,
+    template.price,
+    template.currency,
+    "Pending",
+    "Awaiting Payment",
+    now(),
+    viewer?.id || null,
+  );
+  db.prepare("UPDATE orders SET guest_token=? WHERE id=?").run(
+    guestToken,
+    orderId,
+  );
+  res.status(201).json({
+    id: orderId,
+    orderNo,
+    amount: template.price,
+    currency: template.currency,
+    guestToken,
+  });
+});
 // Shared fulfilment used by both simulation payments and the Mayar payment webhook.
-async function fulfillPaidOrder(order, methodCode){
-  const csId=chooseAssignee('role_cs')
-  // QA TC-099: order otomatis ter-assign ke Web Designer pembuat template bila masih aktif.
-  const templateOwner=db.prepare("SELECT u.id FROM templates t JOIN users u ON u.id=t.created_by WHERE t.id=? AND u.active=1 AND u.role_id='role_editor'").get(order.template_id)
-  const editorId=templateOwner?.id || chooseAssignee('role_editor')
-  if(!csId || !editorId){ const err=new Error('Pembayaran belum dapat diterima. Admin harus menambahkan minimal satu Customer Service dan satu Editor aktif.'); err.status=409; throw err }
-  const paidAt=now()
-  db.prepare(`UPDATE orders SET payment_method=?,payment_status='Paid',order_status='Paid - Onboarding',assigned_cs_id=?,assigned_editor_id=?,paid_at=? WHERE id=?`).run(methodCode,csId,editorId,paidAt,order.id)
-  const paidOrder=db.prepare('SELECT * FROM orders WHERE id=?').get(order.id); const template=db.prepare('SELECT * FROM templates WHERE id=?').get(order.template_id); const receipt=await createReceipt(paidOrder,template)
-  db.prepare('UPDATE orders SET receipt_no=?,receipt_path=? WHERE id=?').run(receipt.receiptNo,receipt.filepath,order.id)
-  const taskInsert=db.prepare(`INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`)
-  taskInsert.run(id('task'),order.id,`Onboarding order ${order.order_no}`,`Hubungi ${order.customer_name} dan konfirmasi channel Email/Web/WhatsApp.`,'Open','High',csId,'role_cs',now(),now())
-  taskInsert.run(id('task'),order.id,`Build website ${template.name}`,`Siapkan Canvas dan konfigurasi template untuk ${order.customer_name}.${templateOwner?' Auto-assign ke Web Designer pembuat template.':' Auto-assign berdasarkan workload (pembuat template tidak aktif).'}`,'Open','Normal',editorId,'role_editor',now(),now())
-  const conversationId=id('conv'); db.prepare(`INSERT INTO conversations(id,order_id,customer_name,customer_email,customer_phone,status,assigned_cs_id,channel,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).run(conversationId,order.id,order.customer_name,order.email,order.phone,'Open',csId,'Web',now(),now())
-  db.prepare(`INSERT INTO messages(id,conversation_id,sender_type,body,created_at) VALUES(?,?,?,?,?)`).run(id('msg'),conversationId,'system',`Order ${order.order_no} telah dibayar. Hubungi customer untuk onboarding.`,now())
-  const html=`<h2>Pembayaran diterima</h2><p>Halo ${order.customer_name}, pembayaran untuk template <strong>${template.name}</strong> telah kami terima.</p><p>Order: ${order.order_no}<br>Jumlah: Rp ${Number(order.amount).toLocaleString('id-ID')}</p><p>Tim Customer Service dan Web Designer ikrarku akan menghubungi Anda.</p>`
-  const outboxId=id('mail'); db.prepare(`INSERT INTO email_outbox(id,to_email,subject,html,status,attachment_path,created_at) VALUES(?,?,?,?,?,?,?)`).run(outboxId,order.email,`Receipt pembayaran ${order.order_no}`,html,process.env.SMTP_HOST?'Queued':'Ready for SMTP',receipt.filepath,now()); void deliverEmail(outboxId)
-  return { receiptUrl:receipt.publicUrl, assignedCsId:csId, assignedEditorId:editorId, conversationId }
+const fulfillmentJobs = new Map();
+async function fulfillPaidOrder(order, methodCode) {
+  if (fulfillmentJobs.has(order.id)) return fulfillmentJobs.get(order.id);
+  const job = (async () => {
+    const fresh = db.prepare("SELECT * FROM orders WHERE id=?").get(order.id);
+    if (fresh.fulfillment_status === "Complete")
+      return {
+        receiptUrl: receiptUrl(fresh),
+        assignedCsId: fresh.assigned_cs_id,
+        assignedEditorId: fresh.assigned_editor_id,
+      };
+    const csId = fresh.assigned_cs_id || chooseAssignee("role_cs");
+    const template = db
+      .prepare("SELECT * FROM templates WHERE id=?")
+      .get(fresh.template_id);
+    const templateOwner = db
+      .prepare(
+        "SELECT id FROM users WHERE id=? AND active=1 AND role_id='role_editor'",
+      )
+      .get(template.created_by);
+    const editorId =
+      fresh.assigned_editor_id ||
+      templateOwner?.id ||
+      chooseAssignee("role_editor");
+    // Record confirmed payment separately; fulfillment can be safely retried after any failure.
+    db.prepare(
+      "UPDATE orders SET payment_status='Paid',payment_method=?,paid_at=COALESCE(paid_at,?),fulfillment_status='Pending' WHERE id=?",
+    ).run(methodCode, now(), fresh.id);
+    try {
+      if (!csId || !editorId)
+        throw Object.assign(
+          new Error("Tambahkan CS dan Web Designer aktif sebelum onboarding."),
+          { status: 409 },
+        );
+      const paidOrder = db
+        .prepare("SELECT * FROM orders WHERE id=?")
+        .get(fresh.id);
+      const receipt = await createReceipt(paidOrder, template);
+      const conversationId = id("conv"),
+        outboxId = id("mail");
+      policy.transaction(() => {
+        db.prepare(
+          "UPDATE orders SET assigned_cs_id=?,assigned_editor_id=?,receipt_no=?,receipt_path=?,order_status='Paid - Onboarding',fulfillment_status='Complete',fulfillment_error=NULL WHERE id=?",
+        ).run(csId, editorId, receipt.receiptNo, receipt.filepath, fresh.id);
+        const taskInsert = db.prepare(
+          `INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+        );
+        taskInsert.run(
+          id("task"),
+          fresh.id,
+          `Onboarding order ${fresh.order_no}`,
+          `Hubungi ${fresh.customer_name}.`,
+          "Open",
+          "High",
+          csId,
+          "role_cs",
+          now(),
+          now(),
+        );
+        taskInsert.run(
+          id("task"),
+          fresh.id,
+          `Build website ${template.name}`,
+          `Siapkan canvas untuk ${fresh.customer_name}.`,
+          "Open",
+          "Normal",
+          editorId,
+          "role_editor",
+          now(),
+          now(),
+        );
+        db.prepare(
+          `INSERT INTO conversations(id,order_id,customer_name,customer_email,customer_phone,status,assigned_cs_id,channel,created_at,updated_at,public_token) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+        ).run(
+          conversationId,
+          fresh.id,
+          fresh.customer_name,
+          fresh.email,
+          fresh.phone,
+          "Open",
+          csId,
+          "Web",
+          now(),
+          now(),
+          crypto.randomBytes(24).toString("hex"),
+        );
+        const linked = db
+          .prepare("SELECT * FROM orders WHERE id=?")
+          .get(fresh.id);
+        if (linked.user_id) policy.assignPaidSite(linked, linked.user_id);
+        db.prepare(
+          `INSERT INTO email_outbox(id,to_email,subject,html,status,attachment_path,created_at) VALUES(?,?,?,?,?,?,?)`,
+        ).run(
+          outboxId,
+          fresh.email,
+          `Receipt ${fresh.order_no}`,
+          `<p>Pembayaran untuk ${escapeHtml(template.name)} diterima. Tim kami akan menghubungi Anda.</p>`,
+          process.env.SMTP_HOST ? "Queued" : "Ready for SMTP",
+          receipt.filepath,
+          now(),
+        );
+      });
+      void deliverEmail(outboxId);
+      return {
+        receiptUrl: receiptUrl(
+          db.prepare("SELECT * FROM orders WHERE id=?").get(fresh.id),
+        ),
+        assignedCsId: csId,
+        assignedEditorId: editorId,
+        conversationId,
+      };
+    } catch (error) {
+      db.prepare(
+        "UPDATE orders SET fulfillment_status='Failed',fulfillment_error=? WHERE id=?",
+      ).run(String(error.message), fresh.id);
+      throw error;
+    }
+  })();
+  fulfillmentJobs.set(order.id, job);
+  try {
+    return await job;
+  } finally {
+    fulfillmentJobs.delete(order.id);
+  }
 }
+function receiptUrl(order) {
+  return order.receipt_path
+    ? `/api/receipts/${order.id}?token=${encodeURIComponent(order.guest_token || "")}`
+    : null;
+}
+app.get("/api/receipts/:id", (req, res) => {
+  const order = db
+      .prepare("SELECT * FROM orders WHERE id=?")
+      .get(req.params.id),
+    viewer = optionalUser(req);
+  if (!order || !order.receipt_path)
+    return res.status(404).json({ error: "Receipt tidak tersedia" });
+  if (
+    !(
+      viewer &&
+      (viewer.id === order.user_id || hasPermission(viewer, "orders.view"))
+    ) &&
+    (!order.guest_token || req.query.token !== order.guest_token)
+  )
+    return res.status(403).json({ error: "Receipt tidak dapat diakses" });
+  res.sendFile(order.receipt_path);
+});
+app.post(
+  "/api/orders/:id/retry-fulfillment",
+  auth,
+  permit("orders.view"),
+  async (req, res) => {
+    const order = db
+      .prepare("SELECT * FROM orders WHERE id=? AND payment_status='Paid'")
+      .get(req.params.id);
+    if (!order)
+      return res.status(404).json({ error: "Paid order tidak ditemukan" });
+    try {
+      res.json({
+        ok: true,
+        ...(await fulfillPaidOrder(order, order.payment_method)),
+      });
+    } catch (e) {
+      res.status(e.status || 500).json({ error: e.message });
+    }
+  },
+);
 
 // Create a Mayar (mayar.id) payment/invoice and return its hosted payment URL.
-async function createMayarInvoice(order, template){
-  const base=(process.env.MAYAR_API_BASE||'https://api.mayar.id/hl/v1').replace(/\/$/,'')
-  const key=process.env.MAYAR_API_KEY
-  if(!key) throw Object.assign(new Error('MAYAR_API_KEY belum diset'),{status:500})
-  const payload={
-    name:order.customer_name, email:order.email, mobile:order.phone||'',
-    amount:Number(order.amount), description:`Template ${template?.name||order.template_id} · ${order.order_no}`,
-    redirectUrl:`${CLIENT_ORIGIN.replace(/\/$/,'')}/pembayaran-berhasil?order=${encodeURIComponent(order.order_no)}`,
-    webhookUrl:`${CLIENT_ORIGIN.replace(/\/$/,'')}/api/webhooks/mayar`,
+async function createMayarInvoice(order, template) {
+  const base = (
+    process.env.MAYAR_API_BASE || "https://api.mayar.id/hl/v1"
+  ).replace(/\/$/, "");
+  const key = process.env.MAYAR_API_KEY;
+  if (!key)
+    throw Object.assign(new Error("MAYAR_API_KEY belum diset"), {
+      status: 500,
+    });
+  const payload = {
+    name: order.customer_name,
+    email: order.email,
+    mobile: order.phone || "",
+    amount: Number(order.amount),
+    description: `Template ${template?.name || order.template_id} · ${order.order_no}`,
+    redirectUrl: `${CLIENT_ORIGIN.replace(/\/$/, "")}/pembayaran-berhasil?order=${encodeURIComponent(order.order_no)}`,
+    webhookUrl: `${CLIENT_ORIGIN.replace(/\/$/, "")}/api/webhooks/mayar`,
     // reference is echoed back by Mayar webhooks so we can match the order.
-    reference:order.id
-  }
-  const response=await fetch(`${base}/invoice/create`,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify(payload)})
-  const data=await response.json().catch(()=>({}))
-  if(!response.ok) throw Object.assign(new Error(data?.messages||data?.message||'Gagal membuat invoice Mayar'),{status:502})
-  const link=data?.data?.link||data?.data?.paymentUrl||data?.link||data?.paymentUrl
-  const transactionId=data?.data?.id||data?.data?.transactionId||data?.id
-  if(!link) throw Object.assign(new Error('Mayar tidak mengembalikan payment URL'),{status:502})
-  return { link, transactionId }
+    reference: order.id,
+  };
+  const response = await fetch(`${base}/invoice/create`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok)
+    throw Object.assign(
+      new Error(
+        data?.messages || data?.message || "Gagal membuat invoice Mayar",
+      ),
+      { status: 502 },
+    );
+  const link =
+    data?.data?.link ||
+    data?.data?.paymentUrl ||
+    data?.link ||
+    data?.paymentUrl;
+  const transactionId = data?.data?.id || data?.data?.transactionId || data?.id;
+  if (!link)
+    throw Object.assign(new Error("Mayar tidak mengembalikan payment URL"), {
+      status: 502,
+    });
+  return { link, transactionId };
 }
 
-app.post('/api/orders/:id/pay', async (req,res) => {
-  const order=db.prepare('SELECT * FROM orders WHERE id=?').get(req.params.id); if(!order)return res.status(404).json({error:'Order tidak ditemukan'}); const method=db.prepare('SELECT * FROM payment_methods WHERE code=? AND enabled=1').get(req.body.paymentMethod); if(!method)return res.status(400).json({error:'Metode pembayaran tidak aktif'})
-  if(order.payment_status==='Paid') return res.status(409).json({error:'Order sudah dibayar'})
-  const mode=process.env.PAYMENT_MODE||(NODE_ENV==='production'?'gateway':'simulation')
-  // Gateway mode: Mayar (mayar.id). Create a hosted invoice and let the customer pay there;
-  // the order stays "Pending" until Mayar calls our webhook. Simulation stays instant for local/staging QA.
-  if(mode==='mayar'){
-    try{
-      const template=db.prepare('SELECT * FROM templates WHERE id=?').get(order.template_id)
-      const { link, transactionId }=await createMayarInvoice(order, template)
-      db.prepare(`UPDATE orders SET payment_method=?,order_status='Awaiting Payment',gateway_ref=? WHERE id=?`).run(method.code,transactionId||null,order.id)
-      return res.json({ok:true,status:'Pending',paymentUrl:link,gateway:'mayar'})
-    }catch(error){ return res.status(error.status||502).json({error:error.message||'Gagal memproses pembayaran Mayar'}) }
-  }
-  if(mode!=='simulation') return res.status(501).json({error:'Payment gateway belum dikonfigurasi. Set PAYMENT_MODE=mayar dan MAYAR_API_KEY, atau PAYMENT_MODE=simulation.'})
-  // Localhost/staging simulation marks payment as accepted immediately.
-  try{
-    const result=await fulfillPaidOrder(order, method.code)
-    res.json({ok:true,status:'Paid',...result})
-  }catch(error){ res.status(error.status||500).json({error:error.message||'Pembayaran gagal.'}) }
-})
+app.post(
+  "/api/orders/:id/pay",
+  rateLimit("payment", 20, 60000),
+  async (req, res) => {
+    const order = db
+      .prepare("SELECT * FROM orders WHERE id=?")
+      .get(req.params.id);
+    if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+    const method = db
+      .prepare("SELECT * FROM payment_methods WHERE code=? AND enabled=1")
+      .get(req.body.paymentMethod);
+    if (!method)
+      return res.status(400).json({ error: "Metode pembayaran tidak aktif" });
+    const viewer = optionalUser(req);
+    if (
+      !(
+        viewer &&
+        (order.user_id === viewer.id || hasPermission(viewer, "*"))
+      ) &&
+      (!order.guest_token || req.body.guestToken !== order.guest_token)
+    )
+      return res.status(403).json({ error: "Order tidak dapat diakses" });
+    if (
+      order.payment_status === "Paid" &&
+      order.fulfillment_status === "Complete"
+    )
+      return res.status(409).json({ error: "Order sudah dibayar" });
+    const mode =
+      process.env.PAYMENT_MODE ||
+      (NODE_ENV === "production" ? "gateway" : "simulation");
+    // Gateway mode: Mayar (mayar.id). Create a hosted invoice and let the customer pay there;
+    // the order stays "Pending" until Mayar calls our webhook. Simulation stays instant for local/staging QA.
+    if (mode === "mayar") {
+      try {
+        const template = db
+          .prepare("SELECT * FROM templates WHERE id=?")
+          .get(order.template_id);
+        const { link, transactionId } = await createMayarInvoice(
+          order,
+          template,
+        );
+        db.prepare(
+          `UPDATE orders SET payment_method=?,order_status='Awaiting Payment',gateway_ref=? WHERE id=?`,
+        ).run(method.code, transactionId || null, order.id);
+        return res.json({
+          ok: true,
+          status: "Pending",
+          paymentUrl: link,
+          gateway: "mayar",
+        });
+      } catch (error) {
+        return res
+          .status(error.status || 502)
+          .json({ error: error.message || "Gagal memproses pembayaran Mayar" });
+      }
+    }
+    if (mode === "simulation" && NODE_ENV === "production")
+      return res.status(403).json({
+        error: "Simulation hanya untuk development/staging non-production",
+      });
+    if (mode !== "simulation")
+      return res.status(501).json({
+        error:
+          "Payment gateway belum dikonfigurasi. Set PAYMENT_MODE=mayar dan MAYAR_API_KEY, atau PAYMENT_MODE=simulation.",
+      });
+    // Localhost/staging simulation marks payment as accepted immediately.
+    try {
+      const result = await fulfillPaidOrder(order, method.code);
+      res.json({ ok: true, status: "Paid", ...result });
+    } catch (error) {
+      res
+        .status(error.status || 500)
+        .json({ error: error.message || "Pembayaran gagal." });
+    }
+  },
+);
 
 // Mayar payment webhook: confirms payment and fulfils the order. Verifies a shared token.
-app.post('/api/webhooks/mayar', async (req,res) => {
-  const configuredToken=process.env.MAYAR_WEBHOOK_TOKEN
-  const provided=req.headers['x-mayar-token']||req.query.token||req.body?.token
-  if(configuredToken && provided!==configuredToken) return res.status(401).json({error:'Invalid webhook token'})
-  const event=String(req.body?.event||req.body?.status||'').toLowerCase()
-  const reference=req.body?.data?.reference||req.body?.reference||req.body?.data?.merchantRef
-  const isPaid=['paid','settled','success','payment.received','testing'].some(flag=>event.includes(flag))
-  if(!reference) return res.status(400).json({error:'Missing reference'})
-  const order=db.prepare('SELECT * FROM orders WHERE id=? OR gateway_ref=?').get(reference,reference)
-  if(!order) return res.status(404).json({error:'Order tidak ditemukan'})
-  if(order.payment_status==='Paid') return res.json({ok:true,already:true})
-  if(!isPaid) return res.json({ok:true,ignored:event})
-  try{ await fulfillPaidOrder(order, order.payment_method||'MAYAR'); res.json({ok:true}) }
-  catch(error){ res.status(error.status||500).json({error:error.message}) }
-})
-app.get('/api/me/orders', auth, (req,res) => {
-  const rows=db.prepare(`SELECT o.*,t.name template_name,t.category template_category,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id WHERE o.user_id=? OR lower(o.email)=lower(?) ORDER BY o.created_at DESC`).all(req.user.id,req.user.email)
-  res.json(rows.map(o=>({...o,tasks:db.prepare('SELECT id,title,status,priority,assigned_role_id,created_at,updated_at FROM tasks WHERE order_id=? ORDER BY created_at').all(o.id),conversation:db.prepare('SELECT id,status,channel,updated_at FROM conversations WHERE order_id=? ORDER BY updated_at DESC LIMIT 1').get(o.id)||null,receiptUrl:o.receipt_path?`/receipts/${path.basename(o.receipt_path)}`:null})))
-})
-app.get('/api/orders/analytics', auth, permit('orders.view'), (_req,res) => {
-  const summary=db.prepare(`SELECT COUNT(*) qty,COALESCE(SUM(CASE WHEN payment_status='Paid' THEN amount ELSE 0 END),0) nominal,COUNT(DISTINCT email) customers FROM orders`).get()
-  const rows=db.prepare(`SELECT o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`).all()
-  res.json({summary,rows})
-})
-function csvCell(value){const s=String(value??'');return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s}
-app.get('/api/orders/export.csv', auth, permit('orders.view'), (_req,res) => {
-  const rows=db.prepare(`SELECT o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`).all()
-  const headers=['Order No','Customer','Email','Phone','Template','Amount','Currency','Payment Status','Order Status','Payment Method','Created At','Paid At','Assigned CS','Assigned Editor']
-  const body=[headers.join(','),...rows.map(r=>[r.order_no,r.customer_name,r.email,r.phone,r.template_name,r.amount,r.currency,r.payment_status,r.order_status,r.payment_method,r.created_at,r.paid_at,r.cs_name,r.editor_name].map(csvCell).join(','))].join('\n')
-  res.setHeader('Content-Type','text/csv; charset=utf-8');res.setHeader('Content-Disposition','attachment; filename="ikrarku-orders.csv"');res.send('﻿'+body)
-})
-app.get('/api/orders/export.xls', auth, permit('orders.view'), (_req,res) => {
-  const rows=db.prepare(`SELECT o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`).all()
-  const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-  const headers=['Order No','Customer','Email','Phone','Template','Amount','Currency','Payment Status','Order Status','Payment Method','Created At','Paid At','Assigned CS','Assigned Editor']
-  const rowXml=values=>`<Row>${values.map(v=>`<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`).join('')}</Row>`
-  const xml=`<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Orders"><Table>${rowXml(headers)}${rows.map(r=>rowXml([r.order_no,r.customer_name,r.email,r.phone,r.template_name,r.amount,r.currency,r.payment_status,r.order_status,r.payment_method,r.created_at,r.paid_at,r.cs_name,r.editor_name])).join('')}</Table></Worksheet></Workbook>`
-  res.setHeader('Content-Type','application/vnd.ms-excel');res.setHeader('Content-Disposition','attachment; filename="ikrarku-orders.xls"');res.send(xml)
-})
+app.post("/api/webhooks/mayar", async (req, res) => {
+  // Gateway adapter stays disabled until provider payload verification is configured.
+  const configuredToken = process.env.MAYAR_WEBHOOK_TOKEN;
+  if (process.env.PAYMENT_MODE !== "mayar" || !configuredToken)
+    return res.status(503).json({ error: "Webhook belum dikonfigurasi" });
+  const provided = String(req.headers["x-mayar-token"] || "");
+  if (
+    Buffer.byteLength(provided) !== Buffer.byteLength(configuredToken) ||
+    !crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(configuredToken))
+  )
+    return res.status(401).json({ error: "Invalid webhook token" });
+  const data = req.body?.data || {},
+    event = String(req.body?.event || req.body?.status || "").toLowerCase();
+  if (!["paid", "settled", "success", "payment.received"].includes(event))
+    return res.json({ ok: true, ignored: event });
+  const reference = data.reference || req.body?.reference || data.merchantRef;
+  if (typeof reference !== "string")
+    return res.status(400).json({ error: "Missing reference" });
+  const order = db
+    .prepare("SELECT * FROM orders WHERE id=? OR gateway_ref=?")
+    .get(reference, reference);
+  if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+  if (
+    Number(data.amount ?? req.body.amount) !== Number(order.amount) ||
+    String(data.currency ?? req.body.currency).toUpperCase() !== order.currency
+  )
+    return res.status(400).json({ error: "Payment amount/currency mismatch" });
+  try {
+    await fulfillPaidOrder(order, order.payment_method || "MAYAR");
+    res.json({ ok: true });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.message });
+  }
+});
+app.get("/api/me/orders", auth, (req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT o.*,t.name template_name,t.category template_category,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id WHERE o.user_id=? ORDER BY o.created_at DESC`,
+    )
+    .all(req.user.id);
+  res.json(
+    rows.map((o) => ({
+      ...o,
+      guest_token: undefined,
+      tasks: db
+        .prepare(
+          "SELECT id,title,status,priority,assigned_role_id,created_at,updated_at FROM tasks WHERE order_id=? ORDER BY created_at",
+        )
+        .all(o.id),
+      conversation:
+        db
+          .prepare(
+            "SELECT id,status,channel,updated_at FROM conversations WHERE order_id=? ORDER BY updated_at DESC LIMIT 1",
+          )
+          .get(o.id) || null,
+      receiptUrl: receiptUrl(o),
+    })),
+  );
+});
+app.get("/api/orders/analytics", auth, permit("orders.view"), (_req, res) => {
+  const summary = db
+    .prepare(
+      `SELECT COUNT(*) qty,COALESCE(SUM(CASE WHEN payment_status='Paid' THEN amount ELSE 0 END),0) nominal,COUNT(DISTINCT email) customers FROM orders`,
+    )
+    .get();
+  const rows = db
+    .prepare(
+      `SELECT o.id,o.fulfillment_status,o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`,
+    )
+    .all();
+  res.json({ summary, rows });
+});
+function csvCell(value) {
+  const s = String(value ?? "");
+  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+app.get("/api/orders/export.csv", auth, permit("orders.view"), (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`,
+    )
+    .all();
+  const headers = [
+    "Order No",
+    "Customer",
+    "Email",
+    "Phone",
+    "Template",
+    "Amount",
+    "Currency",
+    "Payment Status",
+    "Order Status",
+    "Payment Method",
+    "Created At",
+    "Paid At",
+    "Assigned CS",
+    "Assigned Editor",
+  ];
+  const body = [
+    headers.join(","),
+    ...rows.map((r) =>
+      [
+        r.order_no,
+        r.customer_name,
+        r.email,
+        r.phone,
+        r.template_name,
+        r.amount,
+        r.currency,
+        r.payment_status,
+        r.order_status,
+        r.payment_method,
+        r.created_at,
+        r.paid_at,
+        r.cs_name,
+        r.editor_name,
+      ]
+        .map(csvCell)
+        .join(","),
+    ),
+  ].join("\n");
+  res.setHeader("Content-Type", "text/csv; charset=utf-8");
+  res.setHeader(
+    "Content-Disposition",
+    'attachment; filename="ikrarku-orders.csv"',
+  );
+  res.send("﻿" + body);
+});
+app.get("/api/orders/export.xls", auth, permit("orders.view"), (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`,
+    )
+    .all();
+  const esc = (v) =>
+    String(v ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  const headers = [
+    "Order No",
+    "Customer",
+    "Email",
+    "Phone",
+    "Template",
+    "Amount",
+    "Currency",
+    "Payment Status",
+    "Order Status",
+    "Payment Method",
+    "Created At",
+    "Paid At",
+    "Assigned CS",
+    "Assigned Editor",
+  ];
+  const rowXml = (values) =>
+    `<Row>${values.map((v) => `<Cell><Data ss:Type="String">${esc(v)}</Data></Cell>`).join("")}</Row>`;
+  const xml = `<?xml version="1.0"?><Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"><Worksheet ss:Name="Orders"><Table>${rowXml(headers)}${rows.map((r) => rowXml([r.order_no, r.customer_name, r.email, r.phone, r.template_name, r.amount, r.currency, r.payment_status, r.order_status, r.payment_method, r.created_at, r.paid_at, r.cs_name, r.editor_name])).join("")}</Table></Worksheet></Workbook>`;
+  res.setHeader("Content-Type", "application/vnd.ms-excel");
+  res.setHeader(
+    "Content-Disposition",
+    'attachment; filename="ikrarku-orders.xls"',
+  );
+  res.send(xml);
+});
 
-app.get('/api/orders/:id', auth, (req,res) => { const row=db.prepare(`SELECT o.*,t.name template_name,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id WHERE o.id=?`).get(req.params.id); if(!row)return res.status(404).json({error:'Order tidak ditemukan'}); if(!hasPermission(req.user,'orders.view') && String(row.email).toLowerCase()!==String(req.user.email).toLowerCase())return res.status(403).json({error:'Tidak dapat mengakses order ini'}); res.json({...row,receiptUrl:row.receipt_path?`/receipts/${path.basename(row.receipt_path)}`:null}) })
+app.get("/api/orders/:id", auth, (req, res) => {
+  const row = db
+    .prepare(
+      `SELECT o.*,t.name template_name,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id WHERE o.id=?`,
+    )
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Order tidak ditemukan" });
+  if (!hasPermission(req.user, "orders.view") && row.user_id !== req.user.id)
+    return res.status(403).json({ error: "Tidak dapat mengakses order ini" });
+  res.json({ ...row, guest_token: undefined, receiptUrl: receiptUrl(row) });
+});
 
-app.get('/api/tasks', auth, permit('tasks.view'), (req,res) => {
-  const selectSql=`SELECT t.*,o.order_no,o.customer_name,o.email,o.phone,tp.name template_name,tp.status template_status,u.first_name||' '||u.last_name requestor_name,u.email requestor_email FROM tasks t LEFT JOIN orders o ON o.id=t.order_id LEFT JOIN templates tp ON tp.id=t.template_id LEFT JOIN users u ON u.id=t.requestor_id`
-  const rows=req.user.permissions.includes('*')
+app.get("/api/tasks", auth, permit("tasks.view"), (req, res) => {
+  const selectSql = `SELECT t.*,o.order_no,o.customer_name,o.email,o.phone,tp.name template_name,tp.status template_status,u.first_name||' '||u.last_name requestor_name,u.email requestor_email FROM tasks t LEFT JOIN orders o ON o.id=t.order_id LEFT JOIN templates tp ON tp.id=t.template_id LEFT JOIN users u ON u.id=t.requestor_id`;
+  const rows = req.user.permissions.includes("*")
     ? db.prepare(`${selectSql} ORDER BY t.created_at DESC`).all()
-    : req.user.permissions.includes('templates.approve')
-      ? db.prepare(`${selectSql} WHERE t.task_type='Approval' OR t.assigned_user_id=? OR t.assigned_role_id=? ORDER BY t.created_at DESC`).all(req.user.id,req.user.roleId)
-      : db.prepare(`${selectSql} WHERE t.assigned_user_id=? OR t.assigned_role_id=? ORDER BY t.created_at DESC`).all(req.user.id,req.user.roleId)
-  res.json(rows)
-})
-app.patch('/api/tasks/:id', auth, permit('tasks.update'), (req,res) => { db.prepare('UPDATE tasks SET status=?,priority=?,assigned_user_id=COALESCE(?,assigned_user_id),updated_at=? WHERE id=?').run(req.body.status||'Open',req.body.priority||'Normal',req.body.assignedUserId||null,now(),req.params.id); res.json({ok:true}) })
+    : req.user.permissions.includes("templates.approve")
+      ? db
+          .prepare(
+            `${selectSql} WHERE t.task_type='Approval' OR t.assigned_user_id=? OR t.assigned_role_id=? ORDER BY t.created_at DESC`,
+          )
+          .all(req.user.id, req.user.roleId)
+      : db
+          .prepare(
+            `${selectSql} WHERE t.assigned_user_id=? OR (t.assigned_user_id IS NULL AND t.assigned_role_id=?) ORDER BY t.created_at DESC`,
+          )
+          .all(req.user.id, req.user.roleId);
+  res.json(rows);
+});
+app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
+  policy.requireTask(req.user, req.params.id);
+  if (req.body.assignedUserId && !hasPermission(req.user, "*"))
+    return res
+      .status(403)
+      .json({ error: "Hanya Administrator dapat reassign task" });
+  if (
+    req.body.status &&
+    !["Open", "In Progress", "Pending", "Done", "Cancelled"].includes(
+      req.body.status,
+    )
+  )
+    return res.status(400).json({ error: "Status task tidak valid" });
+  db.prepare(
+    "UPDATE tasks SET status=?,priority=?,assigned_user_id=COALESCE(?,assigned_user_id),updated_at=? WHERE id=?",
+  ).run(
+    req.body.status || "Open",
+    req.body.priority || "Normal",
+    req.body.assignedUserId || null,
+    now(),
+    req.params.id,
+  );
+  res.json({ ok: true });
+});
 
-app.get('/api/conversations', auth, permit('conversations.view'), (req,res) => {
-  let rows=[]
-  if(req.user.permissions.includes('*')) rows=db.prepare('SELECT * FROM conversations ORDER BY updated_at DESC').all()
-  else if(req.user.roleId==='role_cs') rows=db.prepare('SELECT * FROM conversations WHERE assigned_cs_id=? ORDER BY updated_at DESC').all(req.user.id)
-  else if(req.user.roleId==='role_editor') rows=db.prepare(`SELECT DISTINCT c.* FROM conversations c JOIN users customer ON lower(customer.email)=lower(c.customer_email) JOIN site_assignments sa ON sa.user_id=customer.id WHERE sa.editor_id=? ORDER BY c.updated_at DESC`).all(req.user.id)
-  const result=rows.map(c=>{
-    const messages=db.prepare('SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at').all(c.id)
-    const read=db.prepare('SELECT last_read_at FROM conversation_reads WHERE conversation_id=? AND user_id=?').get(c.id,req.user.id)
-    const unreadCount=db.prepare(`SELECT COUNT(*) count FROM messages WHERE conversation_id=? AND sender_type='customer' AND created_at>?`).get(c.id,read?.last_read_at||'').count
-    const latestCustomer=[...messages].reverse().find(m=>m.sender_type==='customer'); const latestSupport=[...messages].reverse().find(m=>m.sender_type==='support')
-    const needsReply=Boolean(latestCustomer && (!latestSupport || latestSupport.created_at<latestCustomer.created_at)); const slaDueAt=needsReply?new Date(new Date(latestCustomer.created_at).getTime()+15*60*1000).toISOString():null
-    const order=c.order_id?db.prepare(`SELECT o.order_no,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,t.name template_name,ed.first_name||' '||ed.last_name editor_name,cs.first_name||' '||cs.last_name cs_name FROM orders o LEFT JOIN templates t ON t.id=o.template_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id WHERE o.id=?`).get(c.order_id):null
-    const tasks=c.order_id?db.prepare(`SELECT id,title,status,priority,assigned_role_id,updated_at FROM tasks WHERE order_id=? ORDER BY created_at`).all(c.order_id):[]
-    return {...c,messages,unreadCount:Number(unreadCount)||0,needsReply,slaDueAt,order,tasks}
-  });res.json(result)
-})
-app.post('/api/conversations/:id/read', auth, permit('conversations.view'), (req,res) => {
-  const c=db.prepare('SELECT id FROM conversations WHERE id=?').get(req.params.id);if(!c)return res.status(404).json({error:'Conversation tidak ditemukan'})
-  db.prepare(`INSERT INTO conversation_reads(conversation_id,user_id,last_read_at) VALUES(?,?,?) ON CONFLICT(conversation_id,user_id) DO UPDATE SET last_read_at=excluded.last_read_at`).run(c.id,req.user.id,now());res.json({ok:true})
-})
-app.post('/api/conversations/:id/messages', auth, permit('conversations.reply'), (req,res) => { const conversation=db.prepare('SELECT * FROM conversations WHERE id=?').get(req.params.id);if(!conversation)return res.status(404).json({error:'Conversation tidak ditemukan'});const messageId=id('msg');db.prepare(`INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`).run(messageId,req.params.id,'support',req.user.id,req.body.body,now());db.prepare('UPDATE conversations SET updated_at=? WHERE id=?').run(now(),req.params.id);auditLog(req.user.id,'conversation.reply','conversation',req.params.id,{});if(conversation.customer_email)queueEmail(conversation.customer_email,'Balasan baru dari ikrarku',`<p>${escapeHtml(req.body.body)}</p>`);res.status(201).json({id:messageId}) })
-app.patch('/api/conversations/:id', auth, permit('conversations.reply'), (req,res) => { const status=req.body.status||'Open';if(!['Open','Pending','Resolved'].includes(status))return res.status(400).json({error:'Status conversation tidak valid'});db.prepare('UPDATE conversations SET status=?,updated_at=? WHERE id=?').run(status,now(),req.params.id);auditLog(req.user.id,'conversation.status','conversation',req.params.id,{status});res.json({ok:true}) })
-app.get('/api/cs/metrics', auth, (req,res) => {
-  if(!(req.user.permissions.includes('*')||req.user.permissions.includes('dashboard.cs')))return res.status(403).json({error:'Permission denied'})
-  const scope=req.user.permissions.includes('*')?'':' WHERE assigned_cs_id=@id'; const params={id:req.user.id}
-  const runCount=(sql)=>scope?db.prepare(sql).get(params).count:db.prepare(sql).get().count
-  const incoming=runCount(`SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope?' AND':' WHERE'} m.sender_type='customer'`)
-  const replies=runCount(`SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope?' AND':' WHERE'} m.sender_type='support'`)
-  const active=runCount(`SELECT COUNT(*) count FROM conversations${scope}${scope?' AND':' WHERE'} status IN ('Open','Pending')`)
-  const resolved=runCount(`SELECT COUNT(*) count FROM conversations${scope}${scope?' AND':' WHERE'} status='Resolved'`)
-  res.json({incoming,replies,active,resolved})
-})
+app.get(
+  "/api/conversations",
+  auth,
+  permit("conversations.view"),
+  (req, res) => {
+    let rows = [];
+    if (req.user.permissions.includes("*"))
+      rows = db
+        .prepare("SELECT * FROM conversations ORDER BY updated_at DESC")
+        .all();
+    else if (req.user.roleId === "role_cs")
+      rows = db
+        .prepare(
+          "SELECT * FROM conversations WHERE assigned_cs_id=? ORDER BY updated_at DESC",
+        )
+        .all(req.user.id);
+    else if (req.user.roleId === "role_editor")
+      rows = db
+        .prepare(
+          `SELECT DISTINCT c.* FROM conversations c JOIN users customer ON lower(customer.email)=lower(c.customer_email) JOIN site_assignments sa ON sa.user_id=customer.id WHERE sa.editor_id=? ORDER BY c.updated_at DESC`,
+        )
+        .all(req.user.id);
+    const result = rows.map((c) => {
+      const messages = db
+        .prepare(
+          "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at",
+        )
+        .all(c.id);
+      const read = db
+        .prepare(
+          "SELECT last_read_at FROM conversation_reads WHERE conversation_id=? AND user_id=?",
+        )
+        .get(c.id, req.user.id);
+      const unreadCount = db
+        .prepare(
+          `SELECT COUNT(*) count FROM messages WHERE conversation_id=? AND sender_type='customer' AND created_at>?`,
+        )
+        .get(c.id, read?.last_read_at || "").count;
+      const latestCustomer = [...messages]
+        .reverse()
+        .find((m) => m.sender_type === "customer");
+      const latestSupport = [...messages]
+        .reverse()
+        .find((m) => m.sender_type === "support");
+      const needsReply = Boolean(
+        latestCustomer &&
+          (!latestSupport ||
+            latestSupport.created_at < latestCustomer.created_at),
+      );
+      const slaDueAt = needsReply
+        ? new Date(
+            new Date(latestCustomer.created_at).getTime() + 15 * 60 * 1000,
+          ).toISOString()
+        : null;
+      const order = c.order_id
+        ? db
+            .prepare(
+              `SELECT o.order_no,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,t.name template_name,ed.first_name||' '||ed.last_name editor_name,cs.first_name||' '||cs.last_name cs_name FROM orders o LEFT JOIN templates t ON t.id=o.template_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id WHERE o.id=?`,
+            )
+            .get(c.order_id)
+        : null;
+      const tasks = c.order_id
+        ? db
+            .prepare(
+              `SELECT id,title,status,priority,assigned_role_id,updated_at FROM tasks WHERE order_id=? ORDER BY created_at`,
+            )
+            .all(c.order_id)
+        : [];
+      return {
+        ...c,
+        messages,
+        unreadCount: Number(unreadCount) || 0,
+        needsReply,
+        slaDueAt,
+        order,
+        tasks,
+      };
+    });
+    res.json(result);
+  },
+);
+app.post(
+  "/api/conversations/:id/read",
+  auth,
+  permit("conversations.view"),
+  (req, res) => {
+    policy.requireConversation(req.user, req.params.id);
+    const c = db
+      .prepare("SELECT id FROM conversations WHERE id=?")
+      .get(req.params.id);
+    if (!c)
+      return res.status(404).json({ error: "Conversation tidak ditemukan" });
+    db.prepare(
+      `INSERT INTO conversation_reads(conversation_id,user_id,last_read_at) VALUES(?,?,?) ON CONFLICT(conversation_id,user_id) DO UPDATE SET last_read_at=excluded.last_read_at`,
+    ).run(c.id, req.user.id, now());
+    res.json({ ok: true });
+  },
+);
+app.post(
+  "/api/conversations/:id/messages",
+  auth,
+  permit("conversations.reply"),
+  (req, res) => {
+    policy.requireConversation(req.user, req.params.id);
+    const conversation = db
+      .prepare("SELECT * FROM conversations WHERE id=?")
+      .get(req.params.id);
+    if (!conversation)
+      return res.status(404).json({ error: "Conversation tidak ditemukan" });
+    const messageId = id("msg");
+    db.prepare(
+      `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`,
+    ).run(
+      messageId,
+      req.params.id,
+      "support",
+      req.user.id,
+      req.body.body,
+      now(),
+    );
+    db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+      now(),
+      req.params.id,
+    );
+    auditLog(
+      req.user.id,
+      "conversation.reply",
+      "conversation",
+      req.params.id,
+      {},
+    );
+    if (conversation.customer_email)
+      queueEmail(
+        conversation.customer_email,
+        "Balasan baru dari ikrarku",
+        `<p>${escapeHtml(req.body.body)}</p>`,
+      );
+    res.status(201).json({ id: messageId });
+  },
+);
+app.patch(
+  "/api/conversations/:id",
+  auth,
+  permit("conversations.reply"),
+  (req, res) => {
+    policy.requireConversation(req.user, req.params.id);
+    const status = req.body.status || "Open";
+    if (!["Open", "Pending", "Resolved"].includes(status))
+      return res.status(400).json({ error: "Status conversation tidak valid" });
+    db.prepare("UPDATE conversations SET status=?,updated_at=? WHERE id=?").run(
+      status,
+      now(),
+      req.params.id,
+    );
+    auditLog(
+      req.user.id,
+      "conversation.status",
+      "conversation",
+      req.params.id,
+      { status },
+    );
+    res.json({ ok: true });
+  },
+);
+app.get("/api/cs/metrics", auth, (req, res) => {
+  if (
+    !(
+      req.user.permissions.includes("*") ||
+      req.user.permissions.includes("dashboard.cs")
+    )
+  )
+    return res.status(403).json({ error: "Permission denied" });
+  const scope = req.user.permissions.includes("*")
+    ? ""
+    : " WHERE assigned_cs_id=@id";
+  const params = { id: req.user.id };
+  const runCount = (sql) =>
+    scope ? db.prepare(sql).get(params).count : db.prepare(sql).get().count;
+  const incoming = runCount(
+    `SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope ? " AND" : " WHERE"} m.sender_type='customer'`,
+  );
+  const replies = runCount(
+    `SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope ? " AND" : " WHERE"} m.sender_type='support'`,
+  );
+  const active = runCount(
+    `SELECT COUNT(*) count FROM conversations${scope}${scope ? " AND" : " WHERE"} status IN ('Open','Pending')`,
+  );
+  const resolved = runCount(
+    `SELECT COUNT(*) count FROM conversations${scope}${scope ? " AND" : " WHERE"} status='Resolved'`,
+  );
+  res.json({ incoming, replies, active, resolved });
+});
 
-app.get('/api/email-outbox', auth, permit('orders.view'), (_req,res) => res.json(db.prepare('SELECT id,to_email,subject,status,created_at,sent_at,error FROM email_outbox ORDER BY created_at DESC').all()))
+app.get("/api/email-outbox", auth, permit("orders.view"), (_req, res) =>
+  res.json(
+    db
+      .prepare(
+        "SELECT id,to_email,subject,status,created_at,sent_at,error FROM email_outbox ORDER BY created_at DESC",
+      )
+      .all(),
+  ),
+);
 
 // QA TC-073: Administrator dapat mengirim ulang email yang gagal terkirim.
-app.post('/api/email-outbox/:id/retry', auth, permit('orders.view'), async (req,res) => {
-  const mail=db.prepare('SELECT * FROM email_outbox WHERE id=?').get(req.params.id)
-  if(!mail) return res.status(404).json({error:'Email tidak ditemukan'})
-  if(!process.env.SMTP_HOST) return res.status(503).json({error:'SMTP belum dikonfigurasi. Isi SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM pada environment server.'})
-  await deliverEmail(req.params.id)
-  res.json(db.prepare('SELECT * FROM email_outbox WHERE id=?').get(req.params.id))
-})
-app.get('/api/mailer-status', auth, (_req,res) => res.json({ configured:Boolean(process.env.SMTP_HOST), host:process.env.SMTP_HOST?String(process.env.SMTP_HOST):null, failed:db.prepare("SELECT COUNT(*) c FROM email_outbox WHERE status='Failed'").get().c, pending:db.prepare("SELECT COUNT(*) c FROM email_outbox WHERE status IN ('Queued','Ready for SMTP')").get().c }))
+app.post(
+  "/api/email-outbox/:id/retry",
+  auth,
+  permit("orders.view"),
+  async (req, res) => {
+    const mail = db
+      .prepare("SELECT * FROM email_outbox WHERE id=?")
+      .get(req.params.id);
+    if (!mail) return res.status(404).json({ error: "Email tidak ditemukan" });
+    if (!process.env.SMTP_HOST)
+      return res.status(503).json({
+        error:
+          "SMTP belum dikonfigurasi. Isi SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM pada environment server.",
+      });
+    await deliverEmail(req.params.id);
+    res.json(
+      db.prepare("SELECT * FROM email_outbox WHERE id=?").get(req.params.id),
+    );
+  },
+);
+app.get("/api/mailer-status", auth, (_req, res) =>
+  res.json({
+    configured: Boolean(process.env.SMTP_HOST),
+    host: process.env.SMTP_HOST ? String(process.env.SMTP_HOST) : null,
+    failed: db
+      .prepare("SELECT COUNT(*) c FROM email_outbox WHERE status='Failed'")
+      .get().c,
+    pending: db
+      .prepare(
+        "SELECT COUNT(*) c FROM email_outbox WHERE status IN ('Queued','Ready for SMTP')",
+      )
+      .get().c,
+  }),
+);
 
-if (NODE_ENV === 'production' && fs.existsSync(DIST_DIR)) {
-  app.use(express.static(DIST_DIR))
-app.get(/^(?!\/api|\/uploads|\/receipts).*/, (_req,res)=>res.sendFile(path.join(DIST_DIR,'index.html')))
+if (NODE_ENV === "production" && fs.existsSync(DIST_DIR)) {
+  app.use(express.static(DIST_DIR));
+  app.get(/^(?!\/api|\/uploads|\/receipts).*/, (_req, res) =>
+    res.sendFile(path.join(DIST_DIR, "index.html")),
+  );
 }
 
-app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({error:err.message || 'Server error'}) })
-app.listen(PORT, () => console.log(`ikrarku v0.15 API listening on http://localhost:${PORT}`))
+app.use((err, _req, res, _next) => {
+  console.error(err);
+  res
+    .status(err.status || 500)
+    .json({ error: err.status ? err.message : "Server error" });
+});
+app.listen(PORT, () =>
+  console.log(`ikrarku v0.15 API listening on http://localhost:${PORT}`),
+);
