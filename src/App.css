@@ -939,3 +939,31 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
   .commission-row.ledger,.commission-row.ledger.with-creator{grid-template-columns:1fr 1fr;white-space:normal;row-gap:6px}
   .commission-row.ledger .ledger-status{justify-content:flex-start}
 }
+
+/* =====================================================================
+   Layout mobile berbasis device, bukan media query viewport.
+   Preview Mobile hanya menyempitkan container sehingga media query
+   `max-width` tidak pernah aktif — akibatnya layout lokasi/galeri tetap
+   memakai susunan desktop dan saling tumpang tindih.
+   ===================================================================== */
+.wedding-site.device-mobile .location-feature,
+.wedding-site.device-mobile .location-feature.has-embed,
+.wedding-site.device-mobile .location-feature.has-embed:not(.no-qr){grid-template-columns:minmax(0,1fr);gap:14px;padding:18px}
+.wedding-site.device-mobile .location-map-embed{height:220px!important;width:100%}
+.wedding-site.device-mobile .location-qr{width:100%}
+.wedding-site.device-mobile .location-qr-frame{width:min(168px,52vw)}
+.wedding-site.device-mobile .location-feature h3{font-size:20px;word-break:break-word}
+.wedding-site.device-mobile .canvas-columns{grid-template-columns:minmax(0,1fr)!important}
+.wedding-site.device-mobile .image-layout.side-left,
+.wedding-site.device-mobile .image-layout.side-right{flex-direction:column}
+.wedding-site.device-mobile .gallery-grid.layout-masonry{column-count:2}
+.wedding-site.device-mobile .gallery-grid.layout-hero-left,
+.wedding-site.device-mobile .gallery-grid.layout-mosaic{grid-template-columns:repeat(2,1fr)}
+.wedding-site.device-mobile .love-story-item{flex-direction:column}
+.wedding-site.device-mobile .canvas-form.cols-2 .canvas-form-grid{grid-template-columns:1fr}
+.wedding-site.device-mobile .greetings-widget{grid-template-columns:1fr}
+.wedding-site.device-mobile .section-decoration{transform:scale(.6)}
+
+/* Thumbnail landing: background tidak boleh dikunci ke viewport */
+.wedding-site.is-thumbnail .background-layer,
+.wedding-site.is-thumbnail .background-extra-layer{background-attachment:scroll!important}

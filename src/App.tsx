@@ -12412,8 +12412,13 @@ function WeddingCanvas({
   guestName?: string;
 }) {
   const thumbnail = useContext(ThumbnailContext);
+  // background-attachment: fixed memakai ukuran viewport, bukan ukuran elemen.
+  // Di thumbnail yang di-scale, efeknya gambar tampak sangat ter-zoom, jadi
+  // penguncian background hanya diterapkan pada tampilan publik berukuran penuh.
+  const allowFixedBackground = !thumbnail && !editable;
   // QA TC-112: device aktif menentukan setting mana yang dipakai.
   const device = useContext(DeviceContext);
+
   const coverEntry = useMemo(() => {
     for (const section of sections)
       for (const column of section.columns)
@@ -12553,7 +12558,7 @@ function WeddingCanvas({
   return (
     <div
       ref={revealRootRef}
-      className={`wedding-site theme-${selectedTemplate.preset || "classic"}`}
+      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} theme-${selectedTemplate.preset || "classic"}`}
       style={{ "--accent": selectedTemplate.accent } as React.CSSProperties}
     >
       <nav>
@@ -12627,7 +12632,7 @@ function WeddingCanvas({
             {/* QA TC-107 & TC-127: background utama dapat dikunci (fixed) sehingga
                 hanya konten/layer di atasnya yang bergerak saat di-scroll. */}
             <div
-              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed ? "is-fixed" : ""} loop-${section.backgroundLoopEffect || "none"}`}
+              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed && allowFixedBackground ? "is-fixed" : ""} loop-${section.backgroundLoopEffect || "none"}`}
               style={{
                 backgroundImage: section.backgroundUrl
                   ? `url(${section.backgroundUrl})`
@@ -12637,9 +12642,10 @@ function WeddingCanvas({
                 backgroundSize:
                   section.backgroundSize ||
                   (section.backgroundRepeat === "no-repeat" ? "cover" : "auto"),
-                backgroundAttachment: section.backgroundFixed
-                  ? "fixed"
-                  : "scroll",
+                backgroundAttachment:
+                  section.backgroundFixed && allowFixedBackground
+                    ? "fixed"
+                    : "scroll",
                 filter,
               }}
             />
@@ -12673,7 +12679,8 @@ function WeddingCanvas({
                   backgroundSize: layer.size,
                   backgroundPosition: `${layer.offsetX ?? 50}% ${layer.offsetY ?? 50}%`,
                   backgroundRepeat: layer.repeat,
-                  backgroundAttachment: layer.fixed ? "fixed" : "scroll",
+                  backgroundAttachment:
+                    layer.fixed && allowFixedBackground ? "fixed" : "scroll",
                   opacity: (layer.opacity ?? 100) / 100,
                   mixBlendMode:
                     (layer.blend as React.CSSProperties["mixBlendMode"]) ||
