@@ -37,11 +37,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
   const data = await response.json().catch(() => ({}));
   if (
-    (response.status === 401 &&
-      (data.code === "idle_timeout" || data.code === "session_expired")) ||
-    // QA-03: akun dinonaktifkan atau verifikasi dicabut saat session berjalan.
-    (response.status === 403 &&
-      (data.code === "account_disabled" || data.code === "email_unverified"))
+    response.status === 401 &&
+    (data.code === "idle_timeout" || data.code === "session_expired")
   ) {
     // QA TC-101: sesi idle/expired dibersihkan agar user diarahkan login ulang.
     setApiToken("");

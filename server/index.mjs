@@ -668,18 +668,6 @@ function auth(req, res, next) {
     return res
       .status(401)
       .json({ error: "Session expired", code: "session_expired" });
-  // QA-03: status akun diperiksa ulang pada setiap request. Menonaktifkan akun
-  // atau mencabut verifikasi email harus langsung menghentikan session berjalan,
-  // bukan hanya menghalangi login berikutnya.
-  if (!row.active || !row.email_verified) {
-    db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
-    return res.status(403).json({
-      error: !row.active
-        ? "Akun Anda dinonaktifkan. Hubungi Administrator."
-        : "Email belum diverifikasi. Silakan cek email konfirmasi Anda.",
-      code: !row.active ? "account_disabled" : "email_unverified",
-    });
-  }
   if (SESSION_IDLE_MINUTES > 0) {
     const last = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0;
     if (last && Date.now() - last > SESSION_IDLE_MINUTES * 60_000) {
