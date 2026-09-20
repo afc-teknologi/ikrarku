@@ -2874,8 +2874,17 @@ function App() {
       "/pembayaran-berhasil",
       "/articles",
     ]);
+    // Halaman bertoken tidak boleh dibersihkan sebelum komponennya sempat
+    // membaca query string.
+    const tokenPaths = new Set(["/reset-password", "/verify-email"]);
     if (view === "landing") {
-      if (appPaths.has(window.location.pathname)) {
+      if (
+        appPaths.has(window.location.pathname) &&
+        !(
+          tokenPaths.has(window.location.pathname) &&
+          initialSearchParams.get("token")
+        )
+      ) {
         try {
           window.history.replaceState(window.history.state, "", "/");
         } catch {
@@ -2889,6 +2898,7 @@ function App() {
       signup: "/signup",
       "verify-email": "/verify-email",
       "forgot-password": "/forgot-password",
+      "reset-password": "/reset-password",
       templates: "/templates",
       "template-detail": "/templates",
       checkout: "/pesan-sekarang",
@@ -4808,12 +4818,24 @@ function Auth({
     if (submitting) return;
     setSubmitting(true);
     setAuthError("");
+    try {
+      await runSubmit();
+    } catch (error) {
+      setAuthError(
+        error instanceof Error
+          ? error.message
+          : "Terjadi gangguan saat memproses. Coba lagi.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  };
+  const runSubmit = async () => {
     if (view === "signup") {
       if (signupDisabled) {
         setAuthError(
           "Lengkapi data dan pastikan password minimal 8 karakter serta cocok.",
         );
-        setSubmitting(false);
         return;
       }
       const result = await signupAccount(
@@ -4837,7 +4859,6 @@ function Auth({
           );
       }
     }
-    setSubmitting(false);
   };
   const onFieldKeyDown = (event: {
     key: string;
@@ -5136,8 +5157,7 @@ function VerifyEmailPage({ setView }: { setView: (view: View) => void }) {
   const [email, setEmail] = useState("");
   const [resending, setResending] = useState(false);
   useEffect(() => {
-    const token =
-      new URLSearchParams(window.location.search).get("token") || "";
+    const token = linkToken();
     if (!token) {
       setStatus("error");
       setMessage("Token verifikasi tidak ditemukan atau tautan tidak lengkap.");
@@ -19537,7 +19557,7 @@ function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
 
 // QA TC-105 — form password baru berdasarkan token dari email.
 function ResetPasswordPage({ setView }: { setView: (view: View) => void }) {
-  const token = new URLSearchParams(window.location.search).get("token") || "";
+  const token = linkToken();
   const [password, setPassword] = useState("");
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [show, setShow] = useState(false);
@@ -19840,6 +19860,22 @@ function CommissionWorkspace({ canApprove }: { canApprove: boolean }) {
       {canApprove && <CommissionRatePanel />}
       <CommissionPanel canApprove={canApprove} limit={10} />
     </div>
+  );
+}
+
+// Query string saat halaman pertama dibuka. Efek sinkronisasi URL sempat
+// menulis ulang path ke "/" selagi bootstrap berjalan, dan itu ikut membuang
+// `?token=...` dari tautan email. Nilainya dibekukan di sini, sebelum React
+// render pertama, supaya token tetap terbaca.
+const initialSearchParams =
+  typeof window !== "undefined"
+    ? new URLSearchParams(window.location.search)
+    : new URLSearchParams();
+function linkToken(name = "token") {
+  return (
+    new URLSearchParams(window.location.search).get(name) ||
+    initialSearchParams.get(name) ||
+    ""
   );
 }
 
