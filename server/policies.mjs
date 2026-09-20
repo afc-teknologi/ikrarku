@@ -51,11 +51,36 @@ export function createPolicies(db) {
       fail(403, "Conversation bukan assignment Anda");
     return row;
   }
+  // Template milik Web Designer lain tidak boleh disentuh, tetapi template yang
+  // dibuat Administrator adalah milik bersama dan boleh dipakai semua Web Designer.
+  function templateAuthorIsAdmin(row) {
+    if (!row?.created_by) return true;
+    const author = db
+      .prepare(
+        "SELECT r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id WHERE u.id=?",
+      )
+      .get(row.created_by);
+    if (!author) return false;
+    try {
+      return JSON.parse(author.permissions_json || "[]").includes("*");
+    } catch {
+      return false;
+    }
+  }
   function requireTemplate(user, id) {
     const row = db.prepare("SELECT * FROM templates WHERE id=?").get(id);
     if (!row) fail(404, "Template tidak ditemukan");
-    if (!admin(user) && row.created_by !== user.id)
-      fail(403, "Template bukan milik Anda");
+    // Template milik Web Designer lain tidak boleh disentuh, tetapi template
+    // buatan Administrator adalah milik bersama dan boleh dipakai semua Web Designer.
+    if (
+      !admin(user) &&
+      row.created_by !== user.id &&
+      !templateAuthorIsAdmin(row)
+    )
+      fail(
+        403,
+        "Template ini milik Web Designer lain. Hanya pembuatnya atau Administrator yang dapat mengubahnya.",
+      );
     return row;
   }
   function claimGuestOrders(userId) {
@@ -138,6 +163,7 @@ export function createPolicies(db) {
     requireTask,
     requireConversation,
     requireTemplate,
+    templateAuthorIsAdmin,
     requireEntitlement,
     claimGuestOrders,
     assignPaidSite,

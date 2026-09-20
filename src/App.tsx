@@ -20,6 +20,7 @@ import {
   Bold,
   BookOpen,
   BadgeCheck,
+  Wallet,
   Anchor,
   CalendarDays,
   Check,
@@ -151,7 +152,8 @@ export type View =
   | "help"
   | "customer-service"
   | "cs-dashboard"
-  | "sound-library";
+  | "sound-library"
+  | "commissions";
 type PageKey = "pages" | "invitees" | "rsvp-page";
 type InspectorTab = "content" | "style" | "advanced";
 type Alignment = "left" | "center" | "right" | "justify";
@@ -292,6 +294,43 @@ type ImageLayoutTemplate =
   | "overlap"
   | "banner"
   | "framed-caption";
+// Efek yang berjalan terus-menerus (auto repeat) selama undangan dibuka.
+type LoopEffect =
+  | "none"
+  | "fade"
+  | "float"
+  | "sway"
+  | "pulse"
+  | "shimmer"
+  | "drift";
+type DecorGlyph =
+  | "leaf"
+  | "branch"
+  | "floral"
+  | "rose"
+  | "sparkle"
+  | "ring"
+  | "heart"
+  | "butterfly"
+  | "feather"
+  | "arch";
+type DecorCorner =
+  | "top-left"
+  | "top-right"
+  | "bottom-left"
+  | "bottom-right";
+// Ornamen yang ditempel di pojok section, mis. bunga yang bergoyang pelan.
+type SectionDecoration = {
+  id: string;
+  glyph: DecorGlyph;
+  corner: DecorCorner;
+  size: number;
+  color: string;
+  opacity: number;
+  flip?: boolean;
+  motion: LoopEffect;
+  speed?: number;
+};
 type ImageFrame =
   | "none"
   | "rounded"
@@ -464,6 +503,8 @@ type Feature = DesignerLayout & {
   mapButtonShape?: "rounded" | "pill" | "square" | "outline";
   mapButtonLabel?: string;
   showLocationQr?: boolean; // TC-132
+  showMapEmbed?: boolean; // Preview peta Google Maps langsung di section
+  mapEmbedHeight?: number;
   imageLayoutTemplate?: ImageLayoutTemplate; // TC-129
   imageCaption?: string;
   imageSecondaryUrl?: string;
@@ -475,6 +516,8 @@ type Feature = DesignerLayout & {
   creditText?: string; // TC-123
   creditSongTitle?: string;
   creditLink?: string;
+  loopEffect?: LoopEffect; // Efek berulang pada feature
+  loopSpeed?: number; // detik per siklus
 };
 
 type AuthAccount = {
@@ -527,6 +570,11 @@ type CanvasSection = {
   backgroundLayers?: BackgroundLayer[]; // TC-108 layered background
   columnWidths?: number[]; // TC-114 lebar kolom hasil drag grid line
   showGuides?: boolean; // TC-113 garis guide/margin
+  loopEffect?: LoopEffect; // Efek berulang pada seluruh section
+  loopSpeed?: number;
+  backgroundLoopEffect?: LoopEffect; // Efek berulang khusus layer background
+  backgroundLoopSpeed?: number;
+  decorations?: SectionDecoration[]; // Ornamen pojok
 };
 
 type Guest = {
@@ -589,6 +637,7 @@ export type Template = {
   currency?: string;
   status?: "Pending" | "Published" | "Approved" | "Rejected" | "Unpublished";
   sampleImage?: string;
+  createdByName?: string;
   headerImage?: string;
   unpublishedAt?: string | null;
   pendingReview?: boolean;
@@ -1044,7 +1093,9 @@ function makeFeature(
     cardRadius: 12, // TC-121/TC-122
     mapButtonShape: type === "location" ? "rounded" : undefined, // TC-124
     mapButtonLabel: type === "location" ? "Buka Google Maps" : undefined,
-    showLocationQr: type === "location" ? true : undefined, // TC-132
+    showLocationQr: type === "location" ? false : undefined, // TC-132
+    showMapEmbed: type === "location" ? true : undefined,
+    mapEmbedHeight: type === "location" ? 260 : undefined,
     imageLayoutTemplate: type === "image" ? "single" : undefined, // TC-129
     imageCaption: type === "image" ? "" : undefined,
     gallerySlideshow: type === "gallery" ? false : undefined, // TC-126
@@ -1076,6 +1127,9 @@ function makeFeature(
     creditText: type === "credit" ? "Created by ikrarku" : undefined, // TC-123
     creditSongTitle: type === "credit" ? "" : undefined,
     creditLink: type === "credit" ? "https://ikrarku.id" : undefined,
+    // Auto repeat sebagai default: begitu undangan tampil, efek terus berjalan.
+    loopEffect: "fade",
+    loopSpeed: 6,
   };
 }
 
@@ -2187,6 +2241,7 @@ function App() {
         "cs-dashboard",
         "customer-service",
         "sound-library",
+        "commissions",
         "payment-settings",
         "editor",
       ]);
@@ -2788,6 +2843,7 @@ function App() {
   // Per-view browser tab title and address-bar path (TC-018 SEO / URL relevance)
   useEffect(() => {
     const titles: Partial<Record<View, string>> = {
+      commissions: "Komisi & Share Fee - ikrarku Sites",
       landing: "ikrarku Sites - Wedding Website & Undangan Digital",
       login: "Masuk - ikrarku Sites",
       signup: "Daftar Akun - ikrarku Sites",
@@ -4468,7 +4524,10 @@ function App() {
             deleteSound={deleteSoundFromCatalog}
           />
         )}
-        {view === "customer-service" && (
+        {view === "commissions" && (
+        <CommissionWorkspace canApprove={hasPermission("users.manage")} />
+      )}
+      {view === "customer-service" && (
           <CustomerServiceDatabase
             conversations={serverConversations}
             users={contactableUsers}
@@ -5319,7 +5378,8 @@ function TemplateJourneyPage({
               </button>
             </div>
             <button
-              className="preview-close"
+              className="journey-preview-close"
+              aria-label="Tutup preview"
               onClick={() => setPreviewOpen(false)}
             >
               <X size={18} />
@@ -6368,6 +6428,12 @@ function Sidebar({
       BookOpen,
       can("articles.manage") ? "Articles CMS" : "Articles",
       "articles.view",
+    ],
+    [
+      "commissions",
+      Wallet,
+      can("users.manage") ? "Komisi & Share Fee" : "Komisi Saya",
+      can("users.manage") ? "users.manage" : "templates.create",
     ],
     ["sound-library", Music2, "Sound Library", "sounds.manage"],
     ["payment-settings", CreditCard, "Payment Methods", "settings.payment"],
@@ -7653,6 +7719,7 @@ function Templates({
           })}
         </div>
       </section>
+
       {(canCreate || canApprove) && (
         <TemplateApprovalManager
           templates={managedTemplates}
@@ -7745,9 +7812,9 @@ function Templates({
                   <Crown size={12} /> Premium
                 </div>
               )}
-              {template.createdBy && (
+              {canApprove && (template.createdByName || template.createdBy) && (
                 <div className="creator-chip">
-                  Created by {template.createdBy}
+                  Created by {template.createdByName || template.createdBy}
                 </div>
               )}
               <div className="template-hover">
@@ -8770,6 +8837,27 @@ function Editor({
     }
   };
 
+  // Revisi: gambar untuk layer background diunggah dari komputer.
+  const uploadLayerImage = async (file: File | undefined) => {
+    if (!file) return null;
+    if (!file.type.startsWith("image/")) {
+      flash("Gambar layer harus berupa image.");
+      return null;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      flash("Gambar layer maksimal 2 MB.");
+      return null;
+    }
+    try {
+      const saved = await uploadToServer(file, "background-layer");
+      flash("Gambar layer berhasil diunggah.");
+      return { url: saved.url, key: saved.key };
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Upload gagal.");
+      return null;
+    }
+  };
+
   // QA TC-098: background menerima gambar statis, GIF, maupun video (gambar bergerak).
   const uploadBackground = async (file: File | undefined) => {
     if (!file || !selectedSection) return;
@@ -9271,6 +9359,7 @@ function Editor({
                   updateShared={(patch) =>
                     updateSectionShared(selectedSection.id, patch)
                   }
+                  uploadLayerImage={uploadLayerImage}
                   setColumnCount={(count) =>
                     setColumnCount(selectedSection.id, count)
                   }
@@ -9284,6 +9373,10 @@ function Editor({
                   <p>Pengaturan yang relevan akan muncul di sini.</p>
                 </div>
               )}
+              {/* Revisi: Feature Library dan Website title hanya relevan saat
+                  menambah konten, jadi hanya tampil di tab Content. */}
+              {inspectorTab === "content" && (
+                <>
               <div className="widget-library">
                 <div className="library-head">
                   <strong>Feature Library</strong>
@@ -9338,6 +9431,8 @@ function Editor({
                   />
                 </label>
               </div>
+                </>
+              )}
             </div>
           </aside>
         </div>
@@ -9995,7 +10090,6 @@ function FeatureInspector({
           <div className="video-playback-group">
             <div className="group-heading">
               <strong>Playback</strong>
-              <span>TC-083</span>
             </div>
             <div className="setting-row compact">
               <div>
@@ -10549,7 +10643,6 @@ function FeatureInspector({
           <div className="image-style-group">
             <div className="group-heading">
               <strong>Bingkai & Posisi Gambar</strong>
-              <span>TC-082</span>
             </div>
             <label>
               Bentuk bingkai
@@ -10639,6 +10732,13 @@ function FeatureInspector({
             </select>
           </label>
         )}
+        <LoopEffectControls
+          title="Efek Berulang (Auto Repeat)"
+          hint="Efek berjalan terus selama undangan dibuka, tidak hanya sekali saat muncul."
+          loopEffect={feature.loopEffect}
+          loopSpeed={feature.loopSpeed}
+          onChange={update}
+        />
         <PerElementColorEditor feature={feature} update={update} />
         <FeatureBackgroundImageEditor
           feature={feature}
@@ -11405,13 +11505,407 @@ function InviteeManagementPage({
 }
 
 
-// QA TC-108 & TC-127 — layer background tambahan di atas background utama.
-function BackgroundLayerEditor({
+
+// Ornamen dekoratif digambar sebagai SVG inline agar tidak bergantung pada aset
+// eksternal dan bebas masalah lisensi.
+function DecorGlyphIcon({ glyph }: { glyph: DecorGlyph }) {
+  const base = {
+    viewBox: "0 0 100 100",
+    width: "100%",
+    height: "100%",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.6,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
+  };
+  switch (glyph) {
+    case "branch":
+      return (
+        <svg {...base}>
+          <path d="M6 94C22 76 38 56 52 32 60 18 68 10 82 6" />
+          <path d="M52 32c-8-6-10-16-6-24M52 32c9-2 16 2 20 10M36 54c-9-5-12-15-9-24M36 54c9-1 15 4 18 12M20 74c-9-4-13-13-11-22M20 74c9 0 15 5 17 13" />
+        </svg>
+      );
+    case "floral":
+      return (
+        <svg {...base}>
+          <circle cx="50" cy="50" r="9" />
+          <path d="M50 41c0-13 5-23 13-23s10 12 0 20M59 50c13 0 23 5 23 13s-12 10-20 0M50 59c0 13-5 23-13 23s-10-12 0-20M41 50c-13 0-23-5-23-13s12-10 20 0" />
+        </svg>
+      );
+    case "rose":
+      return (
+        <svg {...base}>
+          <path d="M50 26c12 0 21 9 21 21s-9 21-21 21-21-9-21-21" />
+          <path d="M50 36c7 0 12 5 12 12s-5 11-12 11-11-5-11-11" />
+          <path d="M50 45c3 0 5 2 5 4" />
+          <path d="M50 68v20M50 78c-8 0-13-5-14-12M50 84c8-1 13-6 13-13" />
+        </svg>
+      );
+    case "sparkle":
+      return (
+        <svg {...base}>
+          <path d="M50 14l7 24 24 7-24 7-7 24-7-24-24-7 24-7z" />
+          <path d="M78 66l3 9 9 3-9 3-3 9-3-9-9-3 9-3zM20 20l2 7 7 2-7 2-2 7-2-7-7-2 7-2z" />
+        </svg>
+      );
+    case "ring":
+      return (
+        <svg {...base}>
+          <circle cx="38" cy="62" r="22" />
+          <circle cx="64" cy="62" r="22" />
+          <path d="M52 22l8-12 8 12" />
+        </svg>
+      );
+    case "heart":
+      return (
+        <svg {...base}>
+          <path d="M50 84S16 62 16 40a17 17 0 0 1 34-7 17 17 0 0 1 34 7c0 22-34 44-34 44Z" />
+        </svg>
+      );
+    case "butterfly":
+      return (
+        <svg {...base}>
+          <path d="M50 30v42M50 34c-6-14-20-22-30-16S12 44 26 52c8 5 18 7 24 4M50 34c6-14 20-22 30-16s8 26-6 34c-8 5-18 7-24 4" />
+          <path d="M50 26l-5-8M50 26l5-8" />
+        </svg>
+      );
+    case "feather":
+      return (
+        <svg {...base}>
+          <path d="M22 84C36 62 46 40 70 18c8 22 2 44-14 56-9 7-22 10-34 10Z" />
+          <path d="M22 84 62 34" />
+        </svg>
+      );
+    case "arch":
+      return (
+        <svg {...base}>
+          <path d="M18 90V48a32 32 0 0 1 64 0v42" />
+          <path d="M30 90V50a20 20 0 0 1 40 0v40" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...base}>
+          <path d="M50 88C50 58 62 34 88 20 84 54 70 76 50 88Z" />
+          <path d="M50 88C50 58 38 34 12 20c4 34 18 56 38 68Z" />
+          <path d="M50 88V44" />
+        </svg>
+      );
+  }
+}
+
+const decorGlyphCatalog: [DecorGlyph, string][] = [
+  ["leaf", "Daun"],
+  ["branch", "Ranting"],
+  ["floral", "Bunga"],
+  ["rose", "Mawar"],
+  ["sparkle", "Kilau"],
+  ["ring", "Cincin"],
+  ["heart", "Hati"],
+  ["butterfly", "Kupu-kupu"],
+  ["feather", "Bulu"],
+  ["arch", "Arch"],
+];
+const loopEffectCatalog: [LoopEffect, string][] = [
+  ["none", "Tidak ada"],
+  ["fade", "Fade in-out"],
+  ["float", "Mengambang"],
+  ["sway", "Bergoyang"],
+  ["pulse", "Berdenyut"],
+  ["shimmer", "Berkilau"],
+  ["drift", "Melayang"],
+];
+
+// Kontrol efek berulang pada feature.
+function LoopEffectControls({
+  loopEffect,
+  loopSpeed,
+  onChange,
+  title,
+  hint,
+}: {
+  loopEffect?: LoopEffect;
+  loopSpeed?: number;
+  onChange: (patch: { loopEffect?: LoopEffect; loopSpeed?: number }) => void;
+  title: string;
+  hint: string;
+}) {
+  const active = loopEffect || "none";
+  return (
+    <div className="loop-effect-controls">
+      <div className="group-heading">
+        <strong>{title}</strong>
+      </div>
+      <div className="layout-help">{hint}</div>
+      <label>
+        Efek
+        <select
+          value={active}
+          onChange={(event) =>
+            onChange({ loopEffect: event.target.value as LoopEffect })
+          }
+        >
+          {loopEffectCatalog.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {active !== "none" && (
+        <label className="range-field">
+          <span className="range-head">
+            Durasi siklus<b>{loopSpeed || 6}s</b>
+          </span>
+          <input
+            type="range"
+            min="2"
+            max="20"
+            value={loopSpeed || 6}
+            onChange={(event) =>
+              onChange({ loopSpeed: Number(event.target.value) })
+            }
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+// Editor ornamen pojok pada section.
+function SectionDecorationEditor({
   section,
   update,
 }: {
   section: CanvasSection;
   update: (patch: Partial<CanvasSection>) => void;
+}) {
+  const items = section.decorations || [];
+  const commit = (next: SectionDecoration[]) => update({ decorations: next });
+  const patch = (id: string, next: Partial<SectionDecoration>) =>
+    commit(items.map((item) => (item.id === id ? { ...item, ...next } : item)));
+  return (
+    <div className="decoration-editor">
+      <div className="group-heading">
+        <strong>Ornamen Pojok</strong>
+        <button
+          onClick={() =>
+            commit([
+              ...items,
+              {
+                id: uid("decor"),
+                glyph: "floral",
+                corner: "top-right",
+                size: 140,
+                color: "#7d9e86",
+                opacity: 70,
+                motion: "sway",
+                speed: 7,
+              },
+            ])
+          }
+        >
+          <Plus size={14} /> Tambah ornamen
+        </button>
+      </div>
+      <div className="layout-help">
+        Ornamen ditempel di pojok section dan bergerak terus-menerus. Cocok untuk
+        bunga, ranting, atau kilau di sudut undangan.
+      </div>
+      {items.map((item, index) => (
+        <div className="extra-text-row" key={item.id}>
+          <div className="form-spec-head">
+            <span>Ornamen {index + 1}</span>
+            <button
+              onClick={() => commit(items.filter((value) => value.id !== item.id))}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+          <div className="decor-preview" style={{ color: item.color }}>
+            <DecorGlyphIcon glyph={item.glyph} />
+          </div>
+          <div className="two-inputs">
+            <label>
+              Bentuk
+              <select
+                value={item.glyph}
+                onChange={(event) =>
+                  patch(item.id, { glyph: event.target.value as DecorGlyph })
+                }
+              >
+                {decorGlyphCatalog.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Pojok
+              <select
+                value={item.corner}
+                onChange={(event) =>
+                  patch(item.id, { corner: event.target.value as DecorCorner })
+                }
+              >
+                <option value="top-left">Kiri atas</option>
+                <option value="top-right">Kanan atas</option>
+                <option value="bottom-left">Kiri bawah</option>
+                <option value="bottom-right">Kanan bawah</option>
+              </select>
+            </label>
+          </div>
+          <div className="two-inputs">
+            <label className="range-field">
+              <span className="range-head">
+                Ukuran<b>{item.size}px</b>
+              </span>
+              <input
+                type="range"
+                min="60"
+                max="420"
+                step="10"
+                value={item.size}
+                onChange={(event) =>
+                  patch(item.id, { size: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="range-field">
+              <span className="range-head">
+                Opacity<b>{item.opacity}%</b>
+              </span>
+              <input
+                type="range"
+                min="5"
+                max="100"
+                value={item.opacity}
+                onChange={(event) =>
+                  patch(item.id, { opacity: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <div className="two-inputs">
+            <label>
+              Warna
+              <input
+                type="color"
+                value={item.color}
+                onChange={(event) => patch(item.id, { color: event.target.value })}
+              />
+            </label>
+            <label>
+              Gerak
+              <select
+                value={item.motion}
+                onChange={(event) =>
+                  patch(item.id, { motion: event.target.value as LoopEffect })
+                }
+              >
+                {loopEffectCatalog.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <label className="range-field">
+            <span className="range-head">
+              Durasi siklus<b>{item.speed || 7}s</b>
+            </span>
+            <input
+              type="range"
+              min="2"
+              max="20"
+              value={item.speed || 7}
+              onChange={(event) =>
+                patch(item.id, { speed: Number(event.target.value) })
+              }
+            />
+          </label>
+          <label className="checkbox-row">
+            <span>Cermin horizontal</span>
+            <input
+              type="checkbox"
+              checked={!!item.flip}
+              onChange={(event) => patch(item.id, { flip: event.target.checked })}
+            />
+          </label>
+        </div>
+      ))}
+      {!items.length && (
+        <div className="layout-help">Belum ada ornamen pada section ini.</div>
+      )}
+    </div>
+  );
+}
+
+// QA TC-108 & TC-127 — layer background tambahan di atas background utama.
+function LayerImageUpload({
+  layer,
+  onUploaded,
+  uploadLayerImage,
+}: {
+  layer: BackgroundLayer;
+  onUploaded: (saved: { url: string; key: string }) => void;
+  uploadLayerImage: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  return (
+    <div className="layer-upload">
+      <input
+        ref={input}
+        hidden
+        type="file"
+        accept="image/*"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          setBusy(true);
+          const saved = await uploadLayerImage(file);
+          setBusy(false);
+          if (saved) onUploaded(saved);
+        }}
+      />
+      <button
+        className="upload-control"
+        disabled={busy}
+        onClick={() => input.current?.click()}
+      >
+        <Upload size={16} />
+        <span>
+          <strong>{busy ? "Mengunggah..." : "Upload gambar layer"}</strong>
+          <small>Ambil dari komputer, maksimal 2 MB.</small>
+        </span>
+      </button>
+      {layer.url && (
+        <div className="layer-thumb">
+          <img src={layer.url} alt="Preview layer" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BackgroundLayerEditor({
+  section,
+  update,
+  uploadLayerImage,
+}: {
+  section: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+  uploadLayerImage: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
 }) {
   const layers = section.backgroundLayers || [];
   const commit = (next: BackgroundLayer[]) => update({ backgroundLayers: next });
@@ -11456,6 +11950,14 @@ function BackgroundLayerEditor({
               <Trash2 size={12} />
             </button>
           </div>
+          {/* Revisi: gambar layer dapat diunggah dari komputer, tidak hanya URL. */}
+          <LayerImageUpload
+            layer={layer}
+            onUploaded={(saved) =>
+              patch(layer.id, { url: saved.url, key: saved.key })
+            }
+            uploadLayerImage={uploadLayerImage}
+          />
           <label>
             URL gambar layer
             <input
@@ -11498,8 +12000,10 @@ function BackgroundLayerEditor({
             </label>
           </div>
           <div className="two-inputs">
-            <label>
-              Geser X <span>{layer.offsetX ?? 50}%</span>
+            <label className="range-field">
+              <span className="range-head">
+                Geser X<b>{layer.offsetX ?? 50}%</b>
+              </span>
               <input
                 type="range"
                 min="0"
@@ -11510,8 +12014,10 @@ function BackgroundLayerEditor({
                 }
               />
             </label>
-            <label>
-              Geser Y <span>{layer.offsetY ?? 50}%</span>
+            <label className="range-field">
+              <span className="range-head">
+                Geser Y<b>{layer.offsetY ?? 50}%</b>
+              </span>
               <input
                 type="range"
                 min="0"
@@ -11524,8 +12030,10 @@ function BackgroundLayerEditor({
             </label>
           </div>
           <div className="two-inputs">
-            <label>
-              Opacity <span>{layer.opacity ?? 100}%</span>
+            <label className="range-field">
+              <span className="range-head">
+                Opacity<b>{layer.opacity ?? 100}%</b>
+              </span>
               <input
                 type="range"
                 min="0"
@@ -11536,8 +12044,10 @@ function BackgroundLayerEditor({
                 }
               />
             </label>
-            <label>
-              Skala <span>{layer.scale ?? 100}%</span>
+            <label className="range-field">
+              <span className="range-head">
+                Skala<b>{layer.scale ?? 100}%</b>
+              </span>
               <input
                 type="range"
                 min="50"
@@ -11590,6 +12100,7 @@ function SectionInspector({
   tab,
   update,
   updateShared,
+  uploadLayerImage,
   setColumnCount,
   backgroundInput,
   uploadBackground,
@@ -11600,6 +12111,9 @@ function SectionInspector({
   // QA TC-112: nama canvas dan layout mode bersifat struktural, selalu ditulis
   // ke nilai dasar agar tidak berbeda antara Desktop dan Mobile.
   updateShared: (patch: Partial<CanvasSection>) => void;
+  uploadLayerImage: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
   setColumnCount: (count: ColumnCount) => void;
   backgroundInput: React.RefObject<HTMLInputElement | null>;
   uploadBackground: (file: File | undefined) => Promise<void>;
@@ -11751,8 +12265,32 @@ function SectionInspector({
             <option value="auto">Auto</option>
           </select>
         </label>
+        <LoopEffectControls
+          title="Efek Berulang Section"
+          hint="Berlaku untuk seluruh isi section."
+          loopEffect={section.loopEffect}
+          loopSpeed={section.loopSpeed}
+          onChange={update}
+        />
+        <LoopEffectControls
+          title="Efek Berulang Background"
+          hint="Hanya lapisan background yang bergerak, teks tetap diam."
+          loopEffect={section.backgroundLoopEffect}
+          loopSpeed={section.backgroundLoopSpeed}
+          onChange={(patch) =>
+            update({
+              backgroundLoopEffect: patch.loopEffect,
+              backgroundLoopSpeed: patch.loopSpeed,
+            })
+          }
+        />
+        <SectionDecorationEditor section={section} update={update} />
         {/* QA TC-108: layer background tambahan di dalam background utama. */}
-        <BackgroundLayerEditor section={section} update={update} />
+        <BackgroundLayerEditor
+          section={section}
+          update={update}
+          uploadLayerImage={uploadLayerImage}
+        />
       </div>
     );
   return (
@@ -12043,7 +12581,7 @@ function WeddingCanvas({
         return (
           <section
             key={section.id}
-            className={`canvas-section layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}`}
+            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}`}
             onDragOver={(event) => {
               if (
                 editable &&
@@ -12089,7 +12627,7 @@ function WeddingCanvas({
             {/* QA TC-107 & TC-127: background utama dapat dikunci (fixed) sehingga
                 hanya konten/layer di atasnya yang bergerak saat di-scroll. */}
             <div
-              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed ? "is-fixed" : ""}`}
+              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed ? "is-fixed" : ""} loop-${section.backgroundLoopEffect || "none"}`}
               style={{
                 backgroundImage: section.backgroundUrl
                   ? `url(${section.backgroundUrl})`
@@ -12105,6 +12643,26 @@ function WeddingCanvas({
                 filter,
               }}
             />
+            {/* Ornamen pojok dengan gerak berulang. */}
+            {(section.decorations || []).map((decoration) => (
+              <span
+                key={decoration.id}
+                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"}`}
+                style={
+                  {
+                    width: decoration.size,
+                    height: decoration.size,
+                    color: decoration.color,
+                    opacity: (decoration.opacity ?? 70) / 100,
+                    transform: decoration.flip ? "scaleX(-1)" : undefined,
+                    "--loop-speed": `${decoration.speed || 7}s`,
+                  } as React.CSSProperties
+                }
+                aria-hidden
+              >
+                <DecorGlyphIcon glyph={decoration.glyph} />
+              </span>
+            ))}
             {/* QA TC-108: layer background tambahan di atas background utama. */}
             {(section.backgroundLayers || []).map((layer, layerIndex) => (
               <div
@@ -12621,6 +13179,9 @@ function FeatureBlock({
     textDecoration: feature.underline ? "underline" : "none",
     position: feature.freePosition ? "absolute" : "relative",
     ...designerStyle(feature),
+    ...(feature.loopEffect && feature.loopEffect !== "none"
+      ? ({ "--loop-speed": `${feature.loopSpeed || 6}s` } as React.CSSProperties)
+      : {}),
     overflow:
       feature.type === "gallery" && feature.galleryFullWidth
         ? "visible"
@@ -12714,7 +13275,7 @@ function FeatureBlock({
           onSelect();
         }
       }}
-      className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} ${selected ? "selected-feature" : ""}`}
+      className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""}`}
       style={style}
     >
       <FeatureEffect effect={feature.visualEffect || "none"} />
@@ -13392,9 +13953,19 @@ function LocationFeature({ feature }: { feature: Feature }) {
       "var(--accent, #125946)",
   };
   // QA TC-132: QR diberi container sendiri agar tidak terpotong di mobile.
-  const showQr = feature.showLocationQr !== false;
+  // QR bersifat opsional karena fungsinya sama dengan tombol Buka Google Maps —
+  // default-nya peta embed, QR dinyalakan hanya bila memang dibutuhkan.
+  const showQr = feature.showLocationQr === true;
+  const showEmbed = feature.showMapEmbed !== false;
+  const embedSource = feature.mapUrl
+    ? `https://www.google.com/maps?q=${encodeURIComponent(
+        feature.locationAddress || feature.locationName || feature.mapUrl,
+      )}&output=embed`
+    : "";
   return (
-    <div className={`location-feature ${showQr ? "" : "no-qr"}`}>
+    <div
+      className={`location-feature ${showQr ? "" : "no-qr"} ${showEmbed ? "has-embed" : ""}`}
+    >
       <div>
         <MapPin size={27} />
         <small>LOCATION</small>
@@ -13410,6 +13981,28 @@ function LocationFeature({ feature }: { feature: Feature }) {
           <MapPin size={15} /> {feature.mapButtonLabel || "Buka Google Maps"}
         </a>
       </div>
+      {showEmbed && (
+        <div
+          className="location-map-embed"
+          style={{ height: feature.mapEmbedHeight || 260 }}
+        >
+          {embedSource ? (
+            <iframe
+              title={`Peta ${feature.locationName || feature.title}`}
+              src={embedSource}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              allowFullScreen
+            />
+          ) : (
+            <div className="media-placeholder">
+              <MapPin size={22} />
+              <strong>Preview peta</strong>
+              <span>Isi Link Google Maps pada panel Content</span>
+            </div>
+          )}
+        </div>
+      )}
       {showQr && (
         <div className="location-qr">
           <div className="location-qr-frame">
@@ -18055,7 +18648,6 @@ function SecondaryTextEditor({
     <div className="heading-body-editor">
       <div className="group-heading">
         <strong>Heading 2 & Supporting Text 2</strong>
-        <span>TC-118</span>
       </div>
       <div className="setting-row compact">
         <div>
@@ -18197,7 +18789,6 @@ function PerElementColorEditor({
     <div className="per-element-color-editor">
       <div className="group-heading">
         <strong>Warna per Elemen</strong>
-        <span>TC-121 / TC-122</span>
       </div>
       <div className="layout-help">
         Kosongkan untuk mengikuti warna teks dasar feature. Mengubah salah satu
@@ -18245,7 +18836,6 @@ function FormStyleEditor({
     <div className="form-style-editor">
       <div className="group-heading">
         <strong>Kolom Input & Button Submit</strong>
-        <span>TC-125</span>
       </div>
       <div className="two-inputs">
         <label>
@@ -18364,7 +18954,6 @@ function FeatureBackgroundImageEditor({
     <div className="feature-background-editor">
       <div className="group-heading">
         <strong>Background Image Feature</strong>
-        <span>TC-117</span>
       </div>
       <input
         ref={input}
@@ -18478,7 +19067,6 @@ function ImageLayoutEditor({
     <div className="image-layout-editor">
       <div className="group-heading">
         <strong>Template Layout Image</strong>
-        <span>TC-129</span>
       </div>
       <label>
         Layout
@@ -18531,7 +19119,6 @@ function GallerySlideshowEditor({
     <div className="gallery-slideshow-editor">
       <div className="group-heading">
         <strong>Slideshow Otomatis</strong>
-        <span>TC-126</span>
       </div>
       <div className="setting-row compact">
         <div>
@@ -18579,7 +19166,6 @@ function MapButtonEditor({
     <div className="map-button-editor">
       <div className="group-heading">
         <strong>Button Buka Google Maps</strong>
-        <span>TC-124</span>
       </div>
       <label>
         Label button
@@ -18651,17 +19237,50 @@ function MapButtonEditor({
       </div>
       <div className="setting-row compact">
         <div>
-          <QrCode size={16} />
+          <MapPin size={16} />
           <span>
-            <strong>Tampilkan QR lokasi</strong>
-            <small>Matikan bila ruang mobile terbatas.</small>
+            <strong>Preview peta Google Maps</strong>
+            <small>Menampilkan peta langsung di section, seperti pada website.</small>
           </span>
         </div>
         <button
-          className={`toggle ${feature.showLocationQr !== false ? "on" : ""}`}
+          className={`toggle ${feature.showMapEmbed !== false ? "on" : ""}`}
           onClick={() =>
-            update({ showLocationQr: !(feature.showLocationQr !== false) })
+            update({ showMapEmbed: !(feature.showMapEmbed !== false) })
           }
+        >
+          <i />
+        </button>
+      </div>
+      {feature.showMapEmbed !== false && (
+        <label>
+          Tinggi peta <span>{feature.mapEmbedHeight || 260}px</span>
+          <input
+            type="range"
+            min="160"
+            max="520"
+            step="10"
+            value={feature.mapEmbedHeight || 260}
+            onChange={(event) =>
+              update({ mapEmbedHeight: Number(event.target.value) })
+            }
+          />
+        </label>
+      )}
+      <div className="setting-row compact">
+        <div>
+          <QrCode size={16} />
+          <span>
+            <strong>Tampilkan QR lokasi</strong>
+            <small>
+              Fungsinya sama dengan tombol di atas. Nyalakan hanya bila tamu
+              perlu memindai dari perangkat lain.
+            </small>
+          </span>
+        </div>
+        <button
+          className={`toggle ${feature.showLocationQr === true ? "on" : ""}`}
+          onClick={() => update({ showLocationQr: !feature.showLocationQr })}
         >
           <i />
         </button>
@@ -18777,7 +19396,6 @@ function CreditEditor({
     <div className="credit-editor">
       <div className="group-heading">
         <strong>Credit & Watermark</strong>
-        <span>TC-123</span>
       </div>
       <label>
         Teks credit
@@ -19051,6 +19669,360 @@ function buildGuestLink(slug: string, guestName: string) {
 }
 
 // QA TC-075, TC-076, TC-106 — visibilitas status, takedown/republish, dan upload gambar sample.
+
+
+// Administrator mengatur share fee tiap Template Creator. Rate baru berlaku untuk
+// komisi berikutnya; komisi yang sudah tercatat tidak ikut berubah.
+function CommissionRatePanel() {
+  const [data, setData] = useState<{
+    defaultRate: number;
+    creators: any[];
+  } | null>(null);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      const result = await api.commissionRates();
+      setData(result);
+      setDraft(
+        Object.fromEntries(
+          result.creators.map((creator: any) => [
+            creator.id,
+            creator.rate === null ? "" : String(Math.round(creator.rate * 100)),
+          ]),
+        ),
+      );
+      setError("");
+    } catch (issue) {
+      setError(
+        issue instanceof Error ? issue.message : "Gagal memuat daftar creator.",
+      );
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const save = async (creator: any) => {
+    const raw = (draft[creator.id] ?? "").trim();
+    if (raw !== "") {
+      const percent = Number(raw);
+      if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+        setError("Share fee harus antara 0 dan 100.");
+        return;
+      }
+    }
+    setBusy(creator.id);
+    setError("");
+    try {
+      await api.setCommissionRate(creator.id, raw === "" ? null : Number(raw) / 100);
+      setNote(
+        `Share fee ${creator.name} diperbarui. Berlaku untuk order berikutnya.`,
+      );
+      await load();
+      window.setTimeout(() => setNote(""), 3200);
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Gagal menyimpan.");
+    }
+    setBusy("");
+  };
+  const creators = data?.creators || [];
+  return (
+    <section className="commission-rate-panel">
+      <div className="section-heading">
+        <div>
+          <span>TEMPLATE CREATOR</span>
+          <h2>Share fee per Web Designer</h2>
+          <p>
+            Default platform {Math.round((data?.defaultRate ?? 0.1) * 100)}%.
+            Kosongkan kolom untuk mengikuti default. Perubahan berlaku pada order
+            berikutnya, komisi yang sudah tercatat tidak berubah.
+          </p>
+        </div>
+        <strong>{creators.length} creator</strong>
+      </div>
+      {error && (
+        <div className="auth-error">
+          <X size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+      {note && (
+        <div className="verification-dev-link">
+          <CheckCircle2 size={17} />
+          <div>
+            <span>{note}</span>
+          </div>
+        </div>
+      )}
+      {!creators.length && !error && (
+        <div className="panel-empty">Belum ada Web Designer terdaftar.</div>
+      )}
+      {creators.length > 0 && (
+        <div className="commission-table">
+          <div className="commission-row rate head">
+            <span>Web Designer</span>
+            <span>Template</span>
+            <span>Total komisi</span>
+            <span>Belum dibayar</span>
+            <span>Share fee</span>
+          </div>
+          {creators.map((creator) => (
+            <div className="commission-row rate" key={creator.id}>
+              <div className="creator-cell">
+                <strong>{creator.name}</strong>
+                <small>
+                  {creator.email} · {creator.role}
+                  {creator.active ? "" : " · nonaktif"}
+                </small>
+              </div>
+              <span>{creator.templateCount}</span>
+              <span>{formatRupiah(creator.earned || 0)}</span>
+              <span>{formatRupiah(creator.unpaid || 0)}</span>
+              <span className="rate-cell">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  value={draft[creator.id] ?? ""}
+                  placeholder={String(Math.round((data?.defaultRate ?? 0.1) * 100))}
+                  onChange={(event) =>
+                    setDraft((previous) => ({
+                      ...previous,
+                      [creator.id]: event.target.value,
+                    }))
+                  }
+                />
+                <em>%</em>
+                <button
+                  className="settle-btn"
+                  disabled={busy === creator.id}
+                  onClick={() => void save(creator)}
+                >
+                  {busy === creator.id ? "..." : "Simpan"}
+                </button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// Komisi Template Creator — Web Designer melihat komisi template miliknya,
+// Administrator melihat seluruh komisi dan dapat menandainya sudah dibayar.
+// Komisi & Share Fee dipisah jadi menu sendiri agar tidak menumpuk di halaman
+// Templates & Approval. Administrator mengatur share fee dan melihat seluruh
+// riwayat; Web Designer hanya melihat catatan pembayaran miliknya.
+function CommissionWorkspace({ canApprove }: { canApprove: boolean }) {
+  return (
+    <div className="page commission-page">
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">TEMPLATE CREATOR</div>
+          <h1>{canApprove ? "Komisi & Share Fee" : "Komisi Saya"}</h1>
+          <p>
+            {canApprove
+              ? "Atur bagi hasil tiap Web Designer dan pantau pembayaran komisinya."
+              : "Catatan komisi dari setiap order yang memakai template buatan Anda."}
+          </p>
+        </div>
+      </div>
+      {canApprove && <CommissionRatePanel />}
+      <CommissionPanel canApprove={canApprove} limit={10} />
+    </div>
+  );
+}
+
+function formatShortDate(value?: string) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function CommissionPanel({
+  canApprove,
+  limit = 10,
+}: {
+  canApprove: boolean;
+  limit?: number;
+}) {
+  const [data, setData] = useState<{
+    rate: number;
+    total: number;
+    unpaid: number;
+    rows: any[];
+  } | null>(null);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      setData(await api.commissions());
+      setError("");
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Gagal memuat komisi.");
+    }
+  }, []);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const settle = async (id: string) => {
+    setBusy(id);
+    try {
+      await api.settleCommission(id);
+      await load();
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Gagal memperbarui komisi.");
+    }
+    setBusy("");
+  };
+  const allRows = data?.rows || [];
+  const [page, setPage] = useState(0);
+  const pageCount = Math.max(1, Math.ceil(allRows.length / limit));
+  const safePage = Math.min(page, pageCount - 1);
+  const rows = allRows.slice(safePage * limit, safePage * limit + limit);
+  useEffect(() => {
+    setPage(0);
+  }, [allRows.length]);
+  // Untuk Administrator, rate tunggal tidak bermakna karena tiap Web Designer
+  // punya share fee sendiri. Yang berguna adalah sisa pendapatan platform.
+  const grossOrders = allRows.reduce(
+    (sum, row) => sum + Number(row.order_amount || 0),
+    0,
+  );
+  const platformRevenue = grossOrders - (data?.total || 0);
+  return (
+    <section className="commission-panel">
+      <div className="section-heading">
+        <div>
+          <span>TEMPLATE CREATOR</span>
+          <h2>Riwayat pembayaran komisi</h2>
+          <p>
+            {canApprove
+              ? `Seluruh order yang menghasilkan komisi, beserta penanda sudah atau belum dibayar. ${allRows.length} order tercatat.`
+              : `Catatan komisi dari order yang memakai template buatan Anda. ${allRows.length} order tercatat.`}
+          </p>
+        </div>
+        <button className="secondary-btn" onClick={() => void load()}>
+          <Repeat2 size={15} /> Refresh
+        </button>
+      </div>
+      <div className="commission-summary">
+        {canApprove ? (
+          <div>
+            <span>Pendapatan platform</span>
+            <strong>{formatRupiah(platformRevenue)}</strong>
+          </div>
+        ) : (
+          <div>
+            <span>Rate komisi saya</span>
+            <strong>{Math.round((data?.rate ?? 0.1) * 100)}%</strong>
+          </div>
+        )}
+        <div>
+          <span>Total komisi</span>
+          <strong>{formatRupiah(data?.total || 0)}</strong>
+        </div>
+        <div>
+          <span>Belum dibayar</span>
+          <strong>{formatRupiah(data?.unpaid || 0)}</strong>
+        </div>
+        <div>
+          <span>Jumlah order</span>
+          <strong>{rows.length}</strong>
+        </div>
+      </div>
+      {error && (
+        <div className="auth-error">
+          <X size={16} />
+          <span>{error}</span>
+        </div>
+      )}
+      {!rows.length && !error && (
+        <div className="panel-empty">
+          Belum ada komisi. Komisi tercatat otomatis ketika order yang memakai
+          template Anda lunas.
+        </div>
+      )}
+      {rows.length > 0 && (
+        <div className="commission-table">
+          <div className={`commission-row ledger ${canApprove ? "with-creator" : ""} head`}>
+            <span>Tanggal order</span>
+            <span>Template</span>
+            {canApprove && <span>Creator</span>}
+            <span>Customer</span>
+            <span>Nilai order</span>
+            <span>Rate</span>
+            <span>Komisi</span>
+            <span>Status pembayaran</span>
+          </div>
+          {rows.map((row) => (
+            <div
+              className={`commission-row ledger ${canApprove ? "with-creator" : ""}`}
+              key={row.id}
+            >
+              <span>{formatShortDate(row.order_paid_at || row.created_at)}</span>
+              <strong>{row.template_name}</strong>
+              {canApprove && <span>{row.creator_name || "—"}</span>}
+              <span>{row.customer_name}</span>
+              <span>{formatRupiah(row.order_amount || 0)}</span>
+              <span>{Math.round(Number(row.rate || 0) * 100)}%</span>
+              <strong className="commission-amount">
+                {formatRupiah(row.amount || 0)}
+              </strong>
+              <span className="ledger-status">
+                <em
+                  className={`status-chip ${row.status === "Paid" ? "published" : "pending"}`}
+                >
+                  {row.status === "Paid" ? "Sudah dibayar" : "Belum dibayar"}
+                </em>
+                {row.status === "Paid" && row.settled_at && (
+                  <small>{formatShortDate(row.settled_at)}</small>
+                )}
+                {canApprove && row.status !== "Paid" && (
+                  <button
+                    className="settle-btn"
+                    disabled={busy === row.id}
+                    onClick={() => void settle(row.id)}
+                  >
+                    {busy === row.id ? "..." : "Tandai dibayar"}
+                  </button>
+                )}
+              </span>
+            </div>
+          ))}
+          {pageCount > 1 && (
+            <div className="commission-pagination">
+              <button
+                disabled={safePage === 0}
+                onClick={() => setPage(safePage - 1)}
+              >
+                <ChevronLeft size={14} /> Sebelumnya
+              </button>
+              <span>
+                Halaman {safePage + 1} dari {pageCount} · {allRows.length} order
+              </span>
+              <button
+                disabled={safePage >= pageCount - 1}
+                onClick={() => setPage(safePage + 1)}
+              >
+                Berikutnya <ChevronRight size={14} />
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function TemplateApprovalManager({
   templates,
   currentAccountId,

@@ -49,13 +49,13 @@ export default function DesignerControls({ feature, update }: Props) {
       </div>
       {canPosition && (
         <>
-          <label>
+          <label className="checkbox-row">
+            <span>Posisi bebas</span>
             <input
               type="checkbox"
               checked={!!feature.freePosition}
               onChange={(e) => update({ freePosition: e.target.checked })}
-            />{" "}
-            Posisi bebas
+            />
           </label>
           {feature.freePosition && (
             <>
@@ -206,21 +206,21 @@ export default function DesignerControls({ feature, update }: Props) {
           />
         </label>
       </div>
-      <label>
+      <label className="checkbox-row">
+        <span>Sembunyikan di desktop</span>
         <input
           type="checkbox"
           checked={!!feature.hideDesktop}
           onChange={(e) => update({ hideDesktop: e.target.checked })}
-        />{" "}
-        Sembunyikan di desktop
+        />
       </label>
-      <label>
+      <label className="checkbox-row">
+        <span>Sembunyikan di mobile</span>
         <input
           type="checkbox"
           checked={!!feature.hideMobile}
           onChange={(e) => update({ hideMobile: e.target.checked })}
-        />{" "}
-        Sembunyikan di mobile
+        />
       </label>
       <div className="designer-motion">
         <strong>Timing animasi</strong>

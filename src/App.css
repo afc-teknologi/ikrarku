@@ -759,13 +759,183 @@ html,body,#root{min-width:0!important}
 .tree-column.column-drop-ready{outline:2px dashed #2a8f6d;outline-offset:2px;border-radius:8px}
 .tree-row.column-node[draggable="true"]{cursor:grab}
 
-/* TC-135 — thumbnail gambar sample di landing */
-.ikr-template-sample{width:100%;aspect-ratio:3/4;background-size:cover;background-position:center;border-radius:inherit}
 
 /* TC-136 / TC-137 — preview template desktop & mobile */
-.journey-preview-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;background:rgba(10,26,21,.85);backdrop-filter:blur(6px)}
+.journey-preview-overlay.actual-template-preview{grid-template-rows:auto 1fr;align-content:start;padding:0}
+.journey-preview-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:16px;padding:12px 18px;width:100%;background:rgba(10,26,21,.92)}
+.journey-preview-close{position:static;flex:0 0 auto;width:38px;height:38px;border:0;border-radius:50%;background:#fff;color:#123f33;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.journey-preview-overlay.actual-template-preview>.actual-template-preview-shell{min-height:0;overflow:auto}
+.journey-preview-overlay.actual-template-preview>.actual-template-preview-shell.device-desktop{width:100%;max-width:none;margin:0}
+.journey-preview-overlay.actual-template-preview>.actual-template-preview-shell.device-mobile{width:min(420px,94vw);max-width:none;margin:0 auto;border-radius:18px;box-shadow:0 18px 50px rgba(6,22,17,.45)}
+.journey-preview-overlay.actual-template-preview>.actual-template-preview-shell.device-mobile .journey-preview-window{min-height:520px}
 .journey-device-switch{display:flex;gap:6px}
 .journey-device-switch button{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.28);background:transparent;color:#fff;border-radius:8px;padding:7px 12px;font-size:8px}
 .journey-device-switch button.active{background:#fff;color:#123f33}
 .actual-template-preview-shell.device-desktop{width:100%;max-width:none;margin:0}
 .actual-template-preview-shell.device-mobile{width:min(420px,94vw);margin:0 auto;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(6,22,17,.45)}
+
+/* =====================================================================
+   Revisi tampilan inspector /templates
+   ===================================================================== */
+
+/* Kotak warna per elemen ikut lebar penuh seperti kolom warna lain.
+   Sebelumnya `.color-row` terkena aturan `label>span{margin-left:auto}`
+   sehingga menyusut jadi sliver tipis. */
+.color-row{margin-left:0!important;width:100%;display:flex;align-items:center;gap:6px}
+.color-row input[type=color]{flex:1;width:100%;min-width:0;height:38px;padding:3px}
+.color-row .clear-color{flex:0 0 auto}
+
+/* Checkbox sebaris dengan keterangannya, kotak centang di ujung kanan. */
+label.checkbox-row{flex-direction:row!important;align-items:center;justify-content:space-between;gap:10px;cursor:pointer}
+label.checkbox-row>span{margin-left:0;flex:1;color:inherit;font-weight:inherit}
+label.checkbox-row>input[type=checkbox]{flex:0 0 auto;width:16px;height:16px;margin:0;accent-color:#125946;cursor:pointer}
+
+/* Slider dengan nilai persen sejajar judulnya, tidak melenceng ke luar kolom. */
+label.range-field{display:flex;flex-direction:column;gap:5px;min-width:0}
+label.range-field>.range-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-left:0;width:100%}
+label.range-field>.range-head>b{font-weight:500;color:#81908a}
+label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:block}
+
+/* Upload gambar untuk layer background. */
+.layer-upload{display:flex;flex-direction:column;gap:8px}
+.layer-upload .upload-control{width:100%}
+.layer-thumb{width:100%;height:78px;border-radius:8px;overflow:hidden;border:1px solid #e0e6e2}
+.layer-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+
+/* Support Inbox: tinggi mengikuti viewport supaya list dan kolom balasan tidak terpotong */
+.cs-layout{height:auto;min-height:520px;max-height:calc(100vh - 210px);grid-template-rows:minmax(0,1fr)}
+.cs-layout>*{min-height:0}
+.cs-chat{min-height:0;overflow:hidden}
+.cs-chat>form{flex:0 0 auto;border-top:1px solid var(--line);background:#fff}
+.conversation-list{min-height:0;overflow:auto}
+.customer-profile{min-height:0;overflow:auto}
+@media(max-width:1100px){.cs-layout{max-height:none;grid-template-columns:1fr;grid-template-rows:auto minmax(320px,60vh) auto}}
+
+/* Preview peta Google Maps pada feature Lokasi */
+.location-map-embed{min-width:0;border-radius:12px;overflow:hidden;border:1px solid rgba(22,77,62,.16);background:#eef2f0}
+.location-map-embed iframe{width:100%;height:100%;border:0;display:block}
+/* Kolom grid menyesuaikan isi: teks saja, + peta, + QR. Tanpa ini peta masuk ke
+   kolom QR selebar 145px dan terpotong. */
+.location-feature>*{min-width:0}
+.location-feature.has-embed{grid-template-columns:minmax(0,1fr) minmax(260px,.95fr);align-items:stretch}
+.location-feature.has-embed:not(.no-qr){grid-template-columns:minmax(0,1fr) minmax(220px,.85fr) 150px}
+.location-feature:not(.has-embed):not(.no-qr){grid-template-columns:minmax(0,1fr) 150px}
+.location-feature.no-qr:not(.has-embed){grid-template-columns:minmax(0,1fr)}
+@media(max-width:900px){
+  .location-feature,
+  .location-feature.has-embed,
+  .location-feature.has-embed:not(.no-qr){grid-template-columns:minmax(0,1fr)}
+  .location-map-embed{height:240px!important}
+}
+
+/* Modal Create Template dapat di-scroll saat isinya lebih tinggi dari layar */
+.template-create-dialog{max-height:min(92vh,880px);overflow:auto;overscroll-behavior:contain}
+.template-create-dialog header{position:sticky;top:0;z-index:2;background:#fff;padding-bottom:8px}
+
+/* Panel komisi Template Creator */
+.commission-panel{margin:26px 0 30px}
+.commission-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}
+.commission-summary>div{border:1px solid #e3e8e5;border-radius:12px;padding:12px 14px;background:#fff;display:flex;flex-direction:column;gap:4px}
+.commission-summary span{font-size:8px;letter-spacing:1px;color:#6f817b;text-transform:uppercase}
+.commission-summary strong{font-size:16px}
+.commission-table{border:1px solid #e3e8e5;border-radius:12px;overflow:hidden;background:#fff}
+.commission-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr auto;gap:12px;align-items:center;padding:11px 14px;border-bottom:1px solid #eef2f0;font-size:9px}
+.commission-row.ledger{grid-template-columns:.9fr 1.3fr 1fr .9fr .9fr 1.25fr}
+.commission-row.ledger.with-creator{grid-template-columns:.85fr 1.2fr 1fr .9fr .85fr .85fr 1.2fr}
+.ledger-status{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.ledger-status small{font-size:7px;color:#6f817b}
+@media(max-width:1100px){.commission-row.ledger{grid-template-columns:1fr 1fr}.ledger-status{align-items:flex-start}}
+.commission-row:last-child{border-bottom:0}
+.commission-row.head{background:#f7f9f8;font-size:7.5px;letter-spacing:1px;text-transform:uppercase;color:#6f817b}
+.commission-amount{color:#12684f}
+.commission-row>span:last-child{display:flex;align-items:center;gap:7px;justify-content:flex-end}
+.settle-btn{border:1px solid #cfe0d8;background:#fff;border-radius:7px;padding:5px 9px;font-size:7.5px;white-space:nowrap}
+@media(max-width:1100px){
+  .commission-summary{grid-template-columns:repeat(2,1fr)}
+  .commission-row{grid-template-columns:1fr 1fr;row-gap:6px}
+  .commission-row.head{display:none}
+}
+
+/* Share fee per Template Creator */
+.commission-rate-panel{margin:26px 0 8px}
+.commission-row.rate{grid-template-columns:1.6fr .6fr 1fr 1fr 1.1fr}
+.settle-btn.primary{background:#12684f;border-color:#12684f;color:#fff}
+.creator-cell{display:flex;flex-direction:column;gap:2px;min-width:0}
+.creator-cell small{font-size:7.5px;color:#6f817b}
+.rate-cell{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.rate-cell input{width:64px;height:30px;border:1px solid #dfe5e2;border-radius:7px;padding:0 8px;font-size:9px;text-align:right}
+.rate-cell em{font-style:normal;color:#6f817b;font-size:8px}
+@media(max-width:1100px){.commission-row.rate{grid-template-columns:1fr 1fr}.rate-cell{justify-content:flex-start}}
+
+/* =====================================================================
+   Loop effect (auto repeat) & ornamen pojok
+   ===================================================================== */
+@keyframes loopFade{0%,100%{opacity:1}50%{opacity:.55}}
+@keyframes loopFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+@keyframes loopSway{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(3deg)}}
+@keyframes loopPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes loopShimmer{0%,100%{filter:brightness(1)}50%{filter:brightness(1.18)}}
+@keyframes loopDrift{0%,100%{transform:translate3d(0,0,0)}25%{transform:translate3d(6px,-6px,0)}50%{transform:translate3d(0,-11px,0)}75%{transform:translate3d(-6px,-6px,0)}}
+
+.loop-fade{animation:loopFade var(--loop-speed,6s) ease-in-out infinite}
+.loop-float{animation:loopFloat var(--loop-speed,6s) ease-in-out infinite}
+.loop-sway{animation:loopSway var(--loop-speed,7s) ease-in-out infinite;transform-origin:50% 90%}
+.loop-pulse{animation:loopPulse var(--loop-speed,6s) ease-in-out infinite}
+.loop-shimmer{animation:loopShimmer var(--loop-speed,6s) ease-in-out infinite}
+.loop-drift{animation:loopDrift var(--loop-speed,9s) ease-in-out infinite}
+.loop-none{animation:none}
+/* Entrance effect tetap menang saat elemen baru muncul; loop mengambil alih setelahnya. */
+.feature-block.await-reveal.loop-fade,
+.feature-block.await-reveal.loop-float,
+.feature-block.await-reveal.loop-sway,
+.feature-block.await-reveal.loop-pulse,
+.feature-block.await-reveal.loop-shimmer,
+.feature-block.await-reveal.loop-drift{animation:none}
+.feature-block.revealed.loop-fade{animation:loopFade var(--loop-speed,6s) ease-in-out infinite}
+.feature-block.revealed.loop-float{animation:loopFloat var(--loop-speed,6s) ease-in-out infinite}
+.feature-block.revealed.loop-sway{animation:loopSway var(--loop-speed,7s) ease-in-out infinite}
+.feature-block.revealed.loop-pulse{animation:loopPulse var(--loop-speed,6s) ease-in-out infinite}
+.feature-block.revealed.loop-shimmer{animation:loopShimmer var(--loop-speed,6s) ease-in-out infinite}
+.feature-block.revealed.loop-drift{animation:loopDrift var(--loop-speed,9s) ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .loop-fade,.loop-float,.loop-sway,.loop-pulse,.loop-shimmer,.loop-drift,
+  .feature-block.revealed.loop-fade,.feature-block.revealed.loop-float,
+  .feature-block.revealed.loop-sway,.feature-block.revealed.loop-pulse,
+  .feature-block.revealed.loop-shimmer,.feature-block.revealed.loop-drift{animation:none!important}
+}
+
+.section-decoration{position:absolute;z-index:2;pointer-events:none;display:block}
+.section-decoration svg{width:100%;height:100%;display:block}
+.section-decoration.corner-top-left{top:0;left:0}
+.section-decoration.corner-top-right{top:0;right:0}
+.section-decoration.corner-bottom-left{bottom:0;left:0}
+.section-decoration.corner-bottom-right{bottom:0;right:0}
+.section-decoration.corner-top-left.loop-sway{transform-origin:0 0}
+.section-decoration.corner-top-right.loop-sway{transform-origin:100% 0}
+.section-decoration.corner-bottom-left.loop-sway{transform-origin:0 100%}
+.section-decoration.corner-bottom-right.loop-sway{transform-origin:100% 100%}
+@media(max-width:900px){.section-decoration{transform:scale(.62);transform-origin:inherit}}
+
+.loop-effect-controls,.decoration-editor{border-top:1px solid #e5e9e6;margin-top:14px;padding-top:13px}
+.decor-preview{width:100%;height:76px;display:grid;place-items:center;background:#f7f9f8;border-radius:9px;border:1px solid #eef2f0}
+.decor-preview svg{width:58px;height:58px}
+
+/* Halaman Komisi & Share Fee */
+.commission-page .commission-rate-panel,.commission-page .commission-panel{margin-top:4px}
+.commission-pagination{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 14px;background:#f7f9f8;font-size:8px;color:#5d7169}
+.commission-pagination button{display:inline-flex;align-items:center;gap:5px;border:1px solid #dfe5e2;background:#fff;border-radius:7px;padding:6px 10px;font-size:8px}
+.commission-pagination button:disabled{opacity:.4}
+.commission-row.ledger{grid-template-columns:78px minmax(0,1.25fr) minmax(0,1fr) 84px 50px 84px 118px;gap:8px;font-size:8.5px;white-space:nowrap}
+.commission-row.ledger.with-creator{grid-template-columns:78px minmax(0,1.1fr) minmax(0,.9fr) minmax(0,.9fr) 84px 50px 84px 118px}
+.commission-row.ledger>span,.commission-row.ledger>strong{overflow:hidden;text-overflow:ellipsis}
+.commission-row.ledger .ledger-status{flex-direction:row;align-items:center;justify-content:flex-end;gap:5px;flex-wrap:nowrap}
+.commission-row.ledger .ledger-status .status-chip{padding:3px 7px;font-size:6.5px}
+.commission-row.ledger .ledger-status small{white-space:nowrap}
+.commission-row.ledger .settle-btn{padding:4px 7px;font-size:6.5px}
+@media(max-width:1280px){
+  .commission-row.ledger .ledger-status small{display:none}
+}
+@media(max-width:1100px){
+  .commission-row.ledger,.commission-row.ledger.with-creator{grid-template-columns:1fr 1fr;white-space:normal;row-gap:6px}
+  .commission-row.ledger .ledger-status{justify-content:flex-start}
+}

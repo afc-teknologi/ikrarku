@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
-  Check,
   ChevronDown,
   Menu,
   X,
@@ -154,9 +153,6 @@ export default function LandingPage({
       <main id="main-content">
         <section className="ikr-hero">
           <div className="ikr-hero-copy">
-            <span className="ikr-eyebrow">
-              <i /> UNTUK CERITA YANG HANYA MILIK KALIAN
-            </span>
             <h1>
               Sebuah janji.
               <br />
@@ -179,17 +175,6 @@ export default function LandingPage({
               >
                 Lihat cara kerjanya <ChevronDown size={16} />
               </button>
-            </div>
-            <div className="ikr-hero-points">
-              <span>
-                <Check size={15} /> Tanpa coding
-              </span>
-              <span>
-                <Check size={15} /> Preview sebelum pesan
-              </span>
-              <span>
-                <Check size={15} /> Dibantu tim
-              </span>
             </div>
           </div>
           <div className="ikr-hero-art" aria-label="Ilustrasi undangan digital">
@@ -226,12 +211,6 @@ export default function LandingPage({
               <span className="ikr-invite-open">
                 Buka undangan <ArrowRight size={13} />
               </span>
-            </div>
-            <div className="ikr-art-foot">
-              <span>
-                <Heart size={15} /> Dirancang untuk terasa personal
-              </span>
-              <small>ILUSTRASI DESAIN</small>
             </div>
           </div>
         </section>

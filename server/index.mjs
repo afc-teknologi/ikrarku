@@ -320,6 +320,24 @@ function initDb() {
   ensureColumn("templates", "sample_image_url", "TEXT");
   ensureColumn("templates", "header_image_url", "TEXT");
   ensureColumn("templates", "unpublished_at", "TEXT");
+  // Share fee per Template Creator; NULL = ikut rate default platform.
+  ensureColumn("users", "commission_rate", "REAL");
+  // Komisi Template Creator: 10% dari nilai order yang lunas.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS template_commissions (
+      id TEXT PRIMARY KEY,
+      order_id TEXT NOT NULL UNIQUE,
+      template_id TEXT NOT NULL,
+      creator_id TEXT NOT NULL,
+      order_amount INTEGER NOT NULL,
+      rate REAL NOT NULL,
+      amount INTEGER NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'IDR',
+      status TEXT NOT NULL DEFAULT 'Accrued',
+      created_at TEXT NOT NULL,
+      paid_at TEXT
+    )
+  `);
   try {
     db.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_slug_unique ON sites(slug) WHERE slug <> ''",
@@ -650,6 +668,18 @@ function auth(req, res, next) {
     return res
       .status(401)
       .json({ error: "Session expired", code: "session_expired" });
+  // QA-03: status akun diperiksa ulang pada setiap request. Menonaktifkan akun
+  // atau mencabut verifikasi email harus langsung menghentikan session berjalan,
+  // bukan hanya menghalangi login berikutnya.
+  if (!row.active || !row.email_verified) {
+    db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
+    return res.status(403).json({
+      error: !row.active
+        ? "Akun Anda dinonaktifkan. Hubungi Administrator."
+        : "Email belum diverifikasi. Silakan cek email konfirmasi Anda.",
+      code: !row.active ? "account_disabled" : "email_unverified",
+    });
+  }
   if (SESSION_IDLE_MINUTES > 0) {
     const last = row.last_seen_at ? new Date(row.last_seen_at).getTime() : 0;
     if (last && Date.now() - last > SESSION_IDLE_MINUTES * 60_000) {
@@ -1355,8 +1385,17 @@ app.post("/api/auth/logout", auth, (req, res) => {
   res.json({ ok: true });
 });
 
+function creatorLabel(userId) {
+  if (!userId) return null;
+  const row = db
+    .prepare("SELECT first_name,last_name FROM users WHERE id=?")
+    .get(userId);
+  if (!row) return null;
+  return `${row.first_name || ""} ${row.last_name || ""}`.trim() || null;
+}
 function mapTemplate(row) {
   return {
+    createdByName: creatorLabel(row.created_by),
     id: row.id,
     name: row.name,
     category: row.category,
@@ -1466,10 +1505,16 @@ app.get("/api/templates", auth, (req, res) => {
   const rows = isAdmin
     ? db.prepare("SELECT * FROM templates ORDER BY created_at DESC").all()
     : db
-        .prepare(
-          `SELECT * FROM templates WHERE status IN ('Published','Approved') OR created_by=? ORDER BY created_at DESC`,
-        )
-        .all(req.user.id);
+        .prepare("SELECT * FROM templates ORDER BY created_at DESC")
+        .all()
+        // Template milik Web Designer lain tidak boleh terlihat maupun dipilih.
+        // Yang tersisa: template sendiri dan template yang dibuat Administrator.
+        // Template milik Web Designer lain tidak boleh terlihat maupun dipilih.
+        // Yang tersisa: template sendiri dan template yang dibuat Administrator.
+        .filter(
+          (row) =>
+            row.created_by === req.user.id || policy.templateAuthorIsAdmin(row),
+        );
   res.json(
     rows.map((row) => {
       const draft =
@@ -1568,8 +1613,16 @@ app.patch("/api/templates/:id", auth, (req, res) => {
     .get(req.params.id);
   if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
   const canAll = req.user.permissions.includes("*");
-  if (!canAll && row.created_by !== req.user.id)
-    return res.status(403).json({ error: "Tidak dapat mengubah template ini" });
+  // Template Web Designer lain terkunci; template buatan Administrator terbuka untuk semua.
+  if (
+    !canAll &&
+    row.created_by !== req.user.id &&
+    !policy.templateAuthorIsAdmin(row)
+  )
+    return res.status(403).json({
+      error:
+        "Template ini milik Web Designer lain. Hanya pembuatnya atau Administrator yang dapat mengubahnya.",
+    });
   const pending = db
     .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
     .get(row.id);
@@ -3195,6 +3248,51 @@ app.post("/api/orders", rateLimit("orders", 20, 60_000), (req, res) => {
 });
 // Shared fulfilment used by both simulation payments and the Mayar payment webhook.
 const fulfillmentJobs = new Map();
+// Komisi Template Creator: 10% dari nilai order, dicatat sekali per order
+// (UNIQUE pada order_id) sehingga retry fulfillment tidak menggandakan komisi.
+const TEMPLATE_COMMISSION_RATE = Number(
+  process.env.TEMPLATE_COMMISSION_RATE ?? 0.1,
+);
+function creatorCommissionRate(creatorId) {
+  const row = db
+    .prepare("SELECT commission_rate FROM users WHERE id=?")
+    .get(creatorId);
+  const rate = row?.commission_rate;
+  return rate === null || rate === undefined
+    ? TEMPLATE_COMMISSION_RATE
+    : Number(rate);
+}
+function recordTemplateCommission(order, template) {
+  if (!template?.created_by) return;
+  // Template yang dibuat Administrator adalah milik platform. Membayar komisi ke
+  // platform dari pendapatan platform sendiri hanya memutar uang dan mengotori
+  // laporan, jadi tidak ada baris komisi untuk template admin.
+  if (policy.templateAuthorIsAdmin(template)) return;
+  const rate = creatorCommissionRate(template.created_by);
+  if (!(rate > 0)) return;
+  const amount = Math.round((Number(order.amount) || 0) * rate);
+  if (amount <= 0) return;
+  try {
+    db.prepare(
+      `INSERT INTO template_commissions(id,order_id,template_id,creator_id,order_amount,rate,amount,currency,status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)
+       ON CONFLICT(order_id) DO NOTHING`,
+    ).run(
+      id("comm"),
+      order.id,
+      template.id,
+      template.created_by,
+      Number(order.amount) || 0,
+      rate,
+      amount,
+      order.currency || "IDR",
+      "Accrued",
+      now(),
+    );
+  } catch (error) {
+    console.error("commission record failed", error.message);
+  }
+}
+
 async function fulfillPaidOrder(order, methodCode) {
   if (fulfillmentJobs.has(order.id)) return fulfillmentJobs.get(order.id);
   const job = (async () => {
@@ -3238,6 +3336,7 @@ async function fulfillPaidOrder(order, methodCode) {
         db.prepare(
           "UPDATE orders SET assigned_cs_id=?,assigned_editor_id=?,receipt_no=?,receipt_path=?,order_status='Paid - Onboarding',fulfillment_status='Complete',fulfillment_error=NULL WHERE id=?",
         ).run(csId, editorId, receipt.receiptNo, receipt.filepath, fresh.id);
+      recordTemplateCommission(fresh, template);
         const taskInsert = db.prepare(
           `INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
         );
@@ -3932,6 +4031,160 @@ app.post(
     res.json(
       db.prepare("SELECT * FROM email_outbox WHERE id=?").get(req.params.id),
     );
+  },
+);
+app.get("/api/commissions", auth, (req, res) => {
+  const isAdmin = req.user.permissions.includes("*");
+  const rows = db
+    .prepare(
+      `SELECT c.*,c.paid_at settled_at,t.name template_name,o.customer_name,o.paid_at order_paid_at,u.first_name||' '||u.last_name creator_name
+       FROM template_commissions c
+       JOIN templates t ON t.id=c.template_id
+       JOIN orders o ON o.id=c.order_id
+       LEFT JOIN users u ON u.id=c.creator_id
+       ${isAdmin ? "" : "WHERE c.creator_id=?"}
+       ORDER BY c.created_at DESC`,
+    )
+    .all(...(isAdmin ? [] : [req.user.id]));
+  const myRate = isAdmin
+    ? TEMPLATE_COMMISSION_RATE
+    : creatorCommissionRate(req.user.id);
+  const total = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  const unpaid = rows
+    .filter((row) => row.status !== "Paid")
+    .reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  res.json({ rate: myRate, defaultRate: TEMPLATE_COMMISSION_RATE, total, unpaid, rows });
+});
+// Daftar Template Creator beserta share fee-nya. Administrator dapat mengubah
+// rate per orang; rate baru berlaku untuk komisi berikutnya, tidak mengubah
+// komisi yang sudah tercatat.
+app.get("/api/commission-rates", auth, permit("users.manage"), (_req, res) => {
+  const rows = db
+    .prepare(
+      `SELECT u.id,u.first_name,u.last_name,u.email,u.active,u.commission_rate,r.name role_name,
+              (SELECT COUNT(*) FROM templates t WHERE t.created_by=u.id) template_count,
+              (SELECT COALESCE(SUM(c.amount),0) FROM template_commissions c WHERE c.creator_id=u.id) earned,
+              (SELECT COALESCE(SUM(c.amount),0) FROM template_commissions c WHERE c.creator_id=u.id AND c.status<>'Paid') unpaid
+       FROM users u JOIN roles r ON r.id=u.role_id
+       WHERE u.role_id='role_editor'
+       ORDER BY u.first_name`,
+    )
+    .all();
+  res.json({
+    defaultRate: TEMPLATE_COMMISSION_RATE,
+    creators: rows.map((row) => ({
+      id: row.id,
+      name: `${row.first_name} ${row.last_name}`.trim(),
+      email: row.email,
+      role: row.role_name,
+      active: Boolean(row.active),
+      rate:
+        row.commission_rate === null || row.commission_rate === undefined
+          ? null
+          : Number(row.commission_rate),
+      effectiveRate:
+        row.commission_rate === null || row.commission_rate === undefined
+          ? TEMPLATE_COMMISSION_RATE
+          : Number(row.commission_rate),
+      templateCount: row.template_count,
+      earned: row.earned,
+      unpaid: row.unpaid,
+    })),
+  });
+});
+app.patch(
+  "/api/commission-rates/:id",
+  auth,
+  permit("users.manage"),
+  (req, res) => {
+    const row = db.prepare("SELECT * FROM users WHERE id=?").get(req.params.id);
+    if (!row) return res.status(404).json({ error: "Akun tidak ditemukan" });
+    if (row.role_id !== "role_editor")
+      return res.status(400).json({
+        error:
+          "Share fee hanya berlaku untuk Web Designer. Template buatan Administrator adalah milik platform dan tidak menghasilkan komisi.",
+      });
+    const raw = req.body?.rate;
+    if (raw === null || raw === "" || raw === undefined) {
+      db.prepare("UPDATE users SET commission_rate=NULL,updated_at=? WHERE id=?").run(
+        now(),
+        row.id,
+      );
+      auditLog(req.user.id, "commission.rate", "user", row.id, { rate: null });
+      return res.json({ ok: true, rate: null, effectiveRate: TEMPLATE_COMMISSION_RATE });
+    }
+    const rate = Number(raw);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 1)
+      return res
+        .status(400)
+        .json({ error: "Share fee harus antara 0% dan 100%" });
+    db.prepare("UPDATE users SET commission_rate=?,updated_at=? WHERE id=?").run(
+      rate,
+      now(),
+      row.id,
+    );
+    auditLog(req.user.id, "commission.rate", "user", row.id, { rate });
+    res.json({ ok: true, rate, effectiveRate: rate });
+  },
+);
+app.post(
+  "/api/commission-rates/:id/settle",
+  auth,
+  permit("users.manage"),
+  (req, res) => {
+    if (!req.user.permissions.includes("*"))
+      return res
+        .status(403)
+        .json({ error: "Hanya Administrator dapat menandai komisi dibayar" });
+    const creator = db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(req.params.id);
+    if (!creator)
+      return res.status(404).json({ error: "Akun tidak ditemukan" });
+    const pending = db
+      .prepare(
+        "SELECT COALESCE(SUM(amount),0) total, COUNT(*) count FROM template_commissions WHERE creator_id=? AND status<>'Paid'",
+      )
+      .get(creator.id);
+    if (!pending.count)
+      return res
+        .status(400)
+        .json({ error: "Tidak ada komisi yang belum dibayar." });
+    db.prepare(
+      "UPDATE template_commissions SET status='Paid',paid_at=? WHERE creator_id=? AND status<>'Paid'",
+    ).run(now(), creator.id);
+    auditLog(req.user.id, "commission.settle.bulk", "user", creator.id, {
+      count: pending.count,
+      amount: pending.total,
+    });
+    queueEmail(
+      creator.email,
+      "Komisi template ikrarku sudah dibayarkan",
+      `<h2>Komisi dibayarkan</h2><p>Sebanyak ${pending.count} komisi template Anda telah ditandai lunas oleh Administrator.</p>`,
+    );
+    res.json({ ok: true, count: pending.count, amount: pending.total });
+  },
+);
+app.post(
+  "/api/commissions/:id/settle",
+  auth,
+  permit("orders.view"),
+  (req, res) => {
+    if (!req.user.permissions.includes("*"))
+      return res
+        .status(403)
+        .json({ error: "Hanya Administrator dapat menandai komisi dibayar" });
+    const row = db
+      .prepare("SELECT * FROM template_commissions WHERE id=?")
+      .get(req.params.id);
+    if (!row) return res.status(404).json({ error: "Komisi tidak ditemukan" });
+    db.prepare(
+      "UPDATE template_commissions SET status='Paid',paid_at=? WHERE id=?",
+    ).run(now(), row.id);
+    auditLog(req.user.id, "commission.settle", "commission", row.id, {
+      amount: row.amount,
+    });
+    res.json({ ok: true });
   },
 );
 app.get("/api/mailer-status", auth, (_req, res) =>

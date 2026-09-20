@@ -37,8 +37,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
   const data = await response.json().catch(() => ({}));
   if (
-    response.status === 401 &&
-    (data.code === "idle_timeout" || data.code === "session_expired")
+    (response.status === 401 &&
+      (data.code === "idle_timeout" || data.code === "session_expired")) ||
+    // QA-03: akun dinonaktifkan atau verifikasi dicabut saat session berjalan.
+    (response.status === 403 &&
+      (data.code === "account_disabled" || data.code === "email_unverified"))
   ) {
     // QA TC-101: sesi idle/expired dibersihkan agar user diarahkan login ulang.
     setApiToken("");
@@ -313,6 +316,24 @@ export const api = {
     }),
   csMetrics: () => request<any>("/cs/metrics"),
   emailOutbox: () => request<any[]>("/email-outbox"),
+  commissions: () =>
+    request<{ rate: number; total: number; unpaid: number; rows: any[] }>(
+      "/commissions",
+    ),
+  settleCommission: (id: string) =>
+    request<any>(`/commissions/${id}/settle`, { method: "POST" }),
+  commissionRates: () =>
+    request<{ defaultRate: number; creators: any[] }>("/commission-rates"),
+  settleCreatorCommissions: (id: string) =>
+    request<{ ok: boolean; count: number; amount: number }>(
+      `/commission-rates/${id}/settle`,
+      { method: "POST" },
+    ),
+  setCommissionRate: (id: string, rate: number | null) =>
+    request<any>(`/commission-rates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ rate }),
+    }),
   retryEmail: (id: string) =>
     request<any>(`/email-outbox/${id}/retry`, { method: "POST" }),
   mailerStatus: () =>
