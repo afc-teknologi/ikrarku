@@ -19,6 +19,8 @@ import {
   BarChart3,
   Bold,
   BookOpen,
+  BadgeCheck,
+  Anchor,
   CalendarDays,
   Check,
   ChevronDown,
@@ -185,7 +187,9 @@ type FeatureType =
   | "countdown"
   | "location"
   | "sound"
-  | "icon";
+  | "icon"
+  | "love-story"
+  | "credit";
 type ColumnCount = 1 | 2 | 3 | 4;
 type BackgroundEffect =
   | "none"
@@ -255,6 +259,39 @@ type SocialIconName =
   | "music"
   | "camera"
   | "star";
+// TC-108 / TC-127: layer background tambahan di atas background utama.
+type BackgroundLayer = {
+  id: string;
+  url?: string;
+  key?: string;
+  opacity: number;
+  size: "cover" | "contain" | "auto";
+  position: "center" | "top" | "bottom" | "left" | "right";
+  repeat: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
+  blend?: string;
+  fixed?: boolean;
+  offsetX?: number;
+  offsetY?: number;
+  scale?: number;
+};
+// TC-120: item cerita pada section Love Story.
+type LoveStoryItem = {
+  id: string;
+  year: string;
+  title: string;
+  body: string;
+  imageUrl?: string;
+  imageKey?: string;
+};
+// TC-129: template layout untuk feature Image.
+type ImageLayoutTemplate =
+  | "single"
+  | "side-left"
+  | "side-right"
+  | "stacked"
+  | "overlap"
+  | "banner"
+  | "framed-caption";
 type ImageFrame =
   | "none"
   | "rounded"
@@ -388,6 +425,56 @@ type Feature = DesignerLayout & {
   posY?: number; // TC-103 (px dari atas column)
   boxWidth?: number; // TC-103 (persen)
   boxHeight?: number; // TC-103 (px, 0 = auto)
+  // ---- QA batch TC-107..TC-137 ----
+  mobile?: Partial<Feature>; // TC-112 setting mobile terpisah dari desktop
+  titleColor?: string; // TC-121/TC-122 warna per elemen teks
+  bodyColor?: string;
+  title2?: string; // TC-118 Heading 2
+  body2?: string; // TC-118 Supporting Text 2
+  showTitle2?: boolean;
+  showBody2?: boolean;
+  title2FontSize?: number;
+  body2FontSize?: number;
+  title2Color?: string;
+  body2Color?: string;
+  backgroundImageUrl?: string; // TC-117 background image per feature
+  backgroundImageKey?: string;
+  backgroundImageSize?: "cover" | "contain" | "auto";
+  backgroundImagePosition?: "center" | "top" | "bottom" | "left" | "right";
+  backgroundImageOpacity?: number;
+  backgroundImageFixed?: boolean; // TC-107 background diam saat scroll
+  fieldBackground?: string; // TC-125 custom kolom input
+  fieldTextColor?: string;
+  fieldBorderColor?: string;
+  fieldRadius?: number;
+  buttonBackground?: string; // TC-125 custom button submit
+  buttonTextColor?: string;
+  buttonRadius?: number;
+  buttonBorderColor?: string;
+  buttonBorderWidth?: number;
+  cardBackground?: string; // TC-121/TC-122 warna kolom kartu
+  cardTextColor?: string;
+  cardBorderColor?: string;
+  cardRadius?: number;
+  mapButtonBackground?: string; // TC-124 button Buka Google Maps
+  mapButtonTextColor?: string;
+  mapButtonRadius?: number;
+  mapButtonBorderColor?: string;
+  mapButtonBorderWidth?: number;
+  mapButtonShape?: "rounded" | "pill" | "square" | "outline";
+  mapButtonLabel?: string;
+  showLocationQr?: boolean; // TC-132
+  imageLayoutTemplate?: ImageLayoutTemplate; // TC-129
+  imageCaption?: string;
+  imageSecondaryUrl?: string;
+  imageSecondaryKey?: string;
+  gallerySlideshow?: boolean; // TC-126 slideshow otomatis
+  gallerySlideshowMs?: number;
+  loveStoryItems?: LoveStoryItem[]; // TC-120
+  loveStoryLayout?: "timeline" | "cards" | "zigzag";
+  creditText?: string; // TC-123
+  creditSongTitle?: string;
+  creditLink?: string;
 };
 
 type AuthAccount = {
@@ -433,6 +520,13 @@ type CanvasSection = {
   templateInstanceId?: string;
   sourceTemplateId?: string;
   sourceTemplateName?: string;
+  // ---- QA batch TC-107..TC-137 ----
+  mobile?: Partial<CanvasSection>; // TC-112 setting mobile terpisah
+  backgroundFixed?: boolean; // TC-107/TC-127 background utama diam saat scroll
+  backgroundSize?: "cover" | "contain" | "auto";
+  backgroundLayers?: BackgroundLayer[]; // TC-108 layered background
+  columnWidths?: number[]; // TC-114 lebar kolom hasil drag grid line
+  showGuides?: boolean; // TC-113 garis guide/margin
 };
 
 type Guest = {
@@ -734,6 +828,40 @@ const defaultFeatureStyle = {
   coverExitEasing: "ease" as const,
 };
 
+// QA TC-112: pengaturan Desktop dan Mobile disimpan terpisah. Nilai dasar adalah
+// Desktop; `mobile` hanya berisi field yang sengaja dioverride untuk mobile.
+type DeviceMode = "desktop" | "mobile";
+const DeviceContext = createContext<DeviceMode>("desktop");
+function resolveFeature(feature: Feature, device: DeviceMode): Feature {
+  if (device !== "mobile" || !feature.mobile) return feature;
+  const override = { ...feature.mobile } as Partial<Feature>;
+  delete (override as { mobile?: unknown }).mobile;
+  return { ...feature, ...override };
+}
+function resolveSection(
+  section: CanvasSection,
+  device: DeviceMode,
+): CanvasSection {
+  if (device !== "mobile" || !section.mobile) return section;
+  const override = { ...section.mobile } as Partial<CanvasSection>;
+  delete (override as { mobile?: unknown }).mobile;
+  delete (override as { columns?: unknown }).columns;
+  delete (override as { id?: unknown }).id;
+  return { ...section, ...override };
+}
+// Patch ditulis ke slot device yang sedang aktif agar Desktop tidak ikut berubah
+// saat designer mengedit tampilan Mobile (dan sebaliknya).
+function applyDevicePatch<T extends { mobile?: Partial<T> }>(
+  target: T,
+  patch: Partial<T>,
+  device: DeviceMode,
+): T {
+  if (device !== "mobile") return { ...target, ...patch };
+  const nextMobile = { ...(target.mobile || {}), ...patch } as Partial<T>;
+  delete (nextMobile as { mobile?: unknown }).mobile;
+  return { ...target, mobile: nextMobile } as T;
+}
+
 function makeFeature(
   type: FeatureType,
   title?: string,
@@ -760,6 +888,8 @@ function makeFeature(
     location: ["Lokasi Pernikahan", "Grand Ballroom Arunika, Semarang"],
     sound: ["Wedding Sound", "Romantic Piano"],
     icon: ["Follow Our Journey", "Sosial media & icon dekoratif"],
+    "love-story": ["Our Love Story", "Perjalanan kami dari awal hingga hari ini"],
+    credit: ["Terima kasih", "Undangan ini dibuat dengan penuh cinta"],
   };
   const [defaultTitle, defaultBody] = copy[type];
   return {
@@ -897,6 +1027,55 @@ function makeFeature(
     iconSize: type === "icon" ? 26 : undefined,
     iconColor: type === "icon" ? "#154f40" : undefined,
     iconStyle: type === "icon" ? "circle" : undefined,
+    // ---- QA batch TC-107..TC-137 ----
+    showTitle2: false, // TC-118
+    showBody2: false,
+    title2: "Sub Heading",
+    body2: "Tambahkan keterangan pendukung kedua di sini.",
+    title2FontSize: 20,
+    body2FontSize: 11,
+    backgroundImageOpacity: 100, // TC-117
+    backgroundImageSize: "cover",
+    backgroundImagePosition: "center",
+    backgroundImageFixed: false, // TC-107
+    fieldRadius: 8, // TC-125
+    buttonRadius: 8,
+    buttonBorderWidth: 0,
+    cardRadius: 12, // TC-121/TC-122
+    mapButtonShape: type === "location" ? "rounded" : undefined, // TC-124
+    mapButtonLabel: type === "location" ? "Buka Google Maps" : undefined,
+    showLocationQr: type === "location" ? true : undefined, // TC-132
+    imageLayoutTemplate: type === "image" ? "single" : undefined, // TC-129
+    imageCaption: type === "image" ? "" : undefined,
+    gallerySlideshow: type === "gallery" ? false : undefined, // TC-126
+    gallerySlideshowMs: type === "gallery" ? 3500 : undefined,
+    loveStoryLayout: type === "love-story" ? "timeline" : undefined, // TC-120
+    loveStoryItems:
+      type === "love-story"
+        ? [
+            {
+              id: uid("ls"),
+              year: "2019",
+              title: "Pertama Bertemu",
+              body: "Kami dipertemukan di sebuah acara kampus dan mulai saling mengenal.",
+            },
+            {
+              id: uid("ls"),
+              year: "2022",
+              title: "Mulai Serius",
+              body: "Perjalanan panjang membawa kami pada keputusan untuk melangkah bersama.",
+            },
+            {
+              id: uid("ls"),
+              year: "2026",
+              title: "Melamar",
+              body: "Dengan restu keluarga, kami memutuskan untuk menikah.",
+            },
+          ]
+        : undefined,
+    creditText: type === "credit" ? "Created by ikrarku" : undefined, // TC-123
+    creditSongTitle: type === "credit" ? "" : undefined,
+    creditLink: type === "credit" ? "https://ikrarku.id" : undefined,
   };
 }
 
@@ -1207,6 +1386,18 @@ const widgetLibrary: {
     label: "Sound",
     description: "Preset backsound untuk opening atau section",
     icon: PlayCircle,
+  },
+  {
+    type: "love-story",
+    label: "Love Story",
+    description: "Timeline perjalanan pasangan dengan teks dan foto",
+    icon: BookOpen,
+  },
+  {
+    type: "credit",
+    label: "Credit / Watermark",
+    description: "Created by dan judul lagu di halaman penutup",
+    icon: BadgeCheck,
   },
   {
     type: "icon",
@@ -2154,6 +2345,12 @@ function App() {
           serverTemplates.map((item: any) => ({
             ...item,
             preview: item.preview ? assetUrl(item.preview) : undefined,
+            sampleImage: item.sampleImage
+              ? assetUrl(item.sampleImage)
+              : undefined,
+            headerImage: item.headerImage
+              ? assetUrl(item.headerImage)
+              : undefined,
           })),
         );
         setArticleItems(
@@ -2694,6 +2891,25 @@ function App() {
       window.clearInterval(timer);
     };
   }, [currentAccountId]);
+
+  const refreshPublicCatalog = useCallback(async () => {
+    try {
+      const data = await api.publicBootstrap();
+      const mapped = (data.templates || []).map((item: any) => ({
+        ...item,
+        preview: item.preview ? assetUrl(item.preview) : undefined,
+        sampleImage: item.sampleImage ? assetUrl(item.sampleImage) : undefined,
+        headerImage: item.headerImage ? assetUrl(item.headerImage) : undefined,
+      })) as Template[];
+      setPublicTemplates(mapped);
+    } catch {
+      /* pertahankan katalog lama bila request gagal */
+    }
+  }, []);
+  useEffect(() => {
+    if (view !== "landing" && view !== "templates") return;
+    void refreshPublicCatalog();
+  }, [view, refreshPublicCatalog]);
 
   const flash = (message: string) => {
     setToast(message);
@@ -4350,6 +4566,7 @@ function App() {
 }
 
 function PublicWeddingPage({ site }: { site: any }) {
+  const publicDevice = useViewportDevice();
   const guestName = useMemo(() => {
     try {
       return (
@@ -4425,6 +4642,7 @@ function PublicWeddingPage({ site }: { site: any }) {
       );
   };
   return (
+    <DeviceContext value={publicDevice}>
     <div className="public-site-route">
       <WeddingCanvas
         page="pages"
@@ -4437,7 +4655,25 @@ function PublicWeddingPage({ site }: { site: any }) {
         guestName={guestName}
       />
     </div>
+    </DeviceContext>
   );
+}
+
+// QA TC-112: pengunjung website publik otomatis mendapat setting sesuai lebar layar.
+function useViewportDevice(): DeviceMode {
+  const [device, setDevice] = useState<DeviceMode>(() =>
+    typeof window !== "undefined" && window.innerWidth <= 768
+      ? "mobile"
+      : "desktop",
+  );
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 768px)");
+    const sync = () => setDevice(query.matches ? "mobile" : "desktop");
+    sync();
+    query.addEventListener("change", sync);
+    return () => query.removeEventListener("change", sync);
+  }, []);
+  return device;
 }
 
 function LandingPage(props: {
@@ -4946,6 +5182,8 @@ function TemplateJourneyPage({
   onOrder: () => void;
 }) {
   const [previewOpen, setPreviewOpen] = useState(false);
+  // QA TC-136: mode preview (Desktop / Mobile) pada halaman detail template.
+  const [journeyDevice, setJourneyDevice] = useState<DeviceMode>("desktop");
   const heroImage =
     template.headerImage || template.sampleImage || template.preview;
   return (
@@ -5061,14 +5299,35 @@ function TemplateJourneyPage({
         </section>
       </main>
       {previewOpen && (
-        <div className="journey-preview-overlay actual-template-preview">
-          <button
-            className="preview-close"
-            onClick={() => setPreviewOpen(false)}
-          >
-            <X size={18} />
-          </button>
-          <div className="actual-template-preview-shell">
+        <div
+          className={`journey-preview-overlay actual-template-preview device-${journeyDevice}`}
+        >
+          {/* QA TC-136: toggle mode Desktop / Mobile pada preview template. */}
+          <div className="journey-preview-toolbar">
+            <div className="journey-device-switch">
+              <button
+                className={journeyDevice === "desktop" ? "active" : ""}
+                onClick={() => setJourneyDevice("desktop")}
+              >
+                <Monitor size={15} /> Desktop
+              </button>
+              <button
+                className={journeyDevice === "mobile" ? "active" : ""}
+                onClick={() => setJourneyDevice("mobile")}
+              >
+                <Smartphone size={15} /> Mobile
+              </button>
+            </div>
+            <button
+              className="preview-close"
+              onClick={() => setPreviewOpen(false)}
+            >
+              <X size={18} />
+            </button>
+          </div>
+          {/* QA TC-137: mode Desktop memakai lebar penuh layar, bukan ukuran tablet. */}
+          <DeviceContext value={journeyDevice}>
+          <div className={`actual-template-preview-shell device-${journeyDevice}`}>
             {template.canvasSections?.length ? (
               <WeddingCanvas
                 page="pages"
@@ -5095,6 +5354,7 @@ function TemplateJourneyPage({
               </div>
             )}
           </div>
+          </DeviceContext>
         </div>
       )}
     </div>
@@ -7474,10 +7734,9 @@ function Templates({
                       ? "ONCE UPON A PROMISE"
                       : "THE WEDDING OF"}
                 </small>
-                <strong>
-                  Amara
-                  <br />& Arjuna
-                </strong>
+                {/* QA TC-128: tampilkan nama template yang sedang dibuat,
+                    bukan nama pasangan default bawaan. */}
+                <strong>{template.name}</strong>
                 <i />
                 <em>12 · 12 · 2026</em>
               </div>
@@ -7967,12 +8226,52 @@ function Editor({
     setActivePage("pages");
   };
 
+  // QA TC-112: saat mode Mobile aktif, perubahan disimpan pada slot override
+  // `mobile` sehingga tampilan Desktop tidak ikut berubah (dan sebaliknya).
   const updateSection = (sectionId: string, patch: Partial<CanvasSection>) => {
+    setDirty(true);
+    commitSections((previous) =>
+      previous.map((section) =>
+        section.id === sectionId
+          ? applyDevicePatch(section, patch, previewMode)
+          : section,
+      ),
+    );
+  };
+  // Beberapa pengaturan bersifat struktural dan selalu ditulis ke nilai dasar.
+  const updateSectionShared = (
+    sectionId: string,
+    patch: Partial<CanvasSection>,
+  ) => {
     setDirty(true);
     commitSections((previous) =>
       previous.map((section) =>
         section.id === sectionId ? { ...section, ...patch } : section,
       ),
+    );
+  };
+  const resetSectionMobile = (sectionId: string) => {
+    setDirty(true);
+    commitSections((previous) =>
+      previous.map((section) =>
+        section.id === sectionId ? { ...section, mobile: undefined } : section,
+      ),
+    );
+  };
+  const resetFeatureMobile = (featureId: string) => {
+    setDirty(true);
+    commitSections((previous) =>
+      previous.map((section) => ({
+        ...section,
+        columns: section.columns.map((column) => ({
+          ...column,
+          features: column.features.map((feature) =>
+            feature.id === featureId
+              ? { ...feature, mobile: undefined }
+              : feature,
+          ),
+        })),
+      })),
     );
   };
 
@@ -7984,11 +8283,63 @@ function Editor({
         columns: section.columns.map((column) => ({
           ...column,
           features: column.features.map((feature) =>
-            feature.id === featureId ? { ...feature, ...patch } : feature,
+            feature.id === featureId
+              ? applyDevicePatch(feature, patch, previewMode)
+              : feature,
           ),
         })),
       })),
     );
+  };
+
+  // QA TC-111: memindahkan column (beserta seluruh feature di dalamnya) ke canvas lain.
+  const moveColumnToSection = (
+    payload: string,
+    targetSectionId: string,
+    targetIndex?: number,
+  ) => {
+    const [fromSectionId, columnId] = payload.split("::");
+    if (!fromSectionId || !columnId) return;
+    if (fromSectionId === targetSectionId && targetIndex === undefined) return;
+    setDirty(true);
+    commitSections((previous) => {
+      const source = previous.find((item) => item.id === fromSectionId);
+      const moving = source?.columns.find((item) => item.id === columnId);
+      if (!moving) return previous;
+      if (source && source.id !== targetSectionId && source.columns.length <= 1)
+        return previous;
+      return previous.map((section) => {
+        if (section.id === fromSectionId && section.id === targetSectionId) {
+          const rest = section.columns.filter((item) => item.id !== columnId);
+          const at = Math.min(
+            Math.max(0, targetIndex ?? rest.length),
+            rest.length,
+          );
+          const columns = [...rest];
+          columns.splice(at, 0, moving);
+          return { ...section, columns, columnWidths: undefined };
+        }
+        if (section.id === fromSectionId)
+          return {
+            ...section,
+            columns: section.columns.filter((item) => item.id !== columnId),
+            columnWidths: undefined,
+          };
+        if (section.id === targetSectionId) {
+          const columns = [...section.columns];
+          const at = Math.min(
+            Math.max(0, targetIndex ?? columns.length),
+            columns.length,
+          );
+          columns.splice(at, 0, moving);
+          return { ...section, columns, columnWidths: undefined };
+        }
+        return section;
+      });
+    });
+    setSelectedSectionId(targetSectionId);
+    setSelectedColumnId(columnId);
+    flash("Column dipindahkan ke canvas tujuan.");
   };
 
   const addCanvas = () => {
@@ -8333,29 +8684,28 @@ function Editor({
     }
   };
 
+  // QA TC-117: background image tersedia untuk semua feature, bukan hanya
+  // Buka Undangan. Feature lain menyimpannya pada backgroundImageUrl agar tidak
+  // bentrok dengan media utama (foto, video, sound).
   const uploadFeatureBackground = async (file: File | undefined) => {
-    if (
-      !file ||
-      !selectedFeature ||
-      selectedFeature.type !== "invitation-cover"
-    )
-      return;
+    if (!file || !selectedFeature) return;
     if (!file.type.startsWith("image/")) {
-      flash("Background Buka Undangan harus berupa image.");
+      flash("Background harus berupa image.");
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      flash("Background Buka Undangan maksimal 2 MB.");
+      flash("Background image maksimal 2 MB.");
       return;
     }
     try {
-      const saved = await uploadToServer(file, "invitation-background");
-      updateFeature(selectedFeature.id, {
-        mediaKey: saved.key,
-        mediaUrl: saved.url,
-        mediaName: saved.name,
-      });
-      flash("Background Buka Undangan berhasil disimpan ke server.");
+      const saved = await uploadToServer(file, "feature-background");
+      updateFeature(
+        selectedFeature.id,
+        selectedFeature.type === "invitation-cover"
+          ? { mediaKey: saved.key, mediaUrl: saved.url, mediaName: saved.name }
+          : { backgroundImageKey: saved.key, backgroundImageUrl: saved.url },
+      );
+      flash("Background image berhasil disimpan ke server.");
     } catch (error) {
       flash(error instanceof Error ? error.message : "Upload gagal.");
     }
@@ -8613,6 +8963,14 @@ function Editor({
                   onDragOver={(event) => event.preventDefault()}
                   onDrop={(event) => {
                     event.preventDefault();
+                    // QA TC-111: canvas menerima drop column maupun reorder canvas.
+                    const column = event.dataTransfer.getData(
+                      "application/x-ikrarku-column",
+                    );
+                    if (column) {
+                      moveColumnToSection(column, section.id);
+                      return;
+                    }
                     reorderSectionByDrop(
                       event.dataTransfer.getData(
                         "application/x-ikrarku-canvas",
@@ -8669,11 +9027,49 @@ function Editor({
                     </div>
                   </div>
                   {section.columns.map((column, columnIndex) => (
-                    <div className="tree-column" key={column.id}>
+                    <div
+                      className="tree-column"
+                      key={column.id}
+                      /* QA TC-111: column dapat di-drag ke canvas lain. */
+                      onDragOver={(event) => {
+                        if (
+                          event.dataTransfer.types.includes(
+                            "application/x-ikrarku-column",
+                          )
+                        ) {
+                          event.preventDefault();
+                          event.currentTarget.classList.add("column-drop-ready");
+                        }
+                      }}
+                      onDragLeave={(event) =>
+                        event.currentTarget.classList.remove("column-drop-ready")
+                      }
+                      onDrop={(event) => {
+                        event.currentTarget.classList.remove("column-drop-ready");
+                        const payload = event.dataTransfer.getData(
+                          "application/x-ikrarku-column",
+                        );
+                        if (!payload) return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        moveColumnToSection(payload, section.id, columnIndex);
+                      }}
+                    >
                       <button
                         className={`tree-row column-node ${selectedColumnId === column.id && !selectedFeatureId ? "active" : ""}`}
+                        draggable
+                        onDragStart={(event) => {
+                          event.stopPropagation();
+                          event.dataTransfer.setData(
+                            "application/x-ikrarku-column",
+                            `${section.id}::${column.id}`,
+                          );
+                          event.dataTransfer.effectAllowed = "move";
+                        }}
                         onClick={() => selectColumn(section.id, column.id)}
+                        title="Drag untuk memindahkan column ke canvas lain"
                       >
+                        <GripVertical size={12} />
                         <span className="column-number">{columnIndex + 1}</span>
                         <span>Column {columnIndex + 1}</span>
                         <small>{column.features.length} features</small>
@@ -8766,6 +9162,8 @@ function Editor({
                 feature ke column
               </span>
             </div>
+            {/* QA TC-112: canvas dirender memakai setting device yang dipilih. */}
+            <DeviceContext value={previewMode}>
             <div className={`canvas-frame ${previewMode}`}>
               {activePage === "invitees" ? (
                 <InviteeManagementPage
@@ -8796,9 +9194,11 @@ function Editor({
                   onColumnDrop={onColumnDrop}
                   onCanvasDrop={reorderSectionByDrop}
                   animationNonce={animationNonce}
+                  updateSectionLayout={updateSection}
                 />
               )}
             </div>
+            </DeviceContext>
           </main>
           <aside className="editor-right">
             <div className="inspector-tabs">
@@ -8822,6 +9222,29 @@ function Editor({
               </button>
             </div>
             <div className="inspector-scroll">
+              {/* QA TC-112: penanda bahwa perubahan hanya berlaku untuk mode aktif. */}
+              {previewMode === "mobile" && (selectedFeature || selectedSection) && (
+                <div className="device-scope-banner">
+                  <Smartphone size={15} />
+                  <div>
+                    <strong>Mengedit tampilan Mobile</strong>
+                    <span>
+                      Perubahan di sini hanya berlaku untuk Mobile. Tampilan
+                      Desktop tidak ikut berubah.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() =>
+                      selectedFeature
+                        ? resetFeatureMobile(selectedFeature.id)
+                        : selectedSection &&
+                          resetSectionMobile(selectedSection.id)
+                    }
+                  >
+                    Samakan dengan Desktop
+                  </button>
+                </div>
+              )}
               {selectedFeature ? (
                 <FeatureInspector
                   feature={selectedFeature}
@@ -8845,6 +9268,9 @@ function Editor({
                   section={selectedSection}
                   tab={inspectorTab}
                   update={(patch) => updateSection(selectedSection.id, patch)}
+                  updateShared={(patch) =>
+                    updateSectionShared(selectedSection.id, patch)
+                  }
                   setColumnCount={(count) =>
                     setColumnCount(selectedSection.id, count)
                   }
@@ -9154,7 +9580,10 @@ function FeatureInspector({
           </div>
         </div>
         {textTypes.includes(feature.type) && feature.type !== "location" && (
-          <HeadingBodyEditor feature={feature} update={update} />
+          <>
+            <HeadingBodyEditor feature={feature} update={update} />
+            <SecondaryTextEditor feature={feature} update={update} />
+          </>
         )}
         {feature.type === "form" && (
           <FormFieldEditor
@@ -9698,6 +10127,21 @@ function FeatureInspector({
             </select>
           </label>
         )}
+        {feature.type === "love-story" && (
+          <LoveStoryEditor feature={feature} update={update} />
+        )}
+        {feature.type === "credit" && (
+          <CreditEditor feature={feature} update={update} />
+        )}
+        {feature.type === "image" && (
+          <ImageLayoutEditor feature={feature} update={update} />
+        )}
+        {feature.type === "gallery" && (
+          <GallerySlideshowEditor feature={feature} update={update} />
+        )}
+        {feature.type === "location" && (
+          <MapButtonEditor feature={feature} update={update} />
+        )}
         <ExtraTextEditor feature={feature} update={update} />
       </div>
     );
@@ -10195,6 +10639,13 @@ function FeatureInspector({
             </select>
           </label>
         )}
+        <PerElementColorEditor feature={feature} update={update} />
+        <FeatureBackgroundImageEditor
+          feature={feature}
+          update={update}
+          uploadFeatureBackground={uploadFeatureBackground}
+        />
+        <FormStyleEditor feature={feature} update={update} />
         <FreePositionControls feature={feature} update={update} />
         <BoxStyle feature={feature} update={update} />
       </div>
@@ -10953,10 +11404,192 @@ function InviteeManagementPage({
   );
 }
 
+
+// QA TC-108 & TC-127 — layer background tambahan di atas background utama.
+function BackgroundLayerEditor({
+  section,
+  update,
+}: {
+  section: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+}) {
+  const layers = section.backgroundLayers || [];
+  const commit = (next: BackgroundLayer[]) => update({ backgroundLayers: next });
+  const patch = (id: string, next: Partial<BackgroundLayer>) =>
+    commit(layers.map((item) => (item.id === id ? { ...item, ...next } : item)));
+  return (
+    <div className="background-layer-editor">
+      <div className="group-heading">
+        <strong>Layer Background Tambahan</strong>
+        <button
+          onClick={() =>
+            commit([
+              ...layers,
+              {
+                id: uid("bglayer"),
+                url: "",
+                opacity: 100,
+                size: "cover",
+                position: "center",
+                repeat: "no-repeat",
+                fixed: false,
+                offsetX: 50,
+                offsetY: 50,
+                scale: 100,
+              },
+            ])
+          }
+        >
+          <Plus size={14} /> Tambah layer
+        </button>
+      </div>
+      <div className="layout-help">
+        Layer digambar di atas background utama. Gunakan untuk dekorasi, tekstur,
+        atau ornamen. Biarkan background utama pada mode diam agar hanya layer ini
+        yang bergerak.
+      </div>
+      {layers.map((layer, index) => (
+        <div className="extra-text-row" key={layer.id}>
+          <div className="form-spec-head">
+            <span>Layer {index + 1}</span>
+            <button onClick={() => commit(layers.filter((item) => item.id !== layer.id))}>
+              <Trash2 size={12} />
+            </button>
+          </div>
+          <label>
+            URL gambar layer
+            <input
+              value={layer.url || ""}
+              onChange={(event) => patch(layer.id, { url: event.target.value })}
+              placeholder="https://... atau /uploads/..."
+            />
+          </label>
+          <div className="two-inputs">
+            <label>
+              Ukuran
+              <select
+                value={layer.size}
+                onChange={(event) =>
+                  patch(layer.id, {
+                    size: event.target.value as BackgroundLayer["size"],
+                  })
+                }
+              >
+                <option value="cover">Cover</option>
+                <option value="contain">Contain</option>
+                <option value="auto">Auto</option>
+              </select>
+            </label>
+            <label>
+              Repeat
+              <select
+                value={layer.repeat}
+                onChange={(event) =>
+                  patch(layer.id, {
+                    repeat: event.target.value as BackgroundLayer["repeat"],
+                  })
+                }
+              >
+                <option value="no-repeat">Tidak diulang</option>
+                <option value="repeat">Ulang</option>
+                <option value="repeat-x">Ulang horizontal</option>
+                <option value="repeat-y">Ulang vertikal</option>
+              </select>
+            </label>
+          </div>
+          <div className="two-inputs">
+            <label>
+              Geser X <span>{layer.offsetX ?? 50}%</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={layer.offsetX ?? 50}
+                onChange={(event) =>
+                  patch(layer.id, { offsetX: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Geser Y <span>{layer.offsetY ?? 50}%</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={layer.offsetY ?? 50}
+                onChange={(event) =>
+                  patch(layer.id, { offsetY: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <div className="two-inputs">
+            <label>
+              Opacity <span>{layer.opacity ?? 100}%</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={layer.opacity ?? 100}
+                onChange={(event) =>
+                  patch(layer.id, { opacity: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Skala <span>{layer.scale ?? 100}%</span>
+              <input
+                type="range"
+                min="50"
+                max="200"
+                value={layer.scale ?? 100}
+                onChange={(event) =>
+                  patch(layer.id, { scale: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <label>
+            Blend mode
+            <select
+              value={layer.blend || "normal"}
+              onChange={(event) => patch(layer.id, { blend: event.target.value })}
+            >
+              <option value="normal">Normal</option>
+              <option value="multiply">Multiply</option>
+              <option value="screen">Screen</option>
+              <option value="overlay">Overlay</option>
+              <option value="soft-light">Soft light</option>
+            </select>
+          </label>
+          <div className="setting-row compact">
+            <div>
+              <Anchor size={14} />
+              <span>
+                <strong>Layer diam saat scroll</strong>
+              </span>
+            </div>
+            <button
+              className={`toggle ${layer.fixed ? "on" : ""}`}
+              onClick={() => patch(layer.id, { fixed: !layer.fixed })}
+            >
+              <i />
+            </button>
+          </div>
+        </div>
+      ))}
+      {!layers.length && (
+        <div className="layout-help">Belum ada layer tambahan.</div>
+      )}
+    </div>
+  );
+}
+
 function SectionInspector({
   section,
   tab,
   update,
+  updateShared,
   setColumnCount,
   backgroundInput,
   uploadBackground,
@@ -10964,6 +11597,9 @@ function SectionInspector({
   section: CanvasSection;
   tab: InspectorTab;
   update: (patch: Partial<CanvasSection>) => void;
+  // QA TC-112: nama canvas dan layout mode bersifat struktural, selalu ditulis
+  // ke nilai dasar agar tidak berbeda antara Desktop dan Mobile.
+  updateShared: (patch: Partial<CanvasSection>) => void;
   setColumnCount: (count: ColumnCount) => void;
   backgroundInput: React.RefObject<HTMLInputElement | null>;
   uploadBackground: (file: File | undefined) => Promise<void>;
@@ -10982,7 +11618,7 @@ function SectionInspector({
           Canvas name
           <input
             value={section.name}
-            onChange={(event) => update({ name: event.target.value })}
+            onChange={(event) => updateShared({ name: event.target.value })}
           />
         </label>
         <label>
@@ -10991,7 +11627,7 @@ function SectionInspector({
             value={section.layoutMode}
             onChange={(event) => {
               const value = event.target.value as CanvasLayoutMode;
-              update({ layoutMode: value });
+              updateShared({ layoutMode: value });
               if (value === "split-fixed-left" || value === "split-fixed-right")
                 setColumnCount(2);
             }}
@@ -11080,6 +11716,43 @@ function SectionInspector({
             <Trash2 size={14} /> Remove background image
           </button>
         )}
+        {/* QA TC-107 & TC-127: background utama dikunci agar tidak ikut scroll. */}
+        <div className="setting-row compact">
+          <div>
+            <Anchor size={16} />
+            <span>
+              <strong>Background diam saat di-scroll</strong>
+              <small>
+                Background utama tetap di tempat, hanya teks dan layer di atasnya
+                yang bergerak.
+              </small>
+            </span>
+          </div>
+          <button
+            className={`toggle ${section.backgroundFixed ? "on" : ""}`}
+            onClick={() => update({ backgroundFixed: !section.backgroundFixed })}
+          >
+            <i />
+          </button>
+        </div>
+        <label>
+          Ukuran background
+          <select
+            value={section.backgroundSize || "cover"}
+            onChange={(event) =>
+              update({
+                backgroundSize: event.target
+                  .value as CanvasSection["backgroundSize"],
+              })
+            }
+          >
+            <option value="cover">Cover</option>
+            <option value="contain">Contain</option>
+            <option value="auto">Auto</option>
+          </select>
+        </label>
+        {/* QA TC-108: layer background tambahan di dalam background utama. */}
+        <BackgroundLayerEditor section={section} update={update} />
       </div>
     );
   return (
@@ -11159,6 +11832,7 @@ function WeddingCanvas({
   onCanvasDrop,
   animationNonce = 0,
   guestName,
+  updateSectionLayout,
 }: {
   page: PageKey;
   sections: CanvasSection[];
@@ -11184,6 +11858,12 @@ function WeddingCanvas({
     featureId: string,
   ) => void;
   updateFeature?: (featureId: string, patch: Partial<Feature>) => void;
+  // QA TC-113/TC-114/TC-115: perubahan layout langsung dari canvas (drag guide,
+  // grid line, dan border section).
+  updateSectionLayout?: (
+    sectionId: string,
+    patch: Partial<CanvasSection>,
+  ) => void;
   onColumnDrop?: (
     event: React.DragEvent,
     sectionId: string,
@@ -11194,6 +11874,8 @@ function WeddingCanvas({
   guestName?: string;
 }) {
   const thumbnail = useContext(ThumbnailContext);
+  // QA TC-112: device aktif menentukan setting mana yang dipakai.
+  const device = useContext(DeviceContext);
   const coverEntry = useMemo(() => {
     for (const section of sections)
       for (const column of section.columns)
@@ -11345,7 +12027,9 @@ function WeddingCanvas({
           <a>RSVP</a>
         </div>
       </nav>
-      {sections.map((section) => {
+      {sections.map((rawSection) => {
+        // QA TC-112: nilai section mengikuti device aktif (Desktop / Mobile).
+        const section = resolveSection(rawSection, device);
         const filter = getBackgroundFilter(section.backgroundEffect);
         const hasVisibleFeatures =
           editable ||
@@ -11402,8 +12086,10 @@ function WeddingCanvas({
               } as React.CSSProperties
             }
           >
+            {/* QA TC-107 & TC-127: background utama dapat dikunci (fixed) sehingga
+                hanya konten/layer di atasnya yang bergerak saat di-scroll. */}
             <div
-              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)}`}
+              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed ? "is-fixed" : ""}`}
               style={{
                 backgroundImage: section.backgroundUrl
                   ? `url(${section.backgroundUrl})`
@@ -11411,10 +12097,34 @@ function WeddingCanvas({
                 backgroundPosition: section.backgroundPosition,
                 backgroundRepeat: section.backgroundRepeat,
                 backgroundSize:
-                  section.backgroundRepeat === "no-repeat" ? "cover" : "auto",
+                  section.backgroundSize ||
+                  (section.backgroundRepeat === "no-repeat" ? "cover" : "auto"),
+                backgroundAttachment: section.backgroundFixed
+                  ? "fixed"
+                  : "scroll",
                 filter,
               }}
             />
+            {/* QA TC-108: layer background tambahan di atas background utama. */}
+            {(section.backgroundLayers || []).map((layer, layerIndex) => (
+              <div
+                key={layer.id}
+                className={`background-extra-layer ${layer.fixed ? "is-fixed" : ""}`}
+                style={{
+                  backgroundImage: layer.url ? `url(${layer.url})` : undefined,
+                  backgroundSize: layer.size,
+                  backgroundPosition: `${layer.offsetX ?? 50}% ${layer.offsetY ?? 50}%`,
+                  backgroundRepeat: layer.repeat,
+                  backgroundAttachment: layer.fixed ? "fixed" : "scroll",
+                  opacity: (layer.opacity ?? 100) / 100,
+                  mixBlendMode:
+                    (layer.blend as React.CSSProperties["mixBlendMode"]) ||
+                    "normal",
+                  transform: layer.scale ? `scale(${layer.scale / 100})` : undefined,
+                  zIndex: 1 + layerIndex,
+                }}
+              />
+            ))}
             {section.backgroundVideoUrl && (
               <video
                 className={`background-video-layer ${getBackgroundMotionClass(section.backgroundMotion)}`}
@@ -11425,6 +12135,25 @@ function WeddingCanvas({
                 muted
                 playsInline
                 style={{ filter }}
+              />
+            )}
+            {/* QA TC-113: garis guide / margin yang bisa di-drag. */}
+            {editable && section.showGuides !== false && (
+              <CanvasGuides
+                section={section}
+                onChange={(patch) => updateSectionLayout?.(section.id, patch)}
+              />
+            )}
+            {/* QA TC-115: tinggi section diubah dengan menarik border bawah. */}
+            {editable && (
+              <div
+                className="section-resize-handle"
+                title="Tarik untuk mengubah tinggi section"
+                onPointerDown={(event) =>
+                  startSectionResize(event, section, (patch) =>
+                    updateSectionLayout?.(section.id, patch),
+                  )
+                }
               />
             )}
             {editable && (
@@ -11443,10 +12172,23 @@ function WeddingCanvas({
                 <GripVertical size={15} /> Drag Canvas
               </div>
             )}
-            <div className={`canvas-columns columns-${section.columns.length}`}>
+            <div
+              className={`canvas-columns columns-${section.columns.length}`}
+              style={
+                section.columnWidths &&
+                section.columnWidths.length === section.columns.length
+                  ? {
+                      gridTemplateColumns: section.columnWidths
+                        .map((value) => `${value}fr`)
+                        .join(" "),
+                    }
+                  : undefined
+              }
+            >
               {section.columns.map((column, columnIndex) => (
                 <div
                   key={column.id}
+                  data-column-id={column.id}
                   className={`canvas-column ${editable && selectedColumnId === column.id ? "selected-column" : ""}`}
                   onClick={(event) => {
                     if (editable) {
@@ -11524,6 +12266,17 @@ function WeddingCanvas({
                             canvasId={section.id}
                           />
                         ),
+                    )}
+                  {/* QA TC-114: tarik garis ini untuk mengubah lebar kolom. */}
+                  {editable &&
+                    columnIndex < section.columns.length - 1 && (
+                      <ColumnGridHandle
+                        section={section}
+                        index={columnIndex}
+                        onChange={(patch) =>
+                          updateSectionLayout?.(section.id, patch)
+                        }
+                      />
                     )}
                 </div>
               ))}
@@ -11808,7 +12561,7 @@ function InvitationCover({
 }
 
 function FeatureBlock({
-  feature,
+  feature: rawFeature,
   editable,
   selected,
   onSelect,
@@ -11837,6 +12590,9 @@ function FeatureBlock({
   inviteeName?: string;
   canvasId: string;
 }) {
+  // QA TC-112: pada mode Mobile, nilai yang dipakai adalah override mobile.
+  const device = useContext(DeviceContext);
+  const feature = resolveFeature(rawFeature, device);
   const objectStyle: React.CSSProperties =
     feature.type === "invitation-cover"
       ? { width: "100%", alignSelf: "stretch" }
@@ -11869,19 +12625,47 @@ function FeatureBlock({
       feature.type === "gallery" && feature.galleryFullWidth
         ? "visible"
         : "hidden",
+    // QA TC-117: background image per feature. TC-107: opsi tetap diam saat scroll.
+    ...(feature.backgroundImageUrl
+      ? {
+          backgroundImage: `url(${feature.backgroundImageUrl})`,
+          backgroundSize: feature.backgroundImageSize || "cover",
+          backgroundPosition: feature.backgroundImagePosition || "center",
+          backgroundRepeat: "no-repeat",
+          backgroundAttachment: feature.backgroundImageFixed
+            ? "fixed"
+            : "scroll",
+        }
+      : {}),
     "--effect-intensity": `${(feature.effectIntensity ?? 55) / 100}`,
   } as React.CSSProperties;
-  // QA TC-080 (header/supporting dapat dihapus + line break) & TC-090 (font size non-header).
-  const editableText = (field: "title" | "body", className: string) => {
+  // QA TC-080 (header/supporting dapat dihapus + line break), TC-090 (font size
+  // non-header), TC-118 (Heading 2 & Supporting Text 2), TC-121/TC-122 (warna per elemen).
+  const editableText = (
+    field: "title" | "body" | "title2" | "body2",
+    className: string,
+  ) => {
     if (field === "title" && feature.showTitle === false) return null;
     if (field === "body" && feature.showBody === false) return null;
-    const style: React.CSSProperties =
-      field === "title"
-        ? { fontSize: feature.fontSize, whiteSpace: "pre-wrap" }
-        : {
-            whiteSpace: "pre-wrap",
-            ...(feature.bodyFontSize ? { fontSize: feature.bodyFontSize } : {}),
-          };
+    if (field === "title2" && !feature.showTitle2) return null;
+    if (field === "body2" && !feature.showBody2) return null;
+    const sizeMap: Record<typeof field, number | undefined> = {
+      title: feature.fontSize,
+      body: feature.bodyFontSize,
+      title2: feature.title2FontSize,
+      body2: feature.body2FontSize,
+    };
+    const colorMap: Record<typeof field, string | undefined> = {
+      title: feature.titleColor,
+      body: feature.bodyColor,
+      title2: feature.title2Color,
+      body2: feature.body2Color,
+    };
+    const style: React.CSSProperties = {
+      whiteSpace: "pre-wrap",
+      ...(sizeMap[field] ? { fontSize: sizeMap[field] } : {}),
+      ...(colorMap[field] ? { color: colorMap[field] } : {}),
+    };
     return (
       <div
         className={className}
@@ -11907,6 +12691,14 @@ function FeatureBlock({
       </div>
     );
   };
+  // Heading 2 / Supporting Text 2 dirender setelah blok teks utama tiap feature.
+  const secondaryTexts =
+    feature.showTitle2 || feature.showBody2 ? (
+      <div className="secondary-text-stack">
+        {editableText("title2", "editable-title editable-title-2")}
+        {editableText("body2", "editable-body editable-body-2")}
+      </div>
+    ) : null;
   const canvasGuests = guests.filter((guest) => guest.canvasId === canvasId);
   return (
     <div
@@ -11949,7 +12741,8 @@ function FeatureBlock({
           <CalendarDays size={25} />
           {editableText("title", "editable-title")}
           {editableText("body", "editable-body")}
-          {feature.eventMapUrl && (
+          {/* QA TC-119: button lokasi selalu tampil pada section Event. */}
+          {feature.eventMapUrl ? (
             <a
               className="event-map-button"
               href={feature.eventMapUrl}
@@ -11959,6 +12752,11 @@ function FeatureBlock({
               <MapPin size={14} />
               {feature.eventButtonLabel || "Lihat Lokasi"}
             </a>
+          ) : (
+            <span className="event-map-button placeholder" title="Isi Link lokasi acara pada panel Content">
+              <MapPin size={14} />
+              {feature.eventButtonLabel || "Lihat Lokasi"}
+            </span>
           )}
         </div>
       )}
@@ -12122,38 +12920,7 @@ function FeatureBlock({
         </>
       )}
       {feature.type === "image" && (
-        <div
-          className={`image-feature frame-${feature.imageFrame || "none"}`}
-          style={{
-            height: feature.imageHeight
-              ? `${feature.imageHeight}px`
-              : undefined,
-          }}
-        >
-          {feature.mediaUrl ? (
-            <img
-              src={feature.mediaUrl}
-              alt={feature.title}
-              style={{
-                borderRadius:
-                  feature.imageFrame && feature.imageFrame !== "none"
-                    ? undefined
-                    : feature.borderRadius,
-                objectPosition: `${feature.imageOffsetX ?? 50}% ${feature.imageOffsetY ?? 50}%`,
-                transform: `scale(${(feature.imageZoom ?? 100) / 100})`,
-                height: feature.imageHeight
-                  ? `${feature.imageHeight}px`
-                  : undefined,
-              }}
-            />
-          ) : (
-            <div className="media-placeholder">
-              <ImageIcon size={26} />
-              <strong>Image Feature</strong>
-              <span>Upload melalui panel Content</span>
-            </div>
-          )}
-        </div>
+        <ImageLayoutFeature feature={feature} editableText={editableText} />
       )}
       {feature.type === "video" && <VideoFeature feature={feature} />}
       {feature.type === "gallery" && <GalleryFeature feature={feature} />}
@@ -12175,14 +12942,37 @@ function FeatureBlock({
         />
       )}
       {feature.type === "icon" && <IconFeature feature={feature} />}
+      {/* QA TC-120: section Love Story. */}
+      {feature.type === "love-story" && (
+        <LoveStoryFeature
+          feature={feature}
+          editable={editable}
+          onUpdate={onUpdate}
+          editableText={editableText}
+        />
+      )}
+      {/* QA TC-123: credit / watermark halaman penutup. */}
+      {feature.type === "credit" && (
+        <CreditFeature feature={feature} editableText={editableText} />
+      )}
       {feature.type === "sound" && editable && (
         <SoundFeature feature={feature} />
       )}
+      {/* QA TC-118: Heading 2 & Supporting Text 2 tersedia di setiap feature. */}
+      {secondaryTexts}
       <ExtraTextBlocks
         feature={feature}
         editable={editable}
         onUpdate={onUpdate}
       />
+      {/* QA TC-116: resize box langsung dari sudut walau tidak memakai posisi bebas. */}
+      {editable && !feature.freePosition && !feature.locked && selected && (
+        <span
+          className="box-resize-handle"
+          title="Tarik untuk mengubah lebar & tinggi box"
+          onPointerDown={(event) => startBoxResize(event, feature, onUpdate)}
+        />
+      )}
       {editable && feature.freePosition && !feature.locked && (
         <span
           className="free-resize-handle"
@@ -12200,6 +12990,317 @@ function FeatureBlock({
         </span>
       )}
     </div>
+  );
+}
+
+
+// QA TC-120 — section Love Story: beberapa box teks + gambar dan background sendiri.
+function LoveStoryFeature({
+  feature,
+  editable,
+  onUpdate,
+  editableText,
+}: {
+  feature: Feature;
+  editable: boolean;
+  onUpdate: (patch: Partial<Feature>) => void;
+  editableText: (
+    field: "title" | "body" | "title2" | "body2",
+    className: string,
+  ) => React.ReactNode;
+}) {
+  const items = feature.loveStoryItems || [];
+  const patchItem = (id: string, next: Partial<LoveStoryItem>) =>
+    onUpdate({
+      loveStoryItems: items.map((item) =>
+        item.id === id ? { ...item, ...next } : item,
+      ),
+    });
+  return (
+    <div className={`love-story-feature layout-${feature.loveStoryLayout || "timeline"}`}>
+      {editableText("title", "editable-title")}
+      {editableText("body", "editable-body")}
+      <div className="love-story-track">
+        {items.map((item) => (
+          <article
+            key={item.id}
+            className="love-story-item"
+            style={giftCardStyle(feature)}
+          >
+            {item.imageUrl && (
+              <div className="love-story-image">
+                <img src={item.imageUrl} alt={item.title} loading="lazy" />
+              </div>
+            )}
+            <div className="love-story-copy">
+              <span className="love-story-year">{item.year}</span>
+              <strong
+                contentEditable={editable && !feature.locked}
+                suppressContentEditableWarning
+                onBlur={(event) =>
+                  patchItem(item.id, {
+                    title: (event.currentTarget as HTMLElement).innerText.trim(),
+                  })
+                }
+                style={{
+                  fontSize: feature.fontSize ? feature.fontSize * 0.45 : undefined,
+                  color: feature.titleColor || undefined,
+                }}
+              >
+                {item.title}
+              </strong>
+              <p
+                contentEditable={editable && !feature.locked}
+                suppressContentEditableWarning
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    document.execCommand("insertLineBreak");
+                  }
+                }}
+                onBlur={(event) =>
+                  patchItem(item.id, {
+                    body: (event.currentTarget as HTMLElement).innerText.replace(
+                      /\n$/,
+                      "",
+                    ),
+                  })
+                }
+                style={{
+                  whiteSpace: "pre-wrap",
+                  ...(feature.bodyFontSize ? { fontSize: feature.bodyFontSize } : {}),
+                  ...(feature.bodyColor ? { color: feature.bodyColor } : {}),
+                }}
+              >
+                {item.body}
+              </p>
+            </div>
+          </article>
+        ))}
+        {!items.length && (
+          <div className="media-placeholder">
+            <BookOpen size={24} />
+            <strong>Love Story</strong>
+            <span>Tambahkan cerita melalui panel Content</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// QA TC-123 — credit / watermark pada halaman penutup undangan.
+function CreditFeature({
+  feature,
+  editableText,
+}: {
+  feature: Feature;
+  editableText: (
+    field: "title" | "body" | "title2" | "body2",
+    className: string,
+  ) => React.ReactNode;
+}) {
+  return (
+    <div className="credit-feature">
+      {editableText("title", "editable-title")}
+      {editableText("body", "editable-body")}
+      <div className="credit-meta" style={giftCardStyle(feature)}>
+        {feature.creditSongTitle && (
+          <span className="credit-song">
+            <Disc3 size={14} /> {feature.creditSongTitle}
+          </span>
+        )}
+        <span className="credit-created">
+          {feature.creditLink ? (
+            <a href={feature.creditLink} target="_blank" rel="noreferrer">
+              {feature.creditText || "Created by ikrarku"}
+            </a>
+          ) : (
+            feature.creditText || "Created by ikrarku"
+          )}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+
+// QA TC-116 — resize box teks/feature dengan click & drag dari sudut kanan bawah.
+function startBoxResize(
+  event: React.PointerEvent,
+  feature: Feature,
+  onUpdate: (patch: Partial<Feature>) => void,
+) {
+  event.preventDefault();
+  event.stopPropagation();
+  const block = (event.currentTarget as HTMLElement).closest(
+    ".feature-block",
+  ) as HTMLElement | null;
+  const column = block?.closest(".canvas-column") as HTMLElement | null;
+  if (!block || !column) return;
+  const columnRect = column.getBoundingClientRect();
+  const blockRect = block.getBoundingClientRect();
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const baseWidth =
+    feature.objectWidth ??
+    Math.round((blockRect.width / Math.max(1, columnRect.width)) * 100);
+  const baseHeight = feature.imageHeight || feature.boxHeight || blockRect.height;
+  const move = (moveEvent: PointerEvent) => {
+    const widthRatio =
+      ((moveEvent.clientX - startX) / Math.max(1, columnRect.width)) * 100;
+    const patch: Partial<Feature> = {
+      objectAlign: feature.objectAlign === "stretch" ? "center" : feature.objectAlign,
+      objectWidth: Math.round(
+        Math.min(100, Math.max(10, baseWidth + widthRatio)),
+      ),
+    };
+    const nextHeight = Math.round(
+      Math.max(40, baseHeight + (moveEvent.clientY - startY)),
+    );
+    if (feature.type === "image" || feature.type === "gallery")
+      patch.imageHeight = nextHeight;
+    else patch.boxHeight = nextHeight;
+    onUpdate(patch);
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+// QA TC-113 — garis guide/margin yang dapat di-drag untuk mengubah padding X.
+function CanvasGuides({
+  section,
+  onChange,
+}: {
+  section: CanvasSection;
+  onChange: (patch: Partial<CanvasSection>) => void;
+}) {
+  const padding = section.paddingX ?? 32;
+  const drag = (event: React.PointerEvent, side: "left" | "right") => {
+    event.preventDefault();
+    event.stopPropagation();
+    const host = (event.currentTarget as HTMLElement).closest(
+      ".canvas-section",
+    ) as HTMLElement | null;
+    if (!host) return;
+    const startX = event.clientX;
+    const base = padding;
+    const move = (moveEvent: PointerEvent) => {
+      const delta =
+        side === "left" ? moveEvent.clientX - startX : startX - moveEvent.clientX;
+      onChange({ paddingX: Math.round(Math.min(320, Math.max(0, base + delta))) });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <div className="canvas-guides" aria-hidden>
+      <span
+        className="canvas-guide left"
+        style={{ left: padding }}
+        onPointerDown={(event) => drag(event, "left")}
+        title={`Margin kiri ${padding}px — tarik untuk mengubah`}
+      />
+      <span
+        className="canvas-guide right"
+        style={{ right: padding }}
+        onPointerDown={(event) => drag(event, "right")}
+        title={`Margin kanan ${padding}px — tarik untuk mengubah`}
+      />
+      <span className="canvas-guide-label" style={{ left: padding + 6 }}>
+        {padding}px
+      </span>
+    </div>
+  );
+}
+
+// QA TC-115 — ubah tinggi section dengan menarik border bawah.
+function startSectionResize(
+  event: React.PointerEvent,
+  section: CanvasSection,
+  onChange: (patch: Partial<CanvasSection>) => void,
+) {
+  event.preventDefault();
+  event.stopPropagation();
+  const host = (event.currentTarget as HTMLElement).closest(
+    ".canvas-section",
+  ) as HTMLElement | null;
+  if (!host) return;
+  const startY = event.clientY;
+  const base = section.minHeight || host.getBoundingClientRect().height;
+  const move = (moveEvent: PointerEvent) => {
+    onChange({
+      minHeight: Math.round(
+        Math.min(2400, Math.max(160, base + (moveEvent.clientY - startY))),
+      ),
+    });
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
+// QA TC-114 — ubah lebar kolom dengan menarik garis grid di antara dua kolom.
+function ColumnGridHandle({
+  section,
+  index,
+  onChange,
+}: {
+  section: CanvasSection;
+  index: number;
+  onChange: (patch: Partial<CanvasSection>) => void;
+}) {
+  const widths =
+    section.columnWidths && section.columnWidths.length === section.columns.length
+      ? [...section.columnWidths]
+      : section.columns.map(() => 1);
+  const drag = (event: React.PointerEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const grid = (event.currentTarget as HTMLElement).closest(
+      ".canvas-columns",
+    ) as HTMLElement | null;
+    if (!grid) return;
+    const rect = grid.getBoundingClientRect();
+    const startX = event.clientX;
+    const left = widths[index];
+    const right = widths[index + 1];
+    const pair = left + right;
+    const move = (moveEvent: PointerEvent) => {
+      const ratio = (moveEvent.clientX - startX) / Math.max(1, rect.width);
+      const nextLeft = Math.min(
+        pair - 0.2,
+        Math.max(0.2, left + ratio * section.columns.length),
+      );
+      const next = [...widths];
+      next[index] = Math.round(nextLeft * 100) / 100;
+      next[index + 1] = Math.round((pair - nextLeft) * 100) / 100;
+      onChange({ columnWidths: next });
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  return (
+    <span
+      className="column-grid-handle"
+      onPointerDown={drag}
+      title="Tarik untuk mengatur lebar kolom"
+    />
   );
 }
 
@@ -12247,8 +13348,8 @@ function CountdownFeature({ feature }: { feature: Feature }) {
   return (
     <div className="countdown-feature">
       <small>SAVE THE DATE</small>
-      <h3>{feature.title}</h3>
-      <p>{feature.body}</p>
+      {/* QA TC-110: heading & supporting text dirender sekali saja oleh
+          FeatureBlock agar tidak dobel dan tetap bisa dihapus dari inspector. */}
       <div>
         {[
           ["Hari", time.days],
@@ -12269,21 +13370,54 @@ function CountdownFeature({ feature }: { feature: Feature }) {
 function LocationFeature({ feature }: { feature: Feature }) {
   const mapUrl = feature.mapUrl || "https://maps.google.com";
   const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=210x210&margin=8&data=${encodeURIComponent(mapUrl)}`;
+  // QA TC-124: warna dan bentuk button "Buka Google Maps" dapat dikustomisasi.
+  const shape = feature.mapButtonShape || "rounded";
+  const buttonStyle: React.CSSProperties = {
+    background:
+      shape === "outline"
+        ? "transparent"
+        : feature.mapButtonBackground || "var(--accent, #125946)",
+    color:
+      shape === "outline"
+        ? feature.mapButtonTextColor || feature.mapButtonBackground || "#125946"
+        : feature.mapButtonTextColor || "#ffffff",
+    borderRadius:
+      shape === "pill" ? 999 : shape === "square" ? 0 : (feature.mapButtonRadius ?? 8),
+    borderStyle: "solid",
+    borderWidth:
+      shape === "outline" ? (feature.mapButtonBorderWidth ?? 1) || 1 : (feature.mapButtonBorderWidth ?? 0),
+    borderColor:
+      feature.mapButtonBorderColor ||
+      feature.mapButtonBackground ||
+      "var(--accent, #125946)",
+  };
+  // QA TC-132: QR diberi container sendiri agar tidak terpotong di mobile.
+  const showQr = feature.showLocationQr !== false;
   return (
-    <div className="location-feature">
+    <div className={`location-feature ${showQr ? "" : "no-qr"}`}>
       <div>
         <MapPin size={27} />
         <small>LOCATION</small>
         <h3>{feature.locationName || feature.title}</h3>
         <p>{feature.locationAddress || feature.body}</p>
-        <a href={mapUrl} target="_blank" rel="noreferrer">
-          <MapPin size={15} /> Buka Google Maps
+        <a
+          className={`location-map-button shape-${shape}`}
+          style={buttonStyle}
+          href={mapUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <MapPin size={15} /> {feature.mapButtonLabel || "Buka Google Maps"}
         </a>
       </div>
-      <div className="location-qr">
-        <img src={qrUrl} alt="QR Google Maps" />
-        <span>Scan lokasi</span>
-      </div>
+      {showQr && (
+        <div className="location-qr">
+          <div className="location-qr-frame">
+            <img src={qrUrl} alt="QR Google Maps" loading="lazy" />
+          </div>
+          <span>Scan lokasi</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -12383,6 +13517,11 @@ function GalleryFeature({ feature }: { feature: Feature }) {
         ))}
       </div>
     );
+  // QA TC-126: slideshow otomatis sebagai variasi tampilan galeri.
+  if (feature.gallerySlideshow)
+    return (
+      <GallerySlideshow feature={feature} images={images} />
+    );
   return (
     <div
       className={`gallery-grid layout-${feature.galleryLayoutTemplate || "even"} ${feature.galleryFullWidth ? "full-width" : ""}`}
@@ -12391,6 +13530,211 @@ function GalleryFeature({ feature }: { feature: Feature }) {
         <img src={url} alt={`Gallery ${index + 1}`} key={`${url}-${index}`} />
       ))}
     </div>
+  );
+}
+
+// QA TC-126 — slideshow otomatis dengan kontrol manual dan indikator.
+function GallerySlideshow({
+  feature,
+  images,
+}: {
+  feature: Feature;
+  images: string[];
+}) {
+  const [index, setIndex] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const delay = Math.max(1200, feature.gallerySlideshowMs || 3500);
+  useEffect(() => {
+    if (paused || images.length < 2) return;
+    const timer = window.setInterval(
+      () => setIndex((previous) => (previous + 1) % images.length),
+      delay,
+    );
+    return () => window.clearInterval(timer);
+  }, [paused, delay, images.length]);
+  useEffect(() => {
+    if (index >= images.length) setIndex(0);
+  }, [images.length, index]);
+  const step = (direction: 1 | -1) =>
+    setIndex((previous) => (previous + direction + images.length) % images.length);
+  return (
+    <div
+      className={`gallery-slideshow ${feature.galleryFullWidth ? "full-width" : ""}`}
+      style={{ height: feature.imageHeight ? `${feature.imageHeight}px` : undefined }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {images.map((url, position) => (
+        <img
+          key={`${url}-${position}`}
+          src={url}
+          alt={`Gallery ${position + 1}`}
+          className={position === index ? "active" : ""}
+          style={{ transitionDuration: `${feature.galleryTransitionMs || 850}ms` }}
+        />
+      ))}
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            className="slideshow-nav prev"
+            onClick={(event) => {
+              event.stopPropagation();
+              step(-1);
+            }}
+            aria-label="Foto sebelumnya"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <button
+            type="button"
+            className="slideshow-nav next"
+            onClick={(event) => {
+              event.stopPropagation();
+              step(1);
+            }}
+            aria-label="Foto berikutnya"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <div className="slideshow-dots">
+            {images.map((url, position) => (
+              <span
+                key={`dot-${url}-${position}`}
+                className={position === index ? "active" : ""}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// QA TC-129 — pilihan template layout untuk feature Image.
+function ImageLayoutFeature({
+  feature,
+  editableText,
+}: {
+  feature: Feature;
+  editableText: (
+    field: "title" | "body" | "title2" | "body2",
+    className: string,
+  ) => React.ReactNode;
+}) {
+  const layout = feature.imageLayoutTemplate || "single";
+  const frame = feature.imageFrame || "none";
+  const media = (url?: string, extraClass = "") =>
+    url ? (
+      <img
+        src={url}
+        alt={feature.title}
+        loading="lazy"
+        className={extraClass}
+        style={{
+          borderRadius:
+            frame && frame !== "none" ? undefined : feature.borderRadius,
+          objectPosition: `${feature.imageOffsetX ?? 50}% ${feature.imageOffsetY ?? 50}%`,
+          transform: `scale(${(feature.imageZoom ?? 100) / 100})`,
+        }}
+      />
+    ) : (
+      <div className="media-placeholder">
+        <ImageIcon size={26} />
+        <strong>Image Feature</strong>
+        <span>Upload melalui panel Content</span>
+      </div>
+    );
+  const caption = feature.imageCaption ? (
+    <figcaption className="image-caption" style={{ color: feature.bodyColor }}>
+      {feature.imageCaption}
+    </figcaption>
+  ) : null;
+  const copy = (
+    <div className="image-layout-copy">
+      {editableText("title", "editable-title")}
+      {editableText("body", "editable-body")}
+      {caption}
+    </div>
+  );
+  const frameBox = (
+    <div
+      className={`image-feature frame-${frame}`}
+      style={{
+        height: feature.imageHeight ? `${feature.imageHeight}px` : undefined,
+      }}
+    >
+      {media(feature.mediaUrl)}
+    </div>
+  );
+  if (layout === "single")
+    return (
+      <figure className="image-layout single">
+        {frameBox}
+        {caption}
+      </figure>
+    );
+  if (layout === "banner")
+    return (
+      <figure className="image-layout banner">
+        <div
+          className={`image-feature frame-${frame}`}
+          style={{ height: feature.imageHeight ? `${feature.imageHeight}px` : 220 }}
+        >
+          {media(feature.mediaUrl)}
+        </div>
+        <div className="image-layout-overlay">{copy}</div>
+      </figure>
+    );
+  if (layout === "framed-caption")
+    return (
+      <figure className="image-layout framed-caption">
+        <div className="image-layout-frame" style={giftCardStyle(feature)}>
+          {frameBox}
+          {copy}
+        </div>
+      </figure>
+    );
+  if (layout === "stacked")
+    return (
+      <figure className="image-layout stacked">
+        {frameBox}
+        {feature.imageSecondaryUrl && (
+          <div className={`image-feature frame-${frame}`}>
+            {media(feature.imageSecondaryUrl)}
+          </div>
+        )}
+        {copy}
+      </figure>
+    );
+  if (layout === "overlap")
+    return (
+      <figure className="image-layout overlap">
+        <div className={`image-feature frame-${frame} overlap-back`}>
+          {media(feature.mediaUrl)}
+        </div>
+        {feature.imageSecondaryUrl && (
+          <div className={`image-feature frame-${frame} overlap-front`}>
+            {media(feature.imageSecondaryUrl)}
+          </div>
+        )}
+        {copy}
+      </figure>
+    );
+  return (
+    <figure className={`image-layout ${layout}`}>
+      {layout === "side-right" ? (
+        <>
+          {copy}
+          {frameBox}
+        </>
+      ) : (
+        <>
+          {frameBox}
+          {copy}
+        </>
+      )}
+    </figure>
   );
 }
 
@@ -12454,12 +13798,14 @@ function CanvasForm({
             {spec.required ? " *" : ""}
             {spec.kind === "textarea" ? (
               <textarea
+                style={inputFieldStyle(feature)}
                 value={values[spec.id] || ""}
                 onChange={(event) => set(spec.id, event.target.value)}
                 placeholder={spec.label}
               />
             ) : spec.kind === "select" ? (
               <select
+                style={inputFieldStyle(feature)}
                 value={values[spec.id] || ""}
                 onChange={(event) => set(spec.id, event.target.value)}
               >
@@ -12481,6 +13827,7 @@ function CanvasForm({
                         ? "tel"
                         : "text"
                 }
+                style={inputFieldStyle(feature)}
                 value={values[spec.id] || ""}
                 onChange={(event) => set(spec.id, event.target.value)}
                 placeholder={spec.label}
@@ -12489,7 +13836,7 @@ function CanvasForm({
           </label>
         ))}
       </div>
-      <button type="submit">
+      <button type="submit" style={submitButtonStyle(feature)}>
         {feature.buttonLabel || `Submit RSVP (${guests.length})`}
       </button>
     </form>
@@ -12550,22 +13897,27 @@ function GreetingsWidget({
         }}
       >
         <input
+          style={feature ? inputFieldStyle(feature) : undefined}
           value={name}
           onChange={(event) => setName(event.target.value)}
           placeholder="Nama Anda"
         />
         <textarea
+          style={feature ? inputFieldStyle(feature) : undefined}
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           placeholder="Tuliskan ucapan dan doa..."
         />
-        <button type="submit">
-          <Send size={14} /> Kirim ucapan
+        <button type="submit" style={feature ? submitButtonStyle(feature) : undefined}>
+          <Send size={14} /> {feature?.buttonLabel || "Kirim ucapan"}
         </button>
       </form>
       <div className="greeting-list">
         {greetings.slice(0, compact ? 3 : 8).map((greeting, index) => (
-          <article key={`${greeting.name}-${index}`}>
+          <article
+            key={`${greeting.name}-${index}`}
+            style={feature ? giftCardStyle(feature) : undefined}
+          >
             <div className="greeting-avatar">{greeting.name.slice(0, 1)}</div>
             <div>
               <strong>{greeting.name}</strong>
@@ -12734,6 +14086,7 @@ function PreviewModal({
             </button>
           </div>
         </header>
+        <DeviceContext value={mode}>
         <div className={`preview-full-stage ${mode}`}>
           <div className="preview-content">
             <WeddingCanvas
@@ -12747,6 +14100,7 @@ function PreviewModal({
             />
           </div>
         </div>
+        </DeviceContext>
       </div>
     </div>
   );
@@ -15331,6 +16685,8 @@ function FeatureIcon({ type }: { type: FeatureType }) {
     location: MapPin,
     sound: PlayCircle,
     icon: Heart,
+    "love-story": BookOpen,
+    credit: BadgeCheck,
   };
   const Icon = map[type];
   return <Icon size={14} />;
@@ -15459,8 +16815,9 @@ function TemplateCreatorModal({
           style={{ "--template-accent": accent } as React.CSSProperties}
         >
           <small>{category.toUpperCase()}</small>
-          <strong>Amara & Arjuna</strong>
-          <span>{name}</span>
+          {/* QA TC-128: preview memakai nama template, tanpa nama default. */}
+          <strong>{name || "Nama template"}</strong>
+          <span>{description || "Deskripsi template"}</span>
           <em>{formatRupiah(price)}</em>
         </div>
         <footer>
@@ -15874,6 +17231,35 @@ function VideoFeature({ feature }: { feature: Feature }) {
 }
 
 // TC-088 — daftar rekening / e-wallet dengan nama bank.
+// QA TC-121: warna kolom kartu dan teksnya dapat diatur sendiri agar teks putih
+// tidak hilang di atas kolom putih transparan.
+function giftCardStyle(feature: Feature): React.CSSProperties {
+  return {
+    background: feature.cardBackground || "rgba(255,255,255,.82)",
+    color: feature.cardTextColor || "inherit",
+    borderColor: feature.cardBorderColor || "rgba(22,77,62,.16)",
+    borderRadius: feature.cardRadius ?? 12,
+  };
+}
+// QA TC-125: kolom input dan button submit dapat disesuaikan dengan tema.
+function inputFieldStyle(feature: Feature): React.CSSProperties {
+  return {
+    background: feature.fieldBackground || undefined,
+    color: feature.fieldTextColor || undefined,
+    borderColor: feature.fieldBorderColor || undefined,
+    borderRadius: feature.fieldRadius ?? undefined,
+  };
+}
+function submitButtonStyle(feature: Feature): React.CSSProperties {
+  return {
+    background: feature.buttonBackground || undefined,
+    color: feature.buttonTextColor || undefined,
+    borderRadius: feature.buttonRadius ?? undefined,
+    borderStyle: feature.buttonBorderWidth ? "solid" : undefined,
+    borderWidth: feature.buttonBorderWidth || undefined,
+    borderColor: feature.buttonBorderColor || undefined,
+  };
+}
 function GiftAccountsBlock({ feature }: { feature: Feature }) {
   const accounts = feature.giftAccounts || [];
   const [copied, setCopied] = useState("");
@@ -15881,7 +17267,11 @@ function GiftAccountsBlock({ feature }: { feature: Feature }) {
   return (
     <div className="gift-account-list">
       {accounts.map((account) => (
-        <div className="gift-account-card" key={account.id}>
+        <div
+          className="gift-account-card"
+          key={account.id}
+          style={giftCardStyle(feature)}
+        >
           <span
             className={`bank-logo bank-${account.bank.toLowerCase().replace(/[^a-z0-9]/g, "")}`}
           >
@@ -15892,6 +17282,7 @@ function GiftAccountsBlock({ feature }: { feature: Feature }) {
           {account.note && <em>{account.note}</em>}
           <button
             type="button"
+            style={submitButtonStyle(feature)}
             onClick={(event) => {
               event.stopPropagation();
               void navigator.clipboard?.writeText(account.accountNumber);
@@ -16648,6 +18039,771 @@ function FreePositionControls({
 }) {
   return (
     <DesignerControls key={feature.id} feature={feature} update={update} />
+  );
+}
+
+
+// QA TC-118 — Heading 2 & Supporting Text 2 untuk setiap feature.
+function SecondaryTextEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  return (
+    <div className="heading-body-editor">
+      <div className="group-heading">
+        <strong>Heading 2 & Supporting Text 2</strong>
+        <span>TC-118</span>
+      </div>
+      <div className="setting-row compact">
+        <div>
+          <Heading2 size={16} />
+          <span>
+            <strong>Tampilkan Heading 2</strong>
+            <small>Sub-judul tambahan di bawah teks utama.</small>
+          </span>
+        </div>
+        <button
+          className={`toggle ${feature.showTitle2 ? "on" : ""}`}
+          onClick={() => update({ showTitle2: !feature.showTitle2 })}
+        >
+          <i />
+        </button>
+      </div>
+      {feature.showTitle2 && (
+        <>
+          <label>
+            Heading 2
+            <textarea
+              rows={2}
+              value={feature.title2 || ""}
+              onChange={(event) => update({ title2: event.target.value })}
+            />
+          </label>
+          <div className="two-inputs">
+            <label>
+              Ukuran <span>{feature.title2FontSize ?? 20}px</span>
+              <input
+                type="range"
+                min="8"
+                max="72"
+                value={feature.title2FontSize ?? 20}
+                onChange={(event) =>
+                  update({ title2FontSize: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Warna
+              <input
+                type="color"
+                value={feature.title2Color || feature.textColor || "#154f40"}
+                onChange={(event) => update({ title2Color: event.target.value })}
+              />
+            </label>
+          </div>
+        </>
+      )}
+      <div className="setting-row compact">
+        <div>
+          <Type size={16} />
+          <span>
+            <strong>Tampilkan Supporting Text 2</strong>
+            <small>Paragraf pendukung kedua.</small>
+          </span>
+        </div>
+        <button
+          className={`toggle ${feature.showBody2 ? "on" : ""}`}
+          onClick={() => update({ showBody2: !feature.showBody2 })}
+        >
+          <i />
+        </button>
+      </div>
+      {feature.showBody2 && (
+        <>
+          <label>
+            Supporting Text 2
+            <textarea
+              rows={3}
+              value={feature.body2 || ""}
+              onChange={(event) => update({ body2: event.target.value })}
+            />
+          </label>
+          <div className="two-inputs">
+            <label>
+              Ukuran <span>{feature.body2FontSize ?? 11}px</span>
+              <input
+                type="range"
+                min="8"
+                max="60"
+                value={feature.body2FontSize ?? 11}
+                onChange={(event) =>
+                  update({ body2FontSize: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Warna
+              <input
+                type="color"
+                value={feature.body2Color || feature.textColor || "#154f40"}
+                onChange={(event) => update({ body2Color: event.target.value })}
+              />
+            </label>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// QA TC-121 & TC-122 — warna tiap elemen teks dan kolom diatur terpisah.
+function PerElementColorEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const swatch = (
+    label: string,
+    value: string | undefined,
+    fallback: string,
+    key: keyof Feature,
+  ) => (
+    <label>
+      {label}
+      <span className="color-row">
+        <input
+          type="color"
+          value={value || fallback}
+          onChange={(event) => update({ [key]: event.target.value } as Partial<Feature>)}
+        />
+        {value && (
+          <button
+            className="clear-color"
+            title="Kembali ke warna dasar"
+            onClick={() => update({ [key]: undefined } as Partial<Feature>)}
+          >
+            <X size={11} />
+          </button>
+        )}
+      </span>
+    </label>
+  );
+  return (
+    <div className="per-element-color-editor">
+      <div className="group-heading">
+        <strong>Warna per Elemen</strong>
+        <span>TC-121 / TC-122</span>
+      </div>
+      <div className="layout-help">
+        Kosongkan untuk mengikuti warna teks dasar feature. Mengubah salah satu
+        elemen tidak memengaruhi elemen lain.
+      </div>
+      <div className="two-inputs">
+        {swatch("Heading", feature.titleColor, feature.textColor, "titleColor")}
+        {swatch("Supporting", feature.bodyColor, feature.textColor, "bodyColor")}
+      </div>
+      <div className="group-heading">
+        <strong>Kolom / Kartu</strong>
+        <span>Gift, Greetings, Love Story</span>
+      </div>
+      <div className="two-inputs">
+        {swatch("Latar kolom", feature.cardBackground, "#ffffff", "cardBackground")}
+        {swatch("Teks kolom", feature.cardTextColor, feature.textColor, "cardTextColor")}
+      </div>
+      <div className="two-inputs">
+        {swatch("Border kolom", feature.cardBorderColor, "#d8e2dd", "cardBorderColor")}
+        <label>
+          Sudut kolom <span>{feature.cardRadius ?? 12}px</span>
+          <input
+            type="range"
+            min="0"
+            max="40"
+            value={feature.cardRadius ?? 12}
+            onChange={(event) => update({ cardRadius: Number(event.target.value) })}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
+// QA TC-125 — tampilan kolom input dan button submit.
+function FormStyleEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  if (!["form", "gift", "greetings"].includes(feature.type)) return null;
+  return (
+    <div className="form-style-editor">
+      <div className="group-heading">
+        <strong>Kolom Input & Button Submit</strong>
+        <span>TC-125</span>
+      </div>
+      <div className="two-inputs">
+        <label>
+          Latar kolom
+          <input
+            type="color"
+            value={feature.fieldBackground || "#ffffff"}
+            onChange={(event) => update({ fieldBackground: event.target.value })}
+          />
+        </label>
+        <label>
+          Teks kolom
+          <input
+            type="color"
+            value={feature.fieldTextColor || "#154f40"}
+            onChange={(event) => update({ fieldTextColor: event.target.value })}
+          />
+        </label>
+      </div>
+      <div className="two-inputs">
+        <label>
+          Border kolom
+          <input
+            type="color"
+            value={feature.fieldBorderColor || "#d8e2dd"}
+            onChange={(event) => update({ fieldBorderColor: event.target.value })}
+          />
+        </label>
+        <label>
+          Sudut kolom <span>{feature.fieldRadius ?? 8}px</span>
+          <input
+            type="range"
+            min="0"
+            max="30"
+            value={feature.fieldRadius ?? 8}
+            onChange={(event) => update({ fieldRadius: Number(event.target.value) })}
+          />
+        </label>
+      </div>
+      <label>
+        Label button
+        <input
+          value={feature.buttonLabel || ""}
+          onChange={(event) => update({ buttonLabel: event.target.value })}
+          placeholder="Kirim ucapan"
+        />
+      </label>
+      <div className="two-inputs">
+        <label>
+          Latar button
+          <input
+            type="color"
+            value={feature.buttonBackground || "#125946"}
+            onChange={(event) => update({ buttonBackground: event.target.value })}
+          />
+        </label>
+        <label>
+          Teks button
+          <input
+            type="color"
+            value={feature.buttonTextColor || "#ffffff"}
+            onChange={(event) => update({ buttonTextColor: event.target.value })}
+          />
+        </label>
+      </div>
+      <div className="two-inputs">
+        <label>
+          Sudut button <span>{feature.buttonRadius ?? 8}px</span>
+          <input
+            type="range"
+            min="0"
+            max="40"
+            value={feature.buttonRadius ?? 8}
+            onChange={(event) => update({ buttonRadius: Number(event.target.value) })}
+          />
+        </label>
+        <label>
+          Tebal border <span>{feature.buttonBorderWidth ?? 0}px</span>
+          <input
+            type="range"
+            min="0"
+            max="6"
+            value={feature.buttonBorderWidth ?? 0}
+            onChange={(event) =>
+              update({ buttonBorderWidth: Number(event.target.value) })
+            }
+          />
+        </label>
+      </div>
+      {Boolean(feature.buttonBorderWidth) && (
+        <label>
+          Warna border button
+          <input
+            type="color"
+            value={feature.buttonBorderColor || "#125946"}
+            onChange={(event) => update({ buttonBorderColor: event.target.value })}
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+// QA TC-117 & TC-107 — background image per feature, dengan opsi diam saat scroll.
+function FeatureBackgroundImageEditor({
+  feature,
+  update,
+  uploadFeatureBackground,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+  uploadFeatureBackground: (file: File | undefined) => void | Promise<void>;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div className="feature-background-editor">
+      <div className="group-heading">
+        <strong>Background Image Feature</strong>
+        <span>TC-117</span>
+      </div>
+      <input
+        ref={input}
+        hidden
+        type="file"
+        accept="image/*"
+        onChange={(event) => {
+          void uploadFeatureBackground(event.target.files?.[0]);
+          event.target.value = "";
+        }}
+      />
+      <button className="upload-control" onClick={() => input.current?.click()}>
+        <Upload size={18} />
+        <span>
+          <strong>Upload background image</strong>
+          <small>Berlaku untuk feature ini saja, bukan seluruh section.</small>
+        </span>
+      </button>
+      {feature.backgroundImageUrl && (
+        <>
+          <div className="media-file">
+            <ImageIcon size={15} />
+            <span>Background terpasang</span>
+            <button
+              className="clear-color"
+              title="Hapus background image"
+              onClick={() =>
+                update({ backgroundImageUrl: undefined, backgroundImageKey: undefined })
+              }
+            >
+              <X size={11} />
+            </button>
+          </div>
+          <div className="two-inputs">
+            <label>
+              Ukuran
+              <select
+                value={feature.backgroundImageSize || "cover"}
+                onChange={(event) =>
+                  update({
+                    backgroundImageSize: event.target
+                      .value as Feature["backgroundImageSize"],
+                  })
+                }
+              >
+                <option value="cover">Cover</option>
+                <option value="contain">Contain</option>
+                <option value="auto">Auto</option>
+              </select>
+            </label>
+            <label>
+              Posisi
+              <select
+                value={feature.backgroundImagePosition || "center"}
+                onChange={(event) =>
+                  update({
+                    backgroundImagePosition: event.target
+                      .value as Feature["backgroundImagePosition"],
+                  })
+                }
+              >
+                <option value="center">Tengah</option>
+                <option value="top">Atas</option>
+                <option value="bottom">Bawah</option>
+                <option value="left">Kiri</option>
+                <option value="right">Kanan</option>
+              </select>
+            </label>
+          </div>
+          <div className="setting-row compact">
+            <div>
+              <Anchor size={16} />
+              <span>
+                <strong>Diam saat di-scroll</strong>
+                <small>Background tidak ikut bergeser, hanya teks yang bergerak.</small>
+              </span>
+            </div>
+            <button
+              className={`toggle ${feature.backgroundImageFixed ? "on" : ""}`}
+              onClick={() =>
+                update({ backgroundImageFixed: !feature.backgroundImageFixed })
+              }
+            >
+              <i />
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// QA TC-129 — pilihan template layout untuk feature Image.
+function ImageLayoutEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const layouts: [ImageLayoutTemplate, string][] = [
+    ["single", "Single — gambar penuh"],
+    ["side-left", "Gambar kiri + teks kanan"],
+    ["side-right", "Teks kiri + gambar kanan"],
+    ["stacked", "Dua gambar bertumpuk"],
+    ["overlap", "Dua gambar saling tumpang"],
+    ["banner", "Banner dengan teks di atas gambar"],
+    ["framed-caption", "Gambar berbingkai + caption"],
+  ];
+  return (
+    <div className="image-layout-editor">
+      <div className="group-heading">
+        <strong>Template Layout Image</strong>
+        <span>TC-129</span>
+      </div>
+      <label>
+        Layout
+        <select
+          value={feature.imageLayoutTemplate || "single"}
+          onChange={(event) =>
+            update({
+              imageLayoutTemplate: event.target.value as ImageLayoutTemplate,
+            })
+          }
+        >
+          {layouts.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
+        Caption
+        <input
+          value={feature.imageCaption || ""}
+          onChange={(event) => update({ imageCaption: event.target.value })}
+          placeholder="Keterangan foto (opsional)"
+        />
+      </label>
+      {["stacked", "overlap"].includes(feature.imageLayoutTemplate || "") && (
+        <label>
+          URL gambar kedua
+          <input
+            value={feature.imageSecondaryUrl || ""}
+            onChange={(event) => update({ imageSecondaryUrl: event.target.value })}
+            placeholder="Tempel URL atau upload lewat Gallery"
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+// QA TC-126 — slideshow otomatis pada Gallery.
+function GallerySlideshowEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  return (
+    <div className="gallery-slideshow-editor">
+      <div className="group-heading">
+        <strong>Slideshow Otomatis</strong>
+        <span>TC-126</span>
+      </div>
+      <div className="setting-row compact">
+        <div>
+          <PlayCircle size={16} />
+          <span>
+            <strong>Aktifkan slideshow</strong>
+            <small>Foto berganti otomatis, berhenti saat kursor di atasnya.</small>
+          </span>
+        </div>
+        <button
+          className={`toggle ${feature.gallerySlideshow ? "on" : ""}`}
+          onClick={() => update({ gallerySlideshow: !feature.gallerySlideshow })}
+        >
+          <i />
+        </button>
+      </div>
+      {feature.gallerySlideshow && (
+        <label>
+          Jeda antar foto <span>{((feature.gallerySlideshowMs || 3500) / 1000).toFixed(1)}s</span>
+          <input
+            type="range"
+            min="1500"
+            max="10000"
+            step="250"
+            value={feature.gallerySlideshowMs || 3500}
+            onChange={(event) =>
+              update({ gallerySlideshowMs: Number(event.target.value) })
+            }
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+// QA TC-124 & TC-132 — button Google Maps dan QR pada feature Lokasi.
+function MapButtonEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  return (
+    <div className="map-button-editor">
+      <div className="group-heading">
+        <strong>Button Buka Google Maps</strong>
+        <span>TC-124</span>
+      </div>
+      <label>
+        Label button
+        <input
+          value={feature.mapButtonLabel || ""}
+          onChange={(event) => update({ mapButtonLabel: event.target.value })}
+          placeholder="Buka Google Maps"
+        />
+      </label>
+      <label>
+        Bentuk
+        <select
+          value={feature.mapButtonShape || "rounded"}
+          onChange={(event) =>
+            update({
+              mapButtonShape: event.target.value as Feature["mapButtonShape"],
+            })
+          }
+        >
+          <option value="rounded">Rounded</option>
+          <option value="pill">Pill</option>
+          <option value="square">Kotak</option>
+          <option value="outline">Outline</option>
+        </select>
+      </label>
+      <div className="two-inputs">
+        <label>
+          Warna latar
+          <input
+            type="color"
+            value={feature.mapButtonBackground || "#125946"}
+            onChange={(event) => update({ mapButtonBackground: event.target.value })}
+          />
+        </label>
+        <label>
+          Warna teks
+          <input
+            type="color"
+            value={feature.mapButtonTextColor || "#ffffff"}
+            onChange={(event) => update({ mapButtonTextColor: event.target.value })}
+          />
+        </label>
+      </div>
+      <div className="two-inputs">
+        <label>
+          Sudut <span>{feature.mapButtonRadius ?? 8}px</span>
+          <input
+            type="range"
+            min="0"
+            max="40"
+            value={feature.mapButtonRadius ?? 8}
+            onChange={(event) =>
+              update({ mapButtonRadius: Number(event.target.value) })
+            }
+          />
+        </label>
+        <label>
+          Tebal border <span>{feature.mapButtonBorderWidth ?? 0}px</span>
+          <input
+            type="range"
+            min="0"
+            max="6"
+            value={feature.mapButtonBorderWidth ?? 0}
+            onChange={(event) =>
+              update({ mapButtonBorderWidth: Number(event.target.value) })
+            }
+          />
+        </label>
+      </div>
+      <div className="setting-row compact">
+        <div>
+          <QrCode size={16} />
+          <span>
+            <strong>Tampilkan QR lokasi</strong>
+            <small>Matikan bila ruang mobile terbatas.</small>
+          </span>
+        </div>
+        <button
+          className={`toggle ${feature.showLocationQr !== false ? "on" : ""}`}
+          onClick={() =>
+            update({ showLocationQr: !(feature.showLocationQr !== false) })
+          }
+        >
+          <i />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// QA TC-120 — editor cerita pada section Love Story.
+function LoveStoryEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const items = feature.loveStoryItems || [];
+  const commit = (next: LoveStoryItem[]) => update({ loveStoryItems: next });
+  const patch = (id: string, next: Partial<LoveStoryItem>) =>
+    commit(items.map((item) => (item.id === id ? { ...item, ...next } : item)));
+  return (
+    <div className="love-story-editor">
+      <div className="group-heading">
+        <strong>Cerita</strong>
+        <button
+          onClick={() =>
+            commit([
+              ...items,
+              {
+                id: uid("ls"),
+                year: String(new Date().getFullYear()),
+                title: "Momen Baru",
+                body: "Tuliskan ceritanya di sini.",
+              },
+            ])
+          }
+        >
+          <Plus size={14} /> Tambah cerita
+        </button>
+      </div>
+      <label>
+        Layout
+        <select
+          value={feature.loveStoryLayout || "timeline"}
+          onChange={(event) =>
+            update({
+              loveStoryLayout: event.target
+                .value as Feature["loveStoryLayout"],
+            })
+          }
+        >
+          <option value="timeline">Timeline vertikal</option>
+          <option value="cards">Kartu sejajar</option>
+          <option value="zigzag">Zigzag kiri-kanan</option>
+        </select>
+      </label>
+      {items.map((item, index) => (
+        <div className="extra-text-row" key={item.id}>
+          <div className="form-spec-head">
+            <span>#{index + 1}</span>
+            <button onClick={() => commit(items.filter((value) => value.id !== item.id))}>
+              <Trash2 size={12} />
+            </button>
+          </div>
+          <div className="two-inputs">
+            <label>
+              Tahun
+              <input
+                value={item.year}
+                onChange={(event) => patch(item.id, { year: event.target.value })}
+              />
+            </label>
+            <label>
+              Judul
+              <input
+                value={item.title}
+                onChange={(event) => patch(item.id, { title: event.target.value })}
+              />
+            </label>
+          </div>
+          <textarea
+            value={item.body}
+            onChange={(event) => patch(item.id, { body: event.target.value })}
+            placeholder="Ceritakan momennya"
+          />
+          <label>
+            URL foto (opsional)
+            <input
+              value={item.imageUrl || ""}
+              onChange={(event) => patch(item.id, { imageUrl: event.target.value })}
+            />
+          </label>
+        </div>
+      ))}
+      {!items.length && (
+        <div className="layout-help">
+          Belum ada cerita. Klik <strong>Tambah cerita</strong> untuk memulai.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// QA TC-123 — credit / watermark halaman penutup.
+function CreditEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  return (
+    <div className="credit-editor">
+      <div className="group-heading">
+        <strong>Credit & Watermark</strong>
+        <span>TC-123</span>
+      </div>
+      <label>
+        Teks credit
+        <input
+          value={feature.creditText || ""}
+          onChange={(event) => update({ creditText: event.target.value })}
+          placeholder="Created by ikrarku"
+        />
+      </label>
+      <label>
+        Judul lagu yang dipakai
+        <input
+          value={feature.creditSongTitle || ""}
+          onChange={(event) => update({ creditSongTitle: event.target.value })}
+          placeholder="Contoh: Christina Perri - A Thousand Years"
+        />
+      </label>
+      <label>
+        Link credit (opsional)
+        <input
+          value={feature.creditLink || ""}
+          onChange={(event) => update({ creditLink: event.target.value })}
+          placeholder="https://ikrarku.id"
+        />
+      </label>
+    </div>
   );
 }
 

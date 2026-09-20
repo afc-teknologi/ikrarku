@@ -640,3 +640,132 @@ html,body,#root{min-width:0!important}
 .invitee-bulk-actions button{border:1px solid #dfe5e2;background:#fff;border-radius:8px;padding:8px 12px;font-size:8px;display:inline-flex;align-items:center;gap:6px}
 .invitee-bulk-actions button:disabled{opacity:.45}
 @media(max-width:900px){.invitee-table.with-link .invitee-table-head,.invitee-table.with-link>div{grid-template-columns:1fr!important}}
+
+/* =====================================================================
+   QA BATCH TC-107..TC-137
+   ===================================================================== */
+
+/* TC-107 / TC-127 — background utama & layer diam saat scroll */
+.background-layer.is-fixed{background-attachment:fixed}
+.background-extra-layer{position:absolute;inset:0;pointer-events:none;background-repeat:no-repeat}
+.background-extra-layer.is-fixed{background-attachment:fixed}
+.canvas-section>.canvas-columns,.canvas-section>.canvas-decoration-layer{position:relative;z-index:5}
+
+/* TC-113 — garis guide/margin yang bisa di-drag */
+.canvas-guides{position:absolute;inset:0;pointer-events:none;z-index:20}
+.canvas-guide{position:absolute;top:0;bottom:0;width:9px;margin-left:-4px;cursor:ew-resize;pointer-events:auto;background:linear-gradient(90deg,transparent 3px,rgba(18,89,70,.45) 3px,rgba(18,89,70,.45) 5px,transparent 5px)}
+.canvas-guide:hover{background:linear-gradient(90deg,transparent 2px,rgba(18,89,70,.9) 2px,rgba(18,89,70,.9) 6px,transparent 6px)}
+.canvas-guide.right{margin-left:0;margin-right:-4px}
+.canvas-guide-label{position:absolute;top:6px;font-size:7px;background:#0f4a3b;color:#fff;border-radius:4px;padding:2px 5px;pointer-events:none}
+
+/* TC-114 — garis grid antar kolom */
+.column-grid-handle{position:absolute;top:0;bottom:0;right:-6px;width:12px;cursor:col-resize;z-index:22;background:transparent}
+.column-grid-handle:hover{background:linear-gradient(90deg,transparent 4px,rgba(18,89,70,.75) 4px,rgba(18,89,70,.75) 8px,transparent 8px)}
+
+/* TC-115 — tarik border bawah section untuk ubah tinggi */
+.section-resize-handle{position:absolute;left:0;right:0;bottom:0;height:10px;cursor:ns-resize;z-index:21}
+.section-resize-handle:hover{background:linear-gradient(180deg,transparent 3px,rgba(18,89,70,.6) 3px)}
+
+/* TC-116 — resize box dari sudut */
+.box-resize-handle{position:absolute;right:-5px;bottom:-5px;width:13px;height:13px;border-radius:3px;background:#0f4a3b;border:2px solid #fff;cursor:nwse-resize;z-index:30}
+
+/* TC-112 — penanda mode mobile pada inspector */
+.device-scope-banner{display:flex;gap:9px;align-items:flex-start;background:#eef4f1;border:1px solid #cfe0d8;border-radius:10px;padding:10px;margin-bottom:11px}
+.device-scope-banner div{display:flex;flex-direction:column;gap:3px;flex:1}
+.device-scope-banner strong{font-size:9px}
+.device-scope-banner span{font-size:7.5px;line-height:1.5;color:#547066}
+.device-scope-banner button{border:1px solid #cfe0d8;background:#fff;border-radius:7px;padding:6px 9px;font-size:7.5px;white-space:nowrap;align-self:center}
+
+/* TC-118 — heading 2 & supporting text 2 */
+.secondary-text-stack{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+.editable-title-2{font-weight:600;opacity:.95}
+.editable-body-2{opacity:.85}
+
+/* TC-119 — placeholder button lokasi Event */
+.event-map-button.placeholder{opacity:.55;cursor:default;border:1px dashed currentColor;background:transparent;color:inherit}
+
+/* TC-124 — button Buka Google Maps */
+.location-map-button{display:inline-flex;align-items:center;gap:7px;padding:9px 16px;font-size:9px;text-decoration:none;transition:.2s}
+.location-map-button.shape-pill{padding-left:20px;padding-right:20px}
+
+/* TC-132 — QR lokasi tidak terpotong di mobile */
+.location-qr{display:flex;flex-direction:column;align-items:center;gap:6px;min-width:0;flex:0 0 auto}
+.location-qr-frame{width:min(150px,38vw);aspect-ratio:1;background:#fff;border-radius:10px;padding:8px;box-sizing:border-box;display:grid;place-items:center;overflow:hidden}
+.location-qr-frame img{width:100%;height:100%;object-fit:contain;display:block}
+.location-feature.no-qr .location-qr{display:none}
+@media(max-width:900px){
+  .location-feature{flex-wrap:wrap;justify-content:center;gap:16px;padding-bottom:18px}
+  .location-qr{width:100%}
+  .location-qr-frame{width:min(168px,52vw)}
+}
+
+/* TC-121 / TC-122 — warna per elemen */
+.per-element-color-editor,.form-style-editor,.feature-background-editor,.image-layout-editor,.gallery-slideshow-editor,.map-button-editor,.love-story-editor,.credit-editor,.background-layer-editor{border-top:1px solid #e5e9e6;margin-top:14px;padding-top:13px}
+.color-row{display:flex;align-items:center;gap:5px}
+.clear-color{border:1px solid #e0e6e2;background:#fff;border-radius:5px;padding:3px;color:#8c3a32;display:inline-flex;align-items:center}
+
+/* TC-125 — kolom input & button submit */
+.canvas-form input,.canvas-form textarea,.canvas-form select,.greetings-widget input,.greetings-widget textarea{transition:.2s}
+
+/* TC-126 — slideshow gallery */
+.gallery-slideshow{position:relative;width:100%;min-height:200px;border-radius:inherit;overflow:hidden}
+.gallery-slideshow.full-width{width:100vw;margin-left:calc(50% - 50vw)}
+.gallery-slideshow img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition-property:opacity;transition-timing-function:ease}
+.gallery-slideshow img.active{opacity:1}
+.slideshow-nav{position:absolute;top:50%;transform:translateY(-50%);border:0;background:rgba(255,255,255,.82);color:#123f33;border-radius:50%;width:28px;height:28px;display:grid;place-items:center;cursor:pointer;z-index:3}
+.slideshow-nav.prev{left:10px}
+.slideshow-nav.next{right:10px}
+.slideshow-dots{position:absolute;bottom:10px;left:0;right:0;display:flex;justify-content:center;gap:5px;z-index:3}
+.slideshow-dots span{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.55)}
+.slideshow-dots span.active{background:#fff;width:16px;border-radius:4px}
+
+/* TC-129 — template layout Image */
+.image-layout{margin:0;display:flex;flex-direction:column;gap:12px}
+.image-layout.side-left,.image-layout.side-right{flex-direction:row;align-items:center;gap:18px}
+.image-layout.side-left>.image-feature,.image-layout.side-right>.image-feature{flex:1 1 52%;min-width:0}
+.image-layout-copy{flex:1 1 44%;min-width:0;display:flex;flex-direction:column;gap:6px}
+.image-layout.banner{position:relative}
+.image-layout.banner .image-layout-overlay{position:absolute;inset:0;display:grid;place-items:center;padding:18px;background:linear-gradient(180deg,rgba(6,22,17,.05),rgba(6,22,17,.55));color:#fff;border-radius:inherit}
+.image-layout.framed-caption .image-layout-frame{border:1px solid;padding:14px;display:flex;flex-direction:column;gap:11px}
+.image-layout.overlap{position:relative;padding-bottom:28px}
+.image-layout.overlap .overlap-front{position:absolute;right:6%;bottom:0;width:46%;box-shadow:0 12px 30px rgba(12,40,32,.25)}
+.image-caption{font-size:8.5px;opacity:.75;text-align:center;margin-top:2px}
+@media(max-width:900px){.image-layout.side-left,.image-layout.side-right{flex-direction:column}.image-layout.overlap .overlap-front{position:static;width:100%;margin-top:10px}}
+
+/* TC-120 — Love Story */
+.love-story-feature{display:flex;flex-direction:column;gap:14px}
+.love-story-track{display:flex;flex-direction:column;gap:14px}
+.love-story-item{display:flex;gap:14px;align-items:flex-start;border:1px solid;padding:14px;text-align:left}
+.love-story-image{flex:0 0 34%;max-width:180px;border-radius:10px;overflow:hidden;aspect-ratio:4/3}
+.love-story-image img{width:100%;height:100%;object-fit:cover}
+.love-story-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.love-story-year{font-size:7.5px;letter-spacing:2px;font-weight:700;opacity:.65}
+.love-story-copy p{margin:0;font-size:9px;line-height:1.65}
+.love-story-feature.layout-cards .love-story-track{flex-direction:row;flex-wrap:wrap}
+.love-story-feature.layout-cards .love-story-item{flex:1 1 220px;flex-direction:column}
+.love-story-feature.layout-cards .love-story-image{flex:none;max-width:none;width:100%}
+.love-story-feature.layout-zigzag .love-story-item:nth-child(even){flex-direction:row-reverse}
+.love-story-feature.layout-timeline .love-story-track{position:relative;padding-left:18px}
+.love-story-feature.layout-timeline .love-story-track:before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:1px;background:currentColor;opacity:.25}
+@media(max-width:900px){.love-story-item,.love-story-feature.layout-zigzag .love-story-item:nth-child(even){flex-direction:column}.love-story-image{max-width:none;width:100%}}
+
+/* TC-123 — credit / watermark */
+.credit-feature{display:flex;flex-direction:column;align-items:center;gap:10px}
+.credit-meta{display:flex;flex-direction:column;align-items:center;gap:5px;border:1px solid;padding:12px 18px;font-size:8px}
+.credit-song{display:inline-flex;align-items:center;gap:6px;opacity:.8}
+.credit-created a{color:inherit;text-decoration:underline}
+
+/* TC-111 — drag column antar canvas */
+.tree-column.column-drop-ready{outline:2px dashed #2a8f6d;outline-offset:2px;border-radius:8px}
+.tree-row.column-node[draggable="true"]{cursor:grab}
+
+/* TC-135 — thumbnail gambar sample di landing */
+.ikr-template-sample{width:100%;aspect-ratio:3/4;background-size:cover;background-position:center;border-radius:inherit}
+
+/* TC-136 / TC-137 — preview template desktop & mobile */
+.journey-preview-toolbar{position:sticky;top:0;z-index:10;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 14px;background:rgba(10,26,21,.85);backdrop-filter:blur(6px)}
+.journey-device-switch{display:flex;gap:6px}
+.journey-device-switch button{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(255,255,255,.28);background:transparent;color:#fff;border-radius:8px;padding:7px 12px;font-size:8px}
+.journey-device-switch button.active{background:#fff;color:#123f33}
+.actual-template-preview-shell.device-desktop{width:100%;max-width:none;margin:0}
+.actual-template-preview-shell.device-mobile{width:min(420px,94vw);margin:0 auto;border-radius:18px;overflow:hidden;box-shadow:0 18px 50px rgba(6,22,17,.45)}

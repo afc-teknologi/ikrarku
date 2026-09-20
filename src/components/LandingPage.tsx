@@ -281,7 +281,18 @@ export default function LandingPage({
                   aria-label={`Lihat desain ${t.name}`}
                   onClick={() => onTemplate(t)}
                 >
-                  {t.canvasSections?.length ? (
+                  {t.sampleImage || t.preview ? (
+                    /* QA TC-135: gambar sample yang baru diunggah langsung dipakai
+                       sebagai thumbnail di halaman Templates. */
+                    <div
+                      className="ikr-template-sample"
+                      style={{
+                        backgroundImage: `url(${t.sampleImage || t.preview})`,
+                      }}
+                      role="img"
+                      aria-label={`Sample ${t.name}`}
+                    />
+                  ) : t.canvasSections?.length ? (
                     renderPreview(t)
                   ) : (
                     <div
