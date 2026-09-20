@@ -3200,8 +3200,10 @@ function App() {
         devVerificationUrl: result.devVerificationUrl as string | undefined,
       };
     } catch (error) {
-      flash(error instanceof Error ? error.message : "Registrasi gagal.");
-      return { ok: false };
+      const message =
+        error instanceof Error ? error.message : "Registrasi gagal.";
+      flash(message);
+      return { ok: false, error: message };
     }
   };
 
@@ -4793,7 +4795,7 @@ function Auth({
     password: string,
     passwordConfirm: string,
     email: string,
-  ) => Promise<{ ok: boolean; devVerificationUrl?: string }>;
+  ) => Promise<{ ok: boolean; devVerificationUrl?: string; error?: string }>;
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -4846,6 +4848,7 @@ function Auth({
         email,
       );
       if (result.ok) setSignupSubmitted(true);
+      else setAuthError(result.error || "Registrasi gagal. Coba lagi.");
       if (result.devVerificationUrl)
         setVerificationUrl(result.devVerificationUrl);
     } else {
