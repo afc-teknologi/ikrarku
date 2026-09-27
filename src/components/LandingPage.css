@@ -744,3 +744,20 @@
     translate: none;
   }
 }
+
+/* Thumbnail sample template: isi penuh kartu tanpa terpotong berlebihan.
+   Sample yang diambil dari canvas sudah berasio 4:5 sehingga pas; sample
+   upload manual berasio lain tetap dipusatkan, bukan diperbesar dari tengah. */
+.ikr-template-sample {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  background-color: #eef2ef;
+}
+.ikr-template-preview {
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 4 / 5;
+}

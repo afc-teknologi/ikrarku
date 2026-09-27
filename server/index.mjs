@@ -322,6 +322,41 @@ function initDb() {
   ensureColumn("templates", "unpublished_at", "TEXT");
   // Share fee per Template Creator; NULL = ikut rate default platform.
   ensureColumn("users", "commission_rate", "REAL");
+  // Web Designer perlu canvas.manage.own agar bisa menyimpan websitenya sendiri.
+  try {
+    const editorRole = db
+      .prepare("SELECT permissions_json FROM roles WHERE id='role_editor'")
+      .get();
+    if (editorRole) {
+      const current = JSON.parse(editorRole.permissions_json || "[]");
+      if (!current.includes("canvas.manage.own")) {
+        current.push("canvas.manage.own");
+        db.prepare(
+          "UPDATE roles SET permissions_json=? WHERE id='role_editor'",
+        ).run(JSON.stringify(current));
+      }
+    }
+  } catch (error) {
+    console.error("role canvas permission migration failed", error.message);
+  }
+  // Articles CMS hanya untuk Administrator; cabut dari Web Designer yang sudah ada.
+  try {
+    const editor = db
+      .prepare("SELECT permissions_json FROM roles WHERE id='role_editor'")
+      .get();
+    if (editor) {
+      const current = JSON.parse(editor.permissions_json || "[]");
+      const next = current.filter(
+        (item) => item !== "articles.manage" && item !== "articles.view",
+      );
+      if (next.length !== current.length)
+        db.prepare(
+          "UPDATE roles SET permissions_json=? WHERE id='role_editor'",
+        ).run(JSON.stringify(next));
+    }
+  } catch (error) {
+    console.error("role cleanup failed", error.message);
+  }
   // Komisi Template Creator: 10% dari nilai order yang lunas.
   db.exec(`
     CREATE TABLE IF NOT EXISTS template_commissions (
@@ -385,10 +420,9 @@ function initDb() {
         "templates.create",
         "templates.edit",
         "canvas.manage",
+        "canvas.manage.own",
         "tasks.view",
         "tasks.update",
-        "articles.view",
-        "articles.manage",
         "sounds.view",
         "conversations.view",
         "conversations.reply",
@@ -1014,11 +1048,14 @@ app.get(
 
 app.post("/api/auth/login", rateLimit("login", 12, 60_000), (req, res) => {
   const { username, password } = req.body || {};
+  // Login menerima username maupun email — kolomnya satu, jadi pengguna sering
+  // mengisinya dengan email dan sebelumnya selalu ditolak.
+  const identifier = String(username || "").trim();
   const row = db
     .prepare(
-      `SELECT u.*,r.name role_name,r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id WHERE u.username=?`,
+      `SELECT u.*,r.name role_name,r.permissions_json FROM users u JOIN roles r ON r.id=u.role_id WHERE u.username=? OR lower(u.email)=lower(?)`,
     )
-    .get(username);
+    .get(identifier, identifier);
   if (!row || !bcrypt.compareSync(String(password || ""), row.password_hash))
     return res
       .status(401)
@@ -2463,6 +2500,23 @@ app.get("/api/clients/:id/site", auth, permit("users.view"), (req, res) => {
     return res
       .status(403)
       .json({ error: "User belum di-assign kepada Editor ini" });
+  // Order lama dibayar sebelum seeding ada, sehingga canvas-nya kosong. Isi dari
+  // template yang dibeli begitu Web Designer membukanya.
+  try {
+    const paid = db
+      .prepare(
+        "SELECT * FROM orders WHERE user_id=? AND payment_status='Paid' ORDER BY paid_at DESC LIMIT 1",
+      )
+      .get(req.params.id);
+    if (paid?.template_id) {
+      const tpl = db
+        .prepare("SELECT * FROM templates WHERE id=?")
+        .get(paid.template_id);
+      if (tpl) seedCustomerSiteFromTemplate(req.params.id, paid, tpl);
+    }
+  } catch (error) {
+    console.error("backfill customer site failed", error.message);
+  }
   const row = db
     .prepare("SELECT * FROM sites WHERE user_id=?")
     .get(req.params.id);
@@ -3250,6 +3304,64 @@ function creatorCommissionRate(creatorId) {
     ? TEMPLATE_COMMISSION_RATE
     : Number(rate);
 }
+// Website customer diisi dari canvas template yang dibeli. Tanpa ini, Web
+// Designer membuka Manage Canvas dan mendapati halaman kosong.
+function seedCustomerSiteFromTemplate(userId, order, template) {
+  if (!userId || !template) return;
+  let sections = [];
+  try {
+    sections = JSON.parse(template.canvas_json || "[]");
+  } catch {
+    sections = [];
+  }
+  if (!Array.isArray(sections) || !sections.length) return;
+  const existing = db
+    .prepare("SELECT * FROM sites WHERE user_id=?")
+    .get(userId);
+  const hasDesign = (() => {
+    if (!existing) return false;
+    try {
+      const current = JSON.parse(existing.canvas_json || "[]");
+      return Array.isArray(current) && current.length > 0;
+    } catch {
+      return false;
+    }
+  })();
+  if (hasDesign) return;
+  const title = order.customer_name || template.name;
+  const baseSlug =
+    (order.email || template.name || "undangan")
+      .split("@")[0]
+      .replace(/[^a-z0-9-]/gi, "-")
+      .toLowerCase() || "undangan";
+  try {
+    if (existing)
+      db.prepare(
+        "UPDATE sites SET title=?,template_id=?,canvas_json=?,updated_at=? WHERE user_id=?",
+      ).run(title, template.id, JSON.stringify(sections), now(), userId);
+    else {
+      const taken = db
+        .prepare("SELECT id FROM sites WHERE slug=?")
+        .get(baseSlug);
+      db.prepare(
+        `INSERT INTO sites(id,user_id,title,slug,template_id,canvas_json,status,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        id("site"),
+        userId,
+        title,
+        taken ? `${baseSlug}-${Math.random().toString(36).slice(2, 6)}` : baseSlug,
+        template.id,
+        JSON.stringify(sections),
+        "Draft",
+        now(),
+        now(),
+      );
+    }
+  } catch (error) {
+    console.error("seed customer site failed", error.message);
+  }
+}
+
 function recordTemplateCommission(order, template) {
   if (!template?.created_by) return;
   // Template yang dibuat Administrator adalah milik platform. Membayar komisi ke
@@ -3370,7 +3482,17 @@ async function fulfillPaidOrder(order, methodCode) {
         const linked = db
           .prepare("SELECT * FROM orders WHERE id=?")
           .get(fresh.id);
-        if (linked.user_id) policy.assignPaidSite(linked, linked.user_id);
+        // Order guest belum punya user_id saat dibayar; coba cocokkan lewat email
+        // supaya penugasan Web Designer tidak tertunda sampai customer login.
+        const ownerId =
+          linked.user_id ||
+          db
+            .prepare("SELECT id FROM users WHERE lower(email)=lower(?)")
+            .get(linked.email)?.id;
+        if (ownerId) {
+          policy.assignPaidSite(linked, ownerId);
+          seedCustomerSiteFromTemplate(ownerId, fresh, template);
+        }
         db.prepare(
           `INSERT INTO email_outbox(id,to_email,subject,html,status,attachment_path,created_at) VALUES(?,?,?,?,?,?,?)`,
         ).run(
@@ -3756,7 +3878,7 @@ app.get("/api/orders/:id", auth, (req, res) => {
 });
 
 app.get("/api/tasks", auth, permit("tasks.view"), (req, res) => {
-  const selectSql = `SELECT t.*,o.order_no,o.customer_name,o.email,o.phone,tp.name template_name,tp.status template_status,u.first_name||' '||u.last_name requestor_name,u.email requestor_email FROM tasks t LEFT JOIN orders o ON o.id=t.order_id LEFT JOIN templates tp ON tp.id=t.template_id LEFT JOIN users u ON u.id=t.requestor_id`;
+  const selectSql = `SELECT t.*,o.order_no,o.customer_name,o.email,o.phone,o.user_id customer_user_id,au.first_name||' '||au.last_name assigned_user_name,tp.name template_name,tp.status template_status,u.first_name||' '||u.last_name requestor_name,u.email requestor_email FROM tasks t LEFT JOIN orders o ON o.id=t.order_id LEFT JOIN templates tp ON tp.id=t.template_id LEFT JOIN users u ON u.id=t.requestor_id LEFT JOIN users au ON au.id=t.assigned_user_id`;
   const rows = req.user.permissions.includes("*")
     ? db.prepare(`${selectSql} ORDER BY t.created_at DESC`).all()
     : req.user.permissions.includes("templates.approve")

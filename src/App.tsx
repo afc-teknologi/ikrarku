@@ -114,7 +114,7 @@ import {
 } from "lucide-react";
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 import "./App.css";
-import LandingPageView from "./components/LandingPage";
+import LandingPageView, { JournalCard } from "./components/LandingPage";
 import DesignerControls from "./components/DesignerControls";
 import {
   designerStyle,
@@ -153,7 +153,9 @@ export type View =
   | "customer-service"
   | "cs-dashboard"
   | "sound-library"
-  | "commissions";
+  | "commissions"
+  | "journal"
+  | "designs";
 type PageKey = "pages" | "invitees" | "rsvp-page";
 type InspectorTab = "content" | "style" | "advanced";
 type Alignment = "left" | "center" | "right" | "justify";
@@ -516,6 +518,14 @@ type Feature = DesignerLayout & {
   creditText?: string; // TC-123
   creditSongTitle?: string;
   creditLink?: string;
+  coverButtonShape?:
+    | "solid"
+    | "rounded"
+    | "pill"
+    | "square"
+    | "outline"
+    | "ghost"
+    | "underline"; // TC-141
   loopEffect?: LoopEffect; // Efek berulang pada feature
   loopSpeed?: number; // detik per siklus
 };
@@ -570,6 +580,7 @@ type CanvasSection = {
   backgroundLayers?: BackgroundLayer[]; // TC-108 layered background
   columnWidths?: number[]; // TC-114 lebar kolom hasil drag grid line
   showGuides?: boolean; // TC-113 garis guide/margin
+  backgroundGlobal?: boolean; // TC-146 satu background untuk semua canvas
   loopEffect?: LoopEffect; // Efek berulang pada seluruh section
   loopSpeed?: number;
   backgroundLoopEffect?: LoopEffect; // Efek berulang khusus layer background
@@ -671,6 +682,8 @@ type TaskItem = {
   id: string;
   order_id?: string;
   order_no?: string;
+  customer_user_id?: string;
+  assigned_user_name?: string;
   customer_name?: string;
   email?: string;
   phone?: string;
@@ -971,6 +984,7 @@ function makeFeature(
     objectWidth:
       type === "invitation-cover" ? 82 : defaultFeatureStyle.objectWidth,
     buttonLabel: type === "invitation-cover" ? "Buka Undangan" : undefined,
+    coverButtonShape: type === "invitation-cover" ? "rounded" : undefined, // TC-141
     overlayOpacity:
       type === "invitation-cover" ? 0 : defaultFeatureStyle.overlayOpacity,
     eventDate: type === "countdown" ? "2026-08-20T09:00" : undefined,
@@ -2088,8 +2102,17 @@ function loadSession(): { view: View; role: Role; accountId: string } {
     const saved = JSON.parse(
       localStorage.getItem("ikrarku-session-v7") || "null",
     ) as { view?: View; role?: Role; accountId?: string } | null;
+    // Membuka "/" berarti pengunjung ingin landing page, walau sesi tersimpan
+    // menunjuk halaman workspace.
+    const atRoot =
+      typeof window !== "undefined" &&
+      window.location.pathname.replace(/^\/+|\/+$/g, "") === "";
     if (saved?.view && saved?.role && saved?.accountId)
-      return { view: saved.view, role: saved.role, accountId: saved.accountId };
+      return {
+        view: atRoot ? "landing" : saved.view,
+        role: saved.role,
+        accountId: saved.accountId,
+      };
   } catch {
     /* ignore invalid session */
   }
@@ -2155,6 +2178,7 @@ function App() {
   const [guests, setGuests] = useState<Guest[]>([]);
   const [greetings, setGreetings] = useState<Greeting[]>([]);
   const [toast, setToast] = useState("");
+  const [lastAuthError, setLastAuthError] = useState("");
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [articleItems, setArticleItems] = useState<ArticleItem[]>([]);
@@ -2217,6 +2241,9 @@ function App() {
       // on first paint, which would otherwise erase the slug before we can detect an unknown route.
       const pathSlug = window.location.pathname.replace(/^\/+|\/+$/g, "");
       const reserved = new Set([
+        "jurnal",
+        "desain",
+        "workspace",
         "",
         "login",
         "signup",
@@ -2242,6 +2269,9 @@ function App() {
         "customer-service",
         "sound-library",
         "commissions",
+        "workspace",
+        "journal",
+        "designs",
         "payment-settings",
         "editor",
       ]);
@@ -2272,6 +2302,12 @@ function App() {
         let slugNotFound = false;
         if (pathSlug === "verify-email") setView("verify-email");
         if (pathSlug === "reset-password") setView("reset-password");
+        if (pathSlug === "jurnal") setView("journal");
+        if (pathSlug === "desain") setView("designs");
+        if (pathSlug === "workspace") setView("dashboard");
+        // Root selalu landing page, walau sesi login masih aktif. Workspace
+        // dibuka lewat /workspace atau nama akun pada navigasi.
+        if (!pathSlug) setView("landing");
         if (pathSlug === "forgot-password") setView("forgot-password");
         if (pathSlug && !reserved.has(pathSlug)) {
           try {
@@ -2337,9 +2373,12 @@ function App() {
               )
                 ? savedSession.view
                 : fallbackView;
-            setView((previous) =>
-              previous === "landing" ? protectedView : previous,
-            );
+            // Membuka root berarti pengunjung memang ingin landing page,
+            // jadi view tersimpan tidak dipulihkan di sana.
+            if (pathSlug)
+              setView((previous) =>
+                previous === "landing" ? protectedView : previous,
+              );
           } catch {
             setApiToken("");
             localStorage.removeItem("ikrarku-session-v7");
@@ -2844,6 +2883,8 @@ function App() {
   useEffect(() => {
     const titles: Partial<Record<View, string>> = {
       commissions: "Komisi & Share Fee - ikrarku Sites",
+      journal: "Jurnal ikrarku - ikrarku Sites",
+      designs: "Semua Desain Undangan - ikrarku Sites",
       landing: "ikrarku Sites - Wedding Website & Undangan Digital",
       login: "Masuk - ikrarku Sites",
       signup: "Daftar Akun - ikrarku Sites",
@@ -2873,6 +2914,9 @@ function App() {
       "/pesan-sekarang",
       "/pembayaran-berhasil",
       "/articles",
+      "/jurnal",
+      "/desain",
+      "/workspace",
     ]);
     // Halaman bertoken tidak boleh dibersihkan sebelum komponennya sempat
     // membaca query string.
@@ -2904,8 +2948,29 @@ function App() {
       checkout: "/pesan-sekarang",
       "payment-success": "/pembayaran-berhasil",
       articles: "/articles",
+      journal: "/jurnal",
+      designs: "/desain",
     };
-    const target = paths[view];
+    const workspaceViews: View[] = [
+      "dashboard",
+      "orders",
+      "my-orders",
+      "users",
+      "roles",
+      "tasks",
+      "audit-log",
+      "help",
+      "cs-dashboard",
+      "customer-service",
+      "sound-library",
+      "commissions",
+      "payment-settings",
+      "settings",
+      "editor",
+    ];
+    const target = workspaceViews.includes(view)
+      ? "/workspace"
+      : paths[view];
     if (target && window.location.pathname !== target) {
       try {
         window.history.replaceState(
@@ -2919,6 +2984,15 @@ function App() {
     }
   }, [view, notFound, publicSiteData]);
 
+  const editorSnapshotRef = useRef({
+    view,
+    siteTitle,
+    sections,
+  });
+  useEffect(() => {
+    editorSnapshotRef.current = { view, siteTitle, sections };
+  }, [view, siteTitle, sections]);
+
   // QA TC-101: sesi otomatis berakhir setelah idle, walau browser ditutup tanpa logout.
   useEffect(() => {
     if (!currentAccountId) return;
@@ -2926,6 +3000,11 @@ function App() {
       Number(import.meta.env.VITE_SESSION_IDLE_MINUTES || 120) * 60_000;
     const KEY = "ikrarku-last-activity";
     const expire = () => {
+      // TC-149: pekerjaan editor yang belum tersimpan diamankan dulu sebelum
+      // sesi dibersihkan, supaya tidak hilang saat idle timeout.
+      const snapshot = editorSnapshotRef.current;
+      if (snapshot.view === "editor")
+        backupEditorDraft(snapshot.siteTitle, snapshot.sections);
       localStorage.removeItem(KEY);
       setApiToken("");
       localStorage.removeItem("ikrarku-session-v7");
@@ -3004,33 +3083,16 @@ function App() {
         })),
       })),
     }));
-    const existingHasCover = sections.some((section) =>
-      section.columns.some((column) =>
-        column.features.some((feature) => feature.type === "invitation-cover"),
-      ),
-    );
-    const additions = existingHasCover
-      ? generated.map((section) => ({
-          ...section,
-          columns: section.columns.map((column) => ({
-            ...column,
-            features: column.features.filter(
-              (feature) => feature.type !== "invitation-cover",
-            ),
-          })),
-        }))
-      : generated;
-    const nextSections = normalizeCoverSections([...sections, ...additions]);
-    const firstNewId = additions[0]?.id || nextSections[0]?.id || "";
+    const additions = generated;
+    const nextSections = normalizeCoverSections(additions);
+    const firstNewId = nextSections[0]?.id || "";
     setSelectedTemplate(template);
     setSections(nextSections);
     setSelectedDashboardCanvasId(firstNewId);
     setGuests([]);
     sessionStorage.setItem("ikrarku-edit-canvas", firstNewId);
     setView("editor");
-    flash(
-      `Template ${template.name} ditambahkan sebagai satu design pada website.`,
-    );
+    flash(`Template ${template.name} dipakai sebagai design website.`);
   };
 
   const addBlankCanvasFromTemplates = () => {
@@ -3126,6 +3188,7 @@ function App() {
     try {
       const result = await api.login(username, password);
       setApiToken(result.token);
+      localStorage.setItem("ikrarku-last-activity", String(Date.now()));
       const user = result.user;
       const mappedRole = user.role as Role;
       const account: AuthAccount = {
@@ -3172,7 +3235,9 @@ function App() {
       flash(`Selamat datang, ${user.name}.`);
       return true;
     } catch (error) {
-      flash(error instanceof Error ? error.message : "Login gagal.");
+      const message = error instanceof Error ? error.message : "Login gagal.";
+      flash(message);
+      setLastAuthError(message);
       return false;
     }
   };
@@ -3453,21 +3518,65 @@ function App() {
     }
   };
 
-  const manageUserCanvas = async (userId: string) => {
-    const user = managedUsers.find((item) => item.id === userId);
-    if (!user) return;
+  // Perubahan status task dikabarkan ke customer lewat Live Chat, supaya dia
+  // tidak perlu bertanya progres lewat kanal lain.
+  const notifyCustomerTaskStatus = async (task: TaskItem, status: string) => {
+    const label: Record<string, string> = {
+      Open: "Pesanan Anda masuk antrean pengerjaan.",
+      "In Progress": "Web Designer mulai mengerjakan website Anda.",
+      "Waiting Customer":
+        "Kami menunggu data atau konfirmasi dari Anda untuk melanjutkan.",
+      Done: "Website Anda selesai dikerjakan. Silakan cek hasilnya.",
+      Cancelled: "Pengerjaan dibatalkan. Hubungi kami bila ini keliru.",
+    };
+    const message = `Update pengerjaan: ${task.title}. ${label[status] || `Status menjadi ${status}.`}`;
     try {
-      if (!user.assignedEditorId && role === "Editor") {
+      await api.outboundMessage({
+        email: task.email || "",
+        body: message,
+      });
+      flash("Status tersimpan dan customer diberi tahu lewat Live Chat.");
+    } catch (error) {
+      flash(
+        error instanceof Error
+          ? `Status tersimpan, tetapi notifikasi gagal: ${error.message}`
+          : "Status tersimpan, tetapi notifikasi gagal dikirim.",
+      );
+    }
+  };
+
+  // Menu Canvas Editor selalu membuka ruang kerja Web Designer sendiri.
+  // Konteks website customer hanya aktif lewat Manage Canvas.
+  const resetEditorWorkspace = () => {
+    if (!siteOwnerUserId && editorMode !== "site") return;
+    setSiteOwnerUserId("");
+    setActiveManagedUserId("");
+    setEditorMode("template");
+    setSections([]);
+    setSiteTitle("");
+    setSlug("");
+  };
+
+  const manageUserCanvas = async (userId: string) => {
+    // Customer dari task bisa saja belum tercatat pada daftar assignment lokal,
+    // jadi jangan berhenti diam-diam — ambil datanya langsung dari server.
+    const user = managedUsers.find((item) => item.id === userId);
+    try {
+      if (user && !user.assignedEditorId && role === "Editor") {
         await api.assignClient(userId, currentAccountId);
       }
       const site = await api.clientSite(userId);
+      if (!site && !user) {
+        flash("Canvas customer ini belum tersedia atau bukan tanggung jawab Anda.");
+        return;
+      }
       setActiveManagedUserId(userId);
       setSiteOwnerUserId(userId);
-      setSiteTitle(site?.title || user.siteTitle || user.name);
+      setSiteTitle(site?.title || user?.siteTitle || user?.name || "Website customer");
       setSlug(
         site?.slug ||
-          user.slug ||
-          user.email
+          user?.slug ||
+          (user?.email || "customer")
             .split("@")[0]
             .replace(/[^a-z0-9-]/gi, "-")
             .toLowerCase(),
@@ -3479,7 +3588,8 @@ function App() {
         );
         if (match) setSelectedTemplate(match);
       }
-      setView("templates");
+      // Manage Canvas membuka Canvas Editor, bukan kembali ke daftar template.
+      setView("editor");
       const clients = await api.clients();
       setManagedUsers(
         clients.map((item: any) => ({
@@ -3495,7 +3605,7 @@ function App() {
           canvasIds: item.canvasIds || [],
         })),
       );
-      flash(`Sekarang mengelola Canvas milik ${user.name}.`);
+      flash(`Sekarang mengelola Canvas milik ${user?.name || "customer"}.`);
     } catch (error) {
       flash(
         error instanceof Error
@@ -3524,9 +3634,13 @@ function App() {
         preset: "classic",
         canvasJson: [],
       })) as Template;
+      const templateInstanceId = uid("template-instance");
       const firstCanvas: CanvasSection = {
         id: uid("canvas"),
         name: "Main Canvas",
+        templateInstanceId,
+        sourceTemplateId: template.id,
+        sourceTemplateName: template.name,
         columns: [{ id: uid("column"), features: [] }],
         backgroundColor: "#fffdf8",
         backgroundEffect: "none",
@@ -4069,6 +4183,18 @@ function App() {
     void api.logout().catch(() => undefined);
     setApiToken("");
     localStorage.removeItem("ikrarku-session-v7");
+    localStorage.removeItem("ikrarku-last-activity");
+    localStorage.removeItem(EDITOR_BACKUP_KEY);
+    setCurrentAccountId("");
+    setAccounts([]);
+    setRole("User");
+    setManagedUsers([]);
+    setTaskItems([]);
+    setMyOrders([]);
+    setServerConversations([]);
+    setSiteOwnerUserId("");
+    setActiveManagedUserId("");
+    setLastAuthError("");
     setView("landing");
     setChatWidgetOpen(false);
   };
@@ -4099,6 +4225,8 @@ function App() {
           templates={publicTemplates}
           onTemplate={openTemplateJourney}
           databaseOnline={databaseOnline}
+          accountName={currentAccountId ? currentAccount?.name : undefined}
+          onOpenWorkspace={() => setView("dashboard")}
           scrollTarget={landingScrollTarget}
           onScrolled={() => setLandingScrollTarget(null)}
         />
@@ -4165,6 +4293,26 @@ function App() {
         setView={setView}
         login={login}
         signupAccount={signupAccount}
+        lastAuthError={lastAuthError}
+      />
+    );
+  if (view === "designs")
+    return (
+      <AllDesignsPage
+        templates={publicTemplates}
+        setView={setView}
+        onTemplate={openTemplateJourney}
+        databaseOnline={databaseOnline}
+      />
+    );
+  if (view === "journal")
+    return (
+      <JournalPage
+        articles={articleItems.filter(
+          (article) => article.status === "Published",
+        )}
+        setView={setView}
+        databaseOnline={databaseOnline}
       />
     );
   if (view === "forgot-password")
@@ -4278,6 +4426,7 @@ function App() {
         open={sidebarOpen}
         logout={signOut}
         currentAccount={currentAccount}
+        onResetEditor={resetEditorWorkspace}
       />
       <main className={`main-content ${sidebarOpen ? "" : "collapsed"}`}>
         <Topbar
@@ -4316,6 +4465,7 @@ function App() {
             users={managedUsers}
             setView={setView}
             manageUserCanvas={manageUserCanvas}
+            adminView={hasPermission("users.manage")}
             templateCount={templateCatalog.length}
             supportCount={serverConversations.length}
           />
@@ -4352,6 +4502,7 @@ function App() {
             openTemplateCreator={() => setTemplateCreatorOpen(true)}
             canCreate={hasPermission("templates.create")}
             managedTemplates={templateCatalog}
+          managingCustomer={Boolean(siteOwnerUserId)}
             currentAccountId={currentAccountId}
             canApprove={hasPermission("templates.approve")}
             onTakedown={takedownTemplate}
@@ -4492,6 +4643,8 @@ function App() {
             onReview={approveTemplate}
             canApprove={hasPermission("templates.approve")}
             templates={templateCatalog}
+            onManageCanvas={manageUserCanvas}
+            onNotifyCustomer={notifyCustomerTaskStatus}
           />
         )}
         {view === "roles" && (
@@ -4747,12 +4900,275 @@ function useViewportDevice(): DeviceMode {
   return device;
 }
 
+// Halaman katalog desain lengkap. Landing hanya menampilkan 9 desain; sisanya
+// dibuka di sini dengan filter kategori dan pencarian.
+function AllDesignsPage({
+  templates,
+  setView,
+  onTemplate,
+  databaseOnline,
+}: {
+  templates: Template[];
+  setView: (view: View) => void;
+  onTemplate: (template: Template) => void;
+  databaseOnline: boolean;
+}) {
+  const [category, setCategory] = useState("Semua");
+  const [query, setQuery] = useState("");
+  const categories = useMemo(
+    () => ["Semua", ...new Set(templates.map((item) => item.category))],
+    [templates],
+  );
+  const visible = useMemo(
+    () =>
+      templates.filter(
+        (item) =>
+          (category === "Semua" || item.category === category) &&
+          `${item.name} ${item.description || ""}`
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+      ),
+    [templates, category, query],
+  );
+  return (
+    <div className="journal-page">
+      <header className="journal-topbar">
+        <button className="secondary-btn" onClick={() => setView("landing")}>
+          <ArrowLeft size={16} /> Kembali ke beranda
+        </button>
+        <Brand />
+        <div className="journal-topbar-actions">
+          <button className="secondary-btn" onClick={() => setView("login")}>
+            Masuk
+          </button>
+          <button className="primary-btn" onClick={() => setView("designs")}>
+            Temukan desain <ArrowRight size={15} />
+          </button>
+        </div>
+      </header>
+      <main>
+        <section className="journal-hero">
+          <span className="eyebrow">KATALOG DESAIN</span>
+          <h1>
+            Temukan yang terasa
+            <br />
+            <em>seperti kalian.</em>
+          </h1>
+          <p>
+            Semua desain undangan yang tersedia, lengkap dengan kategori dan
+            harga.
+          </p>
+          {!databaseOnline && (
+            <div className="journal-offline">
+              Koneksi ke server sedang bermasalah. Katalog mungkin belum lengkap.
+            </div>
+          )}
+        </section>
+        <section className="journal-toolbar">
+          <div className="journal-filter">
+            {categories.map((item) => (
+              <button
+                key={item}
+                className={category === item ? "is-active" : ""}
+                onClick={() => setCategory(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <label className="journal-search">
+            <Search size={15} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Cari desain..."
+            />
+          </label>
+        </section>
+        <section className="ikr-template-grid design-catalog-grid">
+          {visible.map((template) => (
+            <article className="ikr-template" key={template.id}>
+              <button
+                className="ikr-template-preview"
+                aria-label={`Lihat desain ${template.name}`}
+                onClick={() => onTemplate(template)}
+              >
+                {template.sampleImage || template.preview ? (
+                  <div
+                    className="ikr-template-sample"
+                    style={{
+                      backgroundImage: `url(${template.sampleImage || template.preview})`,
+                    }}
+                    role="img"
+                    aria-label={`Sample ${template.name}`}
+                  />
+                ) : template.canvasSections?.length ? (
+                  <WebsiteTemplatePreview
+                    template={template}
+                    title={template.name}
+                    sections={template.canvasSections}
+                  />
+                ) : (
+                  <div
+                    className="ikr-template-fallback"
+                    style={{ background: template.bg, color: template.accent }}
+                  >
+                    <small>{template.category}</small>
+                    <span>
+                      Our story,
+                      <br />
+                      <i>beautifully told.</i>
+                    </span>
+                  </div>
+                )}
+                <span className="ikr-preview-action">
+                  Lihat desain <ArrowRight size={16} />
+                </span>
+              </button>
+              <div className="ikr-template-info">
+                <div>
+                  <small>{template.category}</small>
+                  <h3>{template.name}</h3>
+                </div>
+                <span>{formatRupiah(template.price || 0)}</span>
+              </div>
+            </article>
+          ))}
+          {!visible.length && (
+            <div className="journal-empty">
+              Belum ada desain yang cocok dengan pencarian Anda.
+            </div>
+          )}
+        </section>
+      </main>
+      <footer className="journal-footer">
+        <Brand />
+        <span>Undangan digital. Cerita yang personal.</span>
+      </footer>
+    </div>
+  );
+}
+
+// Halaman Jurnal ikrarku — daftar lengkap artikel publik dengan filter kategori.
+// Layout kartunya dipakai bersama landing page supaya seragam.
+function JournalPage({
+  articles,
+  setView,
+  databaseOnline,
+}: {
+  articles: ArticleItem[];
+  setView: (view: View) => void;
+  databaseOnline: boolean;
+}) {
+  const [article, setArticle] = useState<ArticleItem | null>(null);
+  const [category, setCategory] = useState("Semua");
+  const [query, setQuery] = useState("");
+  const categories = useMemo(
+    () => ["Semua", ...new Set(articles.map((item) => item.category))],
+    [articles],
+  );
+  const visible = useMemo(
+    () =>
+      articles.filter(
+        (item) =>
+          (category === "Semua" || item.category === category) &&
+          `${item.title} ${item.excerpt} ${item.tags?.join(" ") || ""}`
+            .toLowerCase()
+            .includes(query.trim().toLowerCase()),
+      ),
+    [articles, category, query],
+  );
+  if (article)
+    return (
+      <ArticleReaderPage
+        article={article}
+        onBack={() => setArticle(null)}
+        publicMode
+      />
+    );
+  return (
+    <div className="journal-page">
+      <header className="journal-topbar">
+        <button className="secondary-btn" onClick={() => setView("landing")}>
+          <ArrowLeft size={16} /> Kembali ke beranda
+        </button>
+        <Brand />
+        <div className="journal-topbar-actions">
+          <button className="secondary-btn" onClick={() => setView("login")}>
+            Masuk
+          </button>
+          <button className="primary-btn" onClick={() => setView("designs")}>
+            Temukan desain <ArrowRight size={15} />
+          </button>
+        </div>
+      </header>
+      <main>
+        <section className="journal-hero">
+          <span className="eyebrow">JURNAL IKRARKU</span>
+          <h1>
+            Inspirasi untuk
+            <br />
+            <em>hari istimewa kalian.</em>
+          </h1>
+          <p>
+            Panduan, ide, dan cerita seputar persiapan pernikahan dan undangan
+            digital.
+          </p>
+          {!databaseOnline && (
+            <div className="journal-offline">
+              Koneksi ke server sedang bermasalah. Daftar artikel mungkin belum
+              lengkap.
+            </div>
+          )}
+        </section>
+        <section className="journal-toolbar">
+          <div className="journal-filter">
+            {categories.map((item) => (
+              <button
+                key={item}
+                className={category === item ? "is-active" : ""}
+                onClick={() => setCategory(item)}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+          <label className="journal-search">
+            <Search size={15} />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Cari artikel..."
+            />
+          </label>
+        </section>
+        <section className="journal-grid">
+          {visible.map((item) => (
+            <JournalCard key={item.id} article={item} onOpen={setArticle} />
+          ))}
+          {!visible.length && (
+            <div className="journal-empty">
+              Belum ada artikel yang cocok dengan pencarian Anda.
+            </div>
+          )}
+        </section>
+      </main>
+      <footer className="journal-footer">
+        <Brand />
+        <span>Undangan digital. Cerita yang personal.</span>
+      </footer>
+    </div>
+  );
+}
+
 function LandingPage(props: {
   setView: (view: View) => void;
   articles: ArticleItem[];
   templates: Template[];
   onTemplate: (template: Template) => void;
   databaseOnline: boolean;
+  accountName?: string;
+  onOpenWorkspace?: () => void;
   scrollTarget?: string | null;
   onScrolled?: () => void;
 }) {
@@ -4785,7 +5201,9 @@ function Auth({
   setView,
   login,
   signupAccount,
+  lastAuthError = "",
 }: {
+  lastAuthError?: string;
   view: View;
   setView: (view: View) => void;
   login: (username: string, password: string) => Promise<boolean>;
@@ -4858,7 +5276,8 @@ function Auth({
         const ok = await login(username, password);
         if (!ok)
           setAuthError(
-            "Username atau password salah. Periksa kembali lalu coba lagi.",
+            lastAuthError ||
+              "Username atau password salah. Periksa kembali lalu coba lagi.",
           );
       }
     }
@@ -4906,7 +5325,7 @@ function Auth({
           <p>
             {view === "signup"
               ? "Email wajib diverifikasi sebelum akun dapat digunakan."
-              : "Masukkan username dan password akun terdaftar."}
+              : "Masukkan username atau email beserta password akun terdaftar."}
           </p>
           <form
             className="auth-fields"
@@ -4937,7 +5356,7 @@ function Auth({
               </>
             )}
             <label>
-              Username
+              Username atau email
               <input
                 value={username}
                 onChange={(event) => {
@@ -5912,6 +6331,8 @@ function TasksPage({
   onReview,
   canApprove,
   templates = [],
+  onManageCanvas,
+  onNotifyCustomer,
 }: {
   tasks: TaskItem[];
   onRefresh: () => void;
@@ -5923,10 +6344,14 @@ function TasksPage({
   ) => Promise<void>;
   canApprove: boolean;
   templates?: Template[];
+  onManageCanvas?: (userId: string) => void;
+  onNotifyCustomer?: (task: TaskItem, status: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState("All");
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
+  const [savingStatus, setSavingStatus] = useState("");
   const approvalTasks = tasks.filter((task) => task.task_type === "Approval");
   const regularTasks = tasks.filter((task) => task.task_type !== "Approval");
   const visible = regularTasks.filter(
@@ -6100,11 +6525,50 @@ function TasksPage({
                   {task.email || task.requestor_email || ""} {task.phone || ""}
                 </span>
               </div>
-              <footer>
+              {task.assigned_user_name && (
+                <div className="task-owner">
+                  <UserCog size={13} /> Web Designer: {task.assigned_user_name}
+                </div>
+              )}
+              {/* Preview template yang dibeli customer, langsung dari kartu task. */}
+              {(() => {
+                const taskTemplate = templates.find(
+                  (item) =>
+                    item.id === task.template_id ||
+                    item.name === task.template_name,
+                );
+                if (!taskTemplate) return null;
+                return (
+                  <button
+                    type="button"
+                    className="task-template-preview"
+                    onClick={() => setPreviewTemplate(taskTemplate)}
+                  >
+                    <Eye size={14} /> Preview template {taskTemplate.name}
+                  </button>
+                );
+              })()}
+              <footer className="task-footer">
+                {/* Manage Canvas: Web Designer membuka canvas customer langsung
+                    dari task yang ditugaskan kepadanya. */}
+                {onManageCanvas && task.customer_user_id && (
+                  <button
+                    type="button"
+                    className="task-manage-canvas"
+                    onClick={() =>
+                      onManageCanvas(task.customer_user_id as string)
+                    }
+                  >
+                    <WandSparkles size={14} /> Manage Canvas
+                  </button>
+                )}
                 <select
-                  value={task.status}
+                  value={draftStatus[task.id] ?? task.status}
                   onChange={(event) =>
-                    void onUpdate(task.id, event.target.value)
+                    setDraftStatus((previous) => ({
+                      ...previous,
+                      [task.id]: event.target.value,
+                    }))
                   }
                 >
                   <option>Open</option>
@@ -6113,6 +6577,33 @@ function TasksPage({
                   <option>Done</option>
                   <option>Cancelled</option>
                 </select>
+                {/* Status baru disimpan setelah ditekan Save, lalu customer
+                    diberi tahu lewat Live Chat. */}
+                {
+                  <button
+                    type="button"
+                    className="task-save-status"
+                    disabled={
+                      savingStatus === task.id ||
+                      (draftStatus[task.id] ?? task.status) === task.status
+                    }
+                    onClick={async () => {
+                      const next = draftStatus[task.id] ?? task.status;
+                      setSavingStatus(task.id);
+                      await onUpdate(task.id, next);
+                      await onNotifyCustomer?.(task, next);
+                      setSavingStatus("");
+                      setDraftStatus((previous) => {
+                        const copy = { ...previous };
+                        delete copy[task.id];
+                        return copy;
+                      });
+                    }}
+                  >
+                    <Save size={13} />
+                    {savingStatus === task.id ? "Menyimpan..." : "Save Status"}
+                  </button>
+                }
                 <small>
                   {new Date(task.created_at).toLocaleString("id-ID")}
                 </small>
@@ -6410,6 +6901,7 @@ function Sidebar({
   open,
   logout,
   currentAccount,
+  onResetEditor,
 }: {
   role: Role;
   view: View;
@@ -6417,6 +6909,7 @@ function Sidebar({
   open: boolean;
   logout: () => void;
   currentAccount?: AuthAccount;
+  onResetEditor?: () => void;
 }) {
   const permissions = currentAccount?.permissions || [];
   const can = (permission: string) =>
@@ -6446,11 +6939,13 @@ function Sidebar({
       "templates.view",
     ],
     ["editor", WandSparkles, "Canvas Editor", "canvas.manage"],
+
+    // Articles CMS dikelola Administrator; Web Designer tidak perlu menu ini.
     [
       "articles",
       BookOpen,
-      can("articles.manage") ? "Articles CMS" : "Articles",
-      "articles.view",
+      "Articles CMS",
+      "articles.manage",
     ],
     [
       "commissions",
@@ -6501,7 +6996,10 @@ function Sidebar({
         {menus.map(([target, Icon, label]) => (
           <button
             className={view === target ? "active" : ""}
-            onClick={() => setView(target)}
+            onClick={() => {
+              if (target === "editor") onResetEditor?.();
+              setView(target);
+            }}
             key={target}
           >
             <Icon size={18} />
@@ -6917,15 +7415,17 @@ function Dashboard({
 function EditorDashboard({
   users,
   setView,
-  manageUserCanvas,
+  manageUserCanvas: _manageUserCanvas,
   templateCount,
   supportCount,
+  adminView = false,
 }: {
   users: ManagedUser[];
   setView: (view: View) => void;
   manageUserCanvas: (userId: string) => void;
   templateCount: number;
   supportCount: number;
+  adminView?: boolean;
 }) {
   const assigned = users.filter((user) => user.assignedTo);
   return (
@@ -6951,9 +7451,9 @@ function EditorDashboard({
       <div className="stats-grid">
         <Stat
           icon={Users}
-          label="Assigned customers"
+          label="Customer dari order saya"
           value={String(assigned.length)}
-          note={`${users.filter((user) => !user.assignedTo).length} waiting assignment`}
+          note="Ditugaskan otomatis dari template buatan Anda"
         />
         <Stat
           icon={Layers3}
@@ -7002,16 +7502,16 @@ function EditorDashboard({
                     {user.email} · {user.plan}
                   </span>
                 </div>
-                <span
-                  className={`assignment-status ${user.assignedTo ? "assigned" : "unassigned"}`}
-                >
-                  {user.assignedTo ? user.assignedTo : "Unassigned"}
-                </span>
+                {adminView && (
+                  <span className="assignment-status assigned">
+                    {user.assignedTo || "Belum di-assign"}
+                  </span>
+                )}
                 <button
-                  disabled={!user.assignedTo}
-                  onClick={() => manageUserCanvas(user.id)}
+                  className="client-task-link"
+                  onClick={() => setView("tasks")}
                 >
-                  Manage Canvas <ArrowRight size={14} />
+                  Tasks &amp; Tickets <ArrowRight size={14} />
                 </button>
               </article>
             ))}
@@ -7276,13 +7776,13 @@ function ClientManagement({
   clients,
   editors = [],
   onAssign,
-  onManage,
   adminMode = false,
 }: {
   clients: ManagedUser[];
   editors?: AuthAccount[];
   onAssign: (userId: string, editorId?: string) => Promise<void>;
-  onManage: (userId: string) => void;
+  // Manage Canvas kini berada pada kartu task, bukan di daftar Client Assignment.
+  onManage?: (userId: string) => void;
   adminMode?: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -7345,25 +7845,14 @@ function ClientManagement({
                   ))}
                 </select>
               ) : !client.assignedTo ? (
-                <button
-                  className="secondary-btn"
-                  onClick={() => void onAssign(client.id)}
-                >
-                  Assign to Me
-                </button>
-              ) : (
+                <span className="assignment-status">
+                  Menunggu order — penugasan mengikuti pembuat template
+                </span>
+              ) : adminMode ? (
                 <span className="assignment-status assigned">
                   {client.assignedTo}
                 </span>
-              )}
-              <button
-                className="primary-btn"
-                disabled={!client.assignedTo && !adminMode}
-                onClick={() => onManage(client.id)}
-              >
-                <WandSparkles size={14} />
-                Manage Canvas
-              </button>
+              ) : null}
             </article>
           ))}
         </div>
@@ -7579,18 +8068,20 @@ function Templates({
   templateCatalog,
   sections,
   applyTemplate,
-  addBlankCanvas,
+  addBlankCanvas: _addBlankCanvas,
   deleteCanvas,
   duplicateCanvas,
   editCanvas,
   openTemplateCreator,
   canCreate,
   managedTemplates = [],
+  managingCustomer = false,
   currentAccountId,
   canApprove = false,
   onTakedown,
   onRepublish,
   onUploadSample,
+  onCaptureSample,
   onEditTemplate,
 }: {
   role: Role;
@@ -7607,11 +8098,13 @@ function Templates({
   openTemplateCreator: () => void;
   canCreate: boolean;
   managedTemplates?: Template[];
+  managingCustomer?: boolean;
   currentAccountId?: string;
   canApprove?: boolean;
   onTakedown?: (templateId: string, reason: string) => Promise<void>;
   onRepublish?: (templateId: string) => Promise<void>;
   onUploadSample?: (templateId: string, file: File) => Promise<void>;
+  onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
 }) {
   const [filter, setFilter] = useState("All");
@@ -7645,11 +8138,16 @@ function Templates({
               <Palette size={17} /> Create Template
             </button>
           )}
-          <button className="primary-btn" onClick={addBlankCanvas}>
-            <Plus size={17} /> Add Canvas
-          </button>
         </div>
       </div>
+      {role === "Editor" && managingCustomer && (
+        <p className="canvas-help-note workspace-hint">
+          Anda sedang mengelola website milik customer. Website customer diedit
+          lewat <strong>Tasks &amp; Tickets → Manage Canvas</strong>, bukan dari
+          halaman ini.
+        </p>
+      )}
+      {!(role === "Editor" && managingCustomer) && (
       <section className="canvas-manager-section">
         <div className="section-heading">
           <div>
@@ -7669,12 +8167,15 @@ function Templates({
               <span>WEBSITE EMPTY</span>
               <h3>Website ini belum memiliki design</h3>
               <p>
-                Mulai dari Canvas kosong atau gunakan template dari library di
-                bawah.
+                {canCreate
+                  ? "Buat desain baru lewat Create Template, atau pilih template dari library di bawah."
+                  : "Pilih salah satu template dari library di bawah untuk memulai."}
               </p>
-              <button className="primary-btn" onClick={addBlankCanvas}>
-                <Plus size={16} /> Create First Canvas
-              </button>
+              {canCreate && (
+                <button className="primary-btn" onClick={openTemplateCreator}>
+                  <Palette size={16} /> Create Template
+                </button>
+              )}
             </div>
           )}
           {websiteDesigns.map((design, index) => {
@@ -7742,6 +8243,7 @@ function Templates({
           })}
         </div>
       </section>
+      )}
 
       {(canCreate || canApprove) && (
         <TemplateApprovalManager
@@ -7751,6 +8253,7 @@ function Templates({
           onTakedown={onTakedown}
           onRepublish={onRepublish}
           onUploadSample={onUploadSample}
+          onCaptureSample={onCaptureSample}
           onEditTemplate={onEditTemplate}
         />
       )}
@@ -8201,8 +8704,16 @@ function Editor({
         setAutosaveState("saved");
         historyRef.current = [];
         futureRef.current = [];
+        window.localStorage.removeItem(EDITOR_BACKUP_KEY);
         setLeavePromptOpen(false);
         if (leave) setView("templates");
+      } else {
+        // TC-149: simpan salinan lokal supaya pekerjaan tidak hilang saat
+        // penyimpanan ke server gagal, termasuk ketika sesi sudah berakhir.
+        backupEditorDraft(siteTitle, sections);
+        flash(
+          "Gagal menyimpan ke server. Perubahan disalin ke perangkat ini dan akan ditawarkan kembali setelah Anda login ulang.",
+        );
       }
     } finally {
       setSaving(false);
@@ -8430,6 +8941,35 @@ function Editor({
     setSelectedSectionId(targetSectionId);
     setSelectedColumnId(columnId);
     flash("Column dipindahkan ke canvas tujuan.");
+  };
+
+  // QA TC-143: menduplikasi canvas beserta seluruh column dan feature di dalamnya.
+  const duplicateCanvas = (sectionId: string) => {
+    const source = sections.find((item) => item.id === sectionId);
+    if (!source) return;
+    const copy: CanvasSection = {
+      ...structuredClone(source),
+      id: uid("canvas"),
+      name: `${source.name} (salinan)`,
+      backgroundGlobal: false,
+      columns: source.columns.map((column) => ({
+        ...structuredClone(column),
+        id: uid("column"),
+        features: column.features.map((feature) => ({
+          ...structuredClone(feature),
+          id: uid("feature"),
+        })),
+      })),
+    };
+    setDirty(true);
+    commitSections((previous) => {
+      const index = previous.findIndex((item) => item.id === sectionId);
+      const next = [...previous];
+      next.splice(index + 1, 0, copy);
+      return next;
+    });
+    setSelectedSectionId(copy.id);
+    flash(`Canvas "${source.name}" diduplikasi.`);
   };
 
   const addCanvas = () => {
@@ -8920,6 +9460,15 @@ function Editor({
     }
   };
 
+  // TC-149: tawarkan pemulihan bila ada salinan lokal dari sesi sebelumnya.
+  const [localBackup, setLocalBackup] = useState<ReturnType<
+    typeof readEditorBackup
+  > | null>(null);
+  const [savingBackup, setSavingBackup] = useState(false);
+  useEffect(() => {
+    setLocalBackup(readEditorBackup());
+  }, []);
+
   const addFormField = () => {
     if (!selectedFeature) return;
     updateFeature(selectedFeature.id, {
@@ -8932,7 +9481,68 @@ function Editor({
 
   return (
     <>
-      {recovery && (
+      {localBackup && (
+        <div className="dialog-overlay">
+          <div className="revision-dialog">
+            <h2>Ada salinan desain yang belum tersimpan</h2>
+            <p>
+              Terakhir Anda mengedit{" "}
+              <strong>{localBackup.title || "desain ini"}</strong> pada{" "}
+              {new Date(localBackup.savedAt).toLocaleString("id-ID")}, tetapi
+              perubahannya belum sempat tersimpan ke server — bisa karena sesi
+              berakhir atau koneksi terputus. Salinannya masih tersimpan di
+              browser ini.
+            </p>
+            <p className="recovery-note">
+              <strong>Simpan Perubahan Sebelumnya</strong> memuat salinan itu ke
+              editor lalu mengirimnya ke server, sehingga menjadi versi terbaru.{" "}
+              <strong>Buang Perubahan Sebelumnya</strong> menghapus salinan lokal
+              dan tetap memakai versi terakhir yang ada di server.
+            </p>
+            <div className="recovery-actions">
+            <button
+              className="primary-btn"
+              disabled={savingBackup}
+              onClick={async () => {
+                setSavingBackup(true);
+                commitSections(hydrateSections(localBackup.sections || []));
+                if (localBackup.title) setSiteTitle(localBackup.title);
+                setLocalBackup(null);
+                // Tombolnya menjanjikan "simpan", jadi kirim ke server sekarang.
+                const saved = await saveSite();
+                if (saved) {
+                  captureSavedBaseline();
+                  setDirty(false);
+                  setAutosaveState("saved");
+                  window.localStorage.removeItem(EDITOR_BACKUP_KEY);
+                  flash("Perubahan sebelumnya tersimpan ke server.");
+                } else {
+                  setDirty(true);
+                  flash(
+                    "Perubahan dimuat ke editor, tetapi belum berhasil dikirim ke server. Coba tekan Save lagi.",
+                  );
+                }
+                setSavingBackup(false);
+              }}
+            >
+              {savingBackup ? "Menyimpan..." : "Simpan Perubahan Sebelumnya"}
+            </button>
+            <button
+              className="secondary-btn"
+              disabled={savingBackup}
+              onClick={() => {
+                window.localStorage.removeItem(EDITOR_BACKUP_KEY);
+                setLocalBackup(null);
+                flash("Salinan lokal dibuang. Memakai versi terakhir dari server.");
+              }}
+            >
+              Buang Perubahan Sebelumnya
+            </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {recovery && !localBackup && (
         <div className="dialog-overlay">
           <div className="revision-dialog">
             <h2>Pulihkan draft terakhir?</h2>
@@ -8967,7 +9577,10 @@ function Editor({
           </div>
         </div>
       )}
-      <div className="editor-shell" inert={saving || Boolean(recovery)}>
+      <div
+        className="editor-shell"
+        inert={saving || Boolean(recovery) || Boolean(localBackup)}
+      >
         <header className="editor-topbar">
           <div className="editor-top-left">
             <button
@@ -9126,6 +9739,16 @@ function Editor({
                       >
                         <MoveDown size={13} />
                       </button>
+                      {/* QA TC-143: duplikasi canvas beserta isinya. */}
+                      <button
+                        title="Duplicate canvas"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          duplicateCanvas(section.id);
+                        }}
+                      >
+                        <Copy size={13} />
+                      </button>
                       <button
                         title="Delete canvas"
                         onClick={(event) => {
@@ -9225,8 +9848,40 @@ function Editor({
               ))}
             </div>
             <button className="add-section" onClick={addCanvas}>
-              <Plus size={17} /> Add Canvas
+              <Plus size={17} /> Tambah Section
             </button>
+            {/* QA TC-142: perjelas bahwa canvas adalah bagian dari template yang
+                sama, bukan template terpisah. */}
+            <p className="canvas-help-note">
+              Setiap Section adalah satu bagian dari template yang sama —
+              misalnya Cover, Mempelai, Acara, Lokasi, RSVP. Seluruhnya tersimpan
+              dan terpublish sebagai satu template utuh ketika Anda menekan Save.
+            </p>
+            {/* QA TC-146: pilihan mode background global atau per canvas. */}
+            {sections[0] && (
+              <div className="setting-row compact background-mode-switch">
+                <div>
+                  <ImageIcon size={16} />
+                  <span>
+                    <strong>Background global</strong>
+                    <small>
+                      Semua canvas memakai background Canvas 1. Matikan untuk
+                      mengatur background sendiri tiap canvas.
+                    </small>
+                  </span>
+                </div>
+                <button
+                  className={`toggle ${sections[0].backgroundGlobal ? "on" : ""}`}
+                  onClick={() =>
+                    updateSectionShared(sections[0].id, {
+                      backgroundGlobal: !sections[0].backgroundGlobal,
+                    })
+                  }
+                >
+                  <i />
+                </button>
+              </div>
+            )}
             <div className="page-settings">
               <strong>Site Pages</strong>
               <button
@@ -9532,12 +10187,21 @@ function Editor({
             void pendingAutosave.current
               .catch(() => {})
               .then(() => discardDraft())
+              .catch((error) => {
+                // Draft server gagal dibuang (mis. sesi sudah berakhir).
+                // Keluar tetap harus bisa dilakukan — draft lokal dibersihkan
+                // dan alasannya disampaikan apa adanya.
+                flash(
+                  isAuthError(error)
+                    ? "Sesi Anda sudah berakhir. Perubahan dibuang secara lokal, silakan login kembali."
+                    : "Draft di server gagal dibuang, perubahan dibuang secara lokal.",
+                );
+              })
               .then(() => {
                 discardToSavedBaseline();
                 setLeavePromptOpen(false);
                 setView("templates");
-              })
-              .catch(() => flash("Gagal membuang draft. Coba lagi."));
+              });
           }}
           onSave={() => void saveAndMaybeLeave(true)}
         />
@@ -10428,6 +11092,26 @@ function FeatureInspector({
               </select>
             </label>
             <label>
+              Bentuk button
+              <select
+                value={feature.coverButtonShape || "rounded"}
+                onChange={(event) =>
+                  update({
+                    coverButtonShape: event.target
+                      .value as Feature["coverButtonShape"],
+                  })
+                }
+              >
+                <option value="solid">Solid</option>
+                <option value="rounded">Rounded</option>
+                <option value="pill">Pill</option>
+                <option value="square">Kotak</option>
+                <option value="outline">Outline</option>
+                <option value="ghost">Ghost (tanpa border)</option>
+                <option value="underline">Underline</option>
+              </select>
+            </label>
+            <label>
               Button radius <span>{feature.coverButtonRadius ?? 12}px</span>
               <input
                 type="range"
@@ -10755,13 +11439,6 @@ function FeatureInspector({
             </select>
           </label>
         )}
-        <LoopEffectControls
-          title="Efek Berulang (Auto Repeat)"
-          hint="Efek berjalan terus selama undangan dibuka, tidak hanya sekali saat muncul."
-          loopEffect={feature.loopEffect}
-          loopSpeed={feature.loopSpeed}
-          onChange={update}
-        />
         <PerElementColorEditor feature={feature} update={update} />
         <FeatureBackgroundImageEditor
           feature={feature}
@@ -10924,6 +11601,15 @@ function FeatureInspector({
           <FeatureEffect effect={feature.visualEffect || "none"} />
         </div>
       </div>
+        {/* QA TC-147 & TC-148: animasi dan looping tersedia pada panel Advanced
+            untuk setiap feature, bukan hanya di tab Style. */}
+      <LoopEffectControls
+        title="Animasi Berulang (Looping)"
+        hint="Menggerakkan elemen dan background feature ini terus-menerus selama undangan dibuka."
+        loopEffect={feature.loopEffect}
+        loopSpeed={feature.loopSpeed}
+        onChange={update}
+      />
       <div className="setting-row compact">
         <div>
           <MoveDown size={16} />
@@ -11868,6 +12554,88 @@ function SectionDecorationEditor({
   );
 }
 
+// QA TC-146 — mode background global: seluruh canvas memakai background canvas
+// pertama, sehingga Web Designer tidak perlu upload ulang tiap menambah canvas.
+function applyGlobalBackground(
+  section: CanvasSection,
+  source: CanvasSection | null,
+): CanvasSection {
+  if (!source || source.id === section.id) return section;
+  return {
+    ...section,
+    backgroundColor: source.backgroundColor,
+    backgroundUrl: source.backgroundUrl,
+    backgroundKey: source.backgroundKey,
+    backgroundVideoUrl: source.backgroundVideoUrl,
+    backgroundVideoKey: source.backgroundVideoKey,
+    backgroundEffect: source.backgroundEffect,
+    backgroundPosition: source.backgroundPosition,
+    backgroundRepeat: source.backgroundRepeat,
+    backgroundSize: source.backgroundSize,
+    backgroundFixed: source.backgroundFixed,
+    backgroundGradientEnabled: source.backgroundGradientEnabled,
+    backgroundGradientFrom: source.backgroundGradientFrom,
+    backgroundGradientTo: source.backgroundGradientTo,
+    backgroundGradientAngle: source.backgroundGradientAngle,
+    backgroundMotion: source.backgroundMotion,
+    backgroundLayers: source.backgroundLayers,
+    backgroundLoopEffect: source.backgroundLoopEffect,
+    backgroundLoopSpeed: source.backgroundLoopSpeed,
+  };
+}
+
+// QA TC-141 — preset bentuk button "Buka Undangan".
+function coverButtonStyle(feature: Feature): React.CSSProperties {
+  const shape = feature.coverButtonShape || "rounded";
+  const background = feature.coverButtonBackground || "#102f27";
+  const text = feature.coverButtonTextColor || "#fff";
+  const border = feature.coverButtonBorderColor || "#fff";
+  const padding = `${feature.coverButtonPaddingY ?? 15}px ${feature.coverButtonPaddingX ?? 30}px`;
+  const radius: Record<string, number | string> = {
+    solid: feature.coverButtonRadius ?? 12,
+    rounded: feature.coverButtonRadius ?? 12,
+    pill: 999,
+    square: 0,
+    outline: feature.coverButtonRadius ?? 12,
+    ghost: feature.coverButtonRadius ?? 12,
+    underline: 0,
+  };
+  const base: React.CSSProperties = {
+    borderRadius: radius[shape],
+    borderStyle: "solid",
+    borderWidth: feature.coverButtonBorderWidth ?? 1,
+    borderColor: border,
+    background,
+    color: text,
+    padding,
+  };
+  if (shape === "outline")
+    return {
+      ...base,
+      background: "transparent",
+      color: feature.coverButtonTextColor || border,
+      borderWidth: Math.max(1, feature.coverButtonBorderWidth ?? 1),
+    };
+  if (shape === "ghost")
+    return {
+      ...base,
+      background: "transparent",
+      borderWidth: 0,
+      color: feature.coverButtonTextColor || border,
+    };
+  if (shape === "underline")
+    return {
+      ...base,
+      background: "transparent",
+      borderWidth: 0,
+      borderBottomWidth: Math.max(1, feature.coverButtonBorderWidth ?? 2),
+      borderBottomStyle: "solid",
+      color: feature.coverButtonTextColor || border,
+      padding: `${feature.coverButtonPaddingY ?? 10}px 2px`,
+    };
+  return base;
+}
+
 // QA TC-108 & TC-127 — layer background tambahan di atas background utama.
 function LayerImageUpload({
   layer,
@@ -11937,7 +12705,7 @@ function BackgroundLayerEditor({
   return (
     <div className="background-layer-editor">
       <div className="group-heading">
-        <strong>Layer Background Tambahan</strong>
+        <strong>Layer 2 dan seterusnya</strong>
         <button
           onClick={() =>
             commit([
@@ -11961,9 +12729,10 @@ function BackgroundLayerEditor({
         </button>
       </div>
       <div className="layout-help">
-        Layer digambar di atas background utama. Gunakan untuk dekorasi, tekstur,
-        atau ornamen. Biarkan background utama pada mode diam agar hanya layer ini
-        yang bergerak.
+        <strong>Layer 1 (default)</strong> adalah background utama di atas.
+        Layer di bawah ini digambar menumpuk di atasnya secara berurutan — Layer
+        2, lalu Layer 3, dan seterusnya. Atur opacity dan blend mode agar layer
+        menyatu dengan layer di bawahnya.
       </div>
       {layers.map((layer, index) => (
         <div className="extra-text-row" key={layer.id}>
@@ -12288,25 +13057,6 @@ function SectionInspector({
             <option value="auto">Auto</option>
           </select>
         </label>
-        <LoopEffectControls
-          title="Efek Berulang Section"
-          hint="Berlaku untuk seluruh isi section."
-          loopEffect={section.loopEffect}
-          loopSpeed={section.loopSpeed}
-          onChange={update}
-        />
-        <LoopEffectControls
-          title="Efek Berulang Background"
-          hint="Hanya lapisan background yang bergerak, teks tetap diam."
-          loopEffect={section.backgroundLoopEffect}
-          loopSpeed={section.backgroundLoopSpeed}
-          onChange={(patch) =>
-            update({
-              backgroundLoopEffect: patch.loopEffect,
-              backgroundLoopSpeed: patch.loopSpeed,
-            })
-          }
-        />
         <SectionDecorationEditor section={section} update={update} />
         {/* QA TC-108: layer background tambahan di dalam background utama. */}
         <BackgroundLayerEditor
@@ -12322,9 +13072,30 @@ function SectionInspector({
         <Settings size={17} />
         <div>
           <strong>Canvas Advanced</strong>
-          <span>Spacing dan height</span>
+          <span>Animasi, spacing, dan height</span>
         </div>
       </div>
+      {/* QA TC-139: animasi khusus untuk layer background tumpang tindih,
+          terpisah dari animasi isi section. */}
+      <LoopEffectControls
+        title="Animasi Layer Background"
+        hint="Hanya lapisan background dan layer tumpang tindih yang bergerak; teks dan feature tetap diam."
+        loopEffect={section.backgroundLoopEffect}
+        loopSpeed={section.backgroundLoopSpeed}
+        onChange={(patch) =>
+          update({
+            backgroundLoopEffect: patch.loopEffect,
+            backgroundLoopSpeed: patch.loopSpeed,
+          })
+        }
+      />
+      <LoopEffectControls
+        title="Animasi Seluruh Section"
+        hint="Menggerakkan seluruh isi canvas ini, termasuk teks dan feature."
+        loopEffect={section.loopEffect}
+        loopSpeed={section.loopSpeed}
+        onChange={update}
+      />
       <label>
         Horizontal padding <span>{section.paddingX ?? 32}px</span>
         <input
@@ -12442,6 +13213,11 @@ function WeddingCanvas({
   // QA TC-112: device aktif menentukan setting mana yang dipakai.
   const device = useContext(DeviceContext);
 
+  // QA TC-146: canvas pertama menjadi sumber background bila mode global aktif.
+  const globalBackgroundSource = useMemo(
+    () => (sections[0]?.backgroundGlobal ? sections[0] : null),
+    [sections],
+  );
   const coverEntry = useMemo(() => {
     for (const section of sections)
       for (const column of section.columns)
@@ -12595,7 +13371,12 @@ function WeddingCanvas({
       </nav>
       {sections.map((rawSection) => {
         // QA TC-112: nilai section mengikuti device aktif (Desktop / Mobile).
-        const section = resolveSection(rawSection, device);
+        // QA TC-146: bila mode background global aktif, seluruh canvas memakai
+        // background canvas pertama sehingga tidak perlu upload berulang.
+        const section = applyGlobalBackground(
+          resolveSection(rawSection, device),
+          globalBackgroundSource,
+        );
         const filter = getBackgroundFilter(section.backgroundEffect);
         const hasVisibleFeatures =
           editable ||
@@ -13042,14 +13823,7 @@ function InvitationCover({
                     <button
                       className={`cover-open-button icon-${active.coverIconPosition || "left"}`}
                       onClick={onOpen}
-                      style={{
-                        borderRadius: active.coverButtonRadius ?? 12,
-                        borderWidth: active.coverButtonBorderWidth ?? 1,
-                        borderColor: active.coverButtonBorderColor || "#fff",
-                        background: active.coverButtonBackground || "#102f27",
-                        color: active.coverButtonTextColor || "#fff",
-                        padding: `${active.coverButtonPaddingY ?? 15}px ${active.coverButtonPaddingX ?? 30}px`,
-                      }}
+                      style={coverButtonStyle(active)}
                     >
                       {active.coverIconPosition === "top" && (
                         <CoverIconGlyph
@@ -19882,6 +20656,42 @@ function linkToken(name = "token") {
   );
 }
 
+// Salinan lokal isi editor, dipakai sebagai jaring pengaman ketika penyimpanan
+// ke server gagal (sesi berakhir, jaringan putus) supaya pekerjaan tidak hilang.
+const EDITOR_BACKUP_KEY = "ikrarku-editor-backup";
+function backupEditorDraft(title: string, sections: CanvasSection[]) {
+  try {
+    window.localStorage.setItem(
+      EDITOR_BACKUP_KEY,
+      JSON.stringify({ title, sections, savedAt: new Date().toISOString() }),
+    );
+  } catch {
+    /* penyimpanan lokal penuh atau diblokir */
+  }
+}
+function readEditorBackup(): {
+  title: string;
+  sections: CanvasSection[];
+  savedAt: string;
+} | null {
+  try {
+    const raw = window.localStorage.getItem(EDITOR_BACKUP_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed?.sections) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+// Error dari middleware auth ketika token hilang atau sesi berakhir.
+function isAuthError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /Authentication required|Session expired|Akun tidak aktif|tidak ada aktivitas/i.test(
+    message,
+  );
+}
+
 function formatShortDate(value?: string) {
   if (!value) return "—";
   const date = new Date(value);
@@ -20076,6 +20886,7 @@ function TemplateApprovalManager({
   onTakedown,
   onRepublish,
   onUploadSample,
+  onCaptureSample,
   onEditTemplate,
 }: {
   templates: Template[];
@@ -20084,6 +20895,7 @@ function TemplateApprovalManager({
   onTakedown?: (templateId: string, reason: string) => Promise<void>;
   onRepublish?: (templateId: string) => Promise<void>;
   onUploadSample?: (templateId: string, file: File) => Promise<void>;
+  onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
 }) {
   const [takedownTarget, setTakedownTarget] = useState<Template | null>(null);
@@ -20183,6 +20995,16 @@ function TemplateApprovalManager({
               >
                 <Upload size={14} /> Gambar sample
               </button>
+              {/* QA TC-144: sample diambil langsung dari canvas Buka Undangan,
+                  dirender pada rasio kartu landing agar tidak terpotong. */}
+              {onCaptureSample && (
+                <button
+                  onClick={() => void onCaptureSample(template.id)}
+                  title="Ambil otomatis dari canvas Buka Undangan"
+                >
+                  <Sparkles size={14} /> Ambil dari Canvas
+                </button>
+              )}
               {["Published", "Approved"].includes(template.status || "") ? (
                 <button
                   className="danger"
@@ -20327,6 +21149,9 @@ function UserEditModal({
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [emailVerified, setEmailVerified] = useState(
+    account.emailVerified !== false,
+  );
   const wantsPassword = password.length > 0;
   const match = password === passwordConfirm;
   const submit = async () => {
@@ -20342,6 +21167,7 @@ function UserEditModal({
       lastName,
       email,
       username,
+      emailVerified,
       ...(wantsPassword ? { password } : {}),
     });
     setBusy(false);
@@ -20390,6 +21216,20 @@ function UserEditModal({
           <input
             value={username}
             onChange={(event) => setUsername(event.target.value)}
+          />
+        </label>
+        <label className="checkbox-row verify-row">
+          <span>
+            Email sudah terverifikasi
+            <small>
+              Akun yang belum terverifikasi tidak bisa login meski passwordnya
+              benar.
+            </small>
+          </span>
+          <input
+            type="checkbox"
+            checked={emailVerified}
+            onChange={(event) => setEmailVerified(event.target.checked)}
           />
         </label>
         <div className="reset-password-block">

@@ -101,9 +101,14 @@ export function createPolicies(db) {
     if (order) assignPaidSite(order, userId);
   }
   function assignPaidSite(order, userId) {
-    // Preserve existing deliberate assignment; new customers inherit their paid order's designer.
+    if (!order?.assigned_editor_id) return;
+    // Penugasan manual yang sudah ada tetap dihormati, tetapi baris kosong
+    // (editor_id NULL) harus terisi — kalau tidak, customer yang membeli
+    // template milik seorang Web Designer tetap tampil "Belum di-assign".
     db.prepare(
-      `INSERT INTO site_assignments(id,user_id,editor_id,assigned_by,created_at,updated_at) VALUES(?,?,?,?,?,?) ON CONFLICT(user_id) DO NOTHING`,
+      `INSERT INTO site_assignments(id,user_id,editor_id,assigned_by,created_at,updated_at) VALUES(?,?,?,?,?,?)
+       ON CONFLICT(user_id) DO UPDATE SET editor_id=excluded.editor_id,assigned_by=excluded.assigned_by,updated_at=excluded.updated_at
+       WHERE site_assignments.editor_id IS NULL`,
     ).run(
       "order_" + order.id,
       userId,
@@ -132,6 +137,8 @@ export function createPolicies(db) {
     for (const id of ids) {
       const template = db.prepare("SELECT * FROM templates WHERE id=?").get(id);
       if (!template) fail(404, "Template tidak ditemukan");
+      // Pembuat template berhak memakai karyanya sendiri tanpa harus membeli.
+      if (template.created_by === actor.id) continue;
       if (
         template.price > 0 &&
         !db

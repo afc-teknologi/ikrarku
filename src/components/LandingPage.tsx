@@ -8,6 +8,8 @@ import {
   Heart,
   MapPin,
   MousePointer2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import type { Template, ArticleItem, View } from "../App";
 import "./LandingPage.css";
@@ -18,11 +20,203 @@ type Props = {
   articles: ArticleItem[];
   onTemplate: (template: Template) => void;
   onArticle: (article: ArticleItem) => void;
+  accountName?: string;
+  onOpenWorkspace?: () => void;
   scrollTarget?: string | null;
   onScrolled?: () => void;
   databaseOnline: boolean;
   renderPreview: (template: Template) => ReactNode;
 };
+// Kartu artikel dipakai bersama oleh landing dan halaman Jurnal supaya
+// layout-nya seragam berapa pun panjang judulnya.
+export function JournalCard({
+  article,
+  onOpen,
+}: {
+  article: ArticleItem;
+  onOpen: (article: ArticleItem) => void;
+}) {
+  return (
+    <button className="ikr-journal-card" onClick={() => onOpen(article)}>
+      <span className="ikr-journal-thumb">
+        {article.coverUrl ? (
+          <img
+            loading="lazy"
+            decoding="async"
+            src={article.coverUrl}
+            alt=""
+            width="400"
+            height="240"
+          />
+        ) : (
+          <em>{article.category}</em>
+        )}
+      </span>
+      <span className="ikr-journal-body">
+        <small>{article.category}</small>
+        <h3>{article.title}</h3>
+        <p>{article.excerpt}</p>
+      </span>
+      <span className="ikr-journal-foot">
+        Baca cerita <ArrowRight size={16} />
+      </span>
+    </button>
+  );
+}
+
+// Menampilkan maksimal 10 artikel, bergeser otomatis tiga-tiga
+// (1,2,3 → 2,3,4 → …) lalu kembali ke awal.
+function JournalCarousel({
+  articles,
+  onArticle,
+  onSeeAll,
+}: {
+  articles: ArticleItem[];
+  onArticle: (article: ArticleItem) => void;
+  onSeeAll: () => void;
+}) {
+  const published = useMemo(
+    () => articles.filter((item) => item.status === "Published"),
+    [articles],
+  );
+  const categories = useMemo(
+    () => ["Semua", ...new Set(published.map((item) => item.category))],
+    [published],
+  );
+  const [category, setCategory] = useState("Semua");
+  const visible = useMemo(
+    () =>
+      (category === "Semua"
+        ? published
+        : published.filter((item) => item.category === category)
+      ).slice(0, 10),
+    [published, category],
+  );
+  const perView = 3;
+  const maxStart = Math.max(0, visible.length - perView);
+  const [start, setStart] = useState(0);
+  const [paused, setPaused] = useState(false);
+  useEffect(() => setStart(0), [category]);
+  useEffect(() => {
+    if (paused || visible.length <= perView) return;
+    const timer = window.setInterval(
+      () => setStart((previous) => (previous >= maxStart ? 0 : previous + 1)),
+      4000,
+    );
+    return () => window.clearInterval(timer);
+  }, [paused, maxStart, visible.length]);
+  const safeStart = Math.min(start, maxStart);
+  // Geser manual: tombol panah, swipe, dan klik indikator.
+  const dragRef = useRef<{ x: number; handled: boolean } | null>(null);
+  const step = (direction: 1 | -1) =>
+    setStart((previous) => {
+      const next = Math.min(maxStart, Math.max(0, previous)) + direction;
+      if (next < 0) return maxStart;
+      if (next > maxStart) return 0;
+      return next;
+    });
+  if (!visible.length)
+    return (
+      <div className="ikr-journal-empty">
+        Belum ada artikel pada kategori ini.
+      </div>
+    );
+  return (
+    <>
+      {/* Gaya tombol disamakan dengan filter pada bagian desain undangan. */}
+      <div className="ikr-filters" aria-label="Filter kategori jurnal">
+        {categories.map((item) => (
+          <button
+            key={item}
+            aria-pressed={category === item}
+            onClick={() => setCategory(item)}
+          >
+            {item}
+          </button>
+        ))}
+      </div>
+      <div className="ikr-journal-stage">
+        {visible.length > perView && (
+          <button
+            className="ikr-journal-nav prev"
+            aria-label="Artikel sebelumnya"
+            onClick={() => step(-1)}
+          >
+            <ChevronLeft size={18} />
+          </button>
+        )}
+        <div
+          className="ikr-journal-viewport"
+          onMouseEnter={() => setPaused(true)}
+          onMouseLeave={() => setPaused(false)}
+          onPointerDown={(event) => {
+            dragRef.current = { x: event.clientX, handled: false };
+            setPaused(true);
+          }}
+          onPointerMove={(event) => {
+            const drag = dragRef.current;
+            if (!drag || drag.handled) return;
+            const delta = event.clientX - drag.x;
+            if (Math.abs(delta) > 48) {
+              step(delta < 0 ? 1 : -1);
+              drag.handled = true;
+            }
+          }}
+          onPointerUp={() => {
+            dragRef.current = null;
+            setPaused(false);
+          }}
+          onPointerLeave={() => {
+            dragRef.current = null;
+          }}
+        >
+          <div
+            className="ikr-journal-track"
+            style={{
+              transform: `translateX(calc(-${safeStart} * (100% + 22px) / ${perView}))`,
+            }}
+          >
+            {visible.map((article) => (
+              <JournalCard
+                key={article.id}
+                article={article}
+                onOpen={onArticle}
+              />
+            ))}
+          </div>
+        </div>
+        {visible.length > perView && (
+          <button
+            className="ikr-journal-nav next"
+            aria-label="Artikel berikutnya"
+            onClick={() => step(1)}
+          >
+            <ChevronRight size={18} />
+          </button>
+        )}
+      </div>
+      {visible.length > perView && (
+        <div className="ikr-journal-dots">
+          {Array.from({ length: maxStart + 1 }).map((_, index) => (
+            <button
+              key={index}
+              type="button"
+              aria-label={`Ke kelompok artikel ${index + 1}`}
+              className={index === safeStart ? "is-active" : ""}
+              onClick={() => setStart(index)}
+            />
+          ))}
+        </div>
+      )}
+      <div className="ikr-journal-more">
+        <button className="ikr-btn" onClick={onSeeAll}>
+          Lihat semua Jurnal ikrarku <ArrowRight size={16} />
+        </button>
+      </div>
+    </>
+  );
+}
+
 const rupiah = (value = 0) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -43,6 +237,8 @@ export default function LandingPage({
   articles,
   onTemplate,
   onArticle,
+  accountName,
+  onOpenWorkspace,
   scrollTarget,
   onScrolled,
   databaseOnline,
@@ -128,11 +324,33 @@ export default function LandingPage({
           <a href="#faq" onClick={() => nav("faq")}>
             FAQ
           </a>
+          <a
+            href="/jurnal"
+            onClick={(event) => {
+              event.preventDefault();
+              setMenu(false);
+              setView("journal");
+            }}
+          >
+            Jurnal ikrarku
+          </a>
         </nav>
         <div className="ikr-nav-actions">
-          <button className="ikr-login" onClick={() => setView("login")}>
-            Masuk
-          </button>
+          {/* Pengunjung yang sudah login melihat namanya, dan klik namanya
+              membawa langsung ke workspace. */}
+          {accountName ? (
+            <button
+              className="ikr-login is-account"
+              onClick={() => onOpenWorkspace?.()}
+              title="Buka workspace ikrarku"
+            >
+              {accountName}
+            </button>
+          ) : (
+            <button className="ikr-login" onClick={() => setView("login")}>
+              Masuk
+            </button>
+          )}
           <button
             className="ikr-btn ikr-nav-cta"
             onClick={() => nav("templates")}
@@ -253,7 +471,7 @@ export default function LandingPage({
             ))}
           </div>
           <div className="ikr-template-grid">
-            {visible.map((t) => (
+            {visible.slice(0, 9).map((t) => (
               <article className="ikr-template" key={t.id}>
                 <button
                   className="ikr-template-preview"
@@ -307,6 +525,14 @@ export default function LandingPage({
               {databaseOnline
                 ? "Desain untuk kategori ini belum tersedia."
                 : "Katalog belum dapat dimuat. Silakan muat ulang atau coba beberapa saat lagi."}
+            </div>
+          )}
+          {/* Landing menampilkan 9 desain; selebihnya dibuka di halaman khusus. */}
+          {visible.length > 9 && (
+            <div className="ikr-template-more">
+              <button className="ikr-btn" onClick={() => setView("designs")}>
+                Lihat semua desain ({visible.length}) <ArrowRight size={16} />
+              </button>
             </div>
           )}
         </section>
@@ -436,30 +662,11 @@ export default function LandingPage({
               <br />
               <em>hari istimewa kalian.</em>
             </h2>
-            <div className="ikr-journal">
-              {articles
-                .filter((a) => a.status === "Published")
-                .slice(0, 3)
-                .map((a) => (
-                  <button key={a.id} onClick={() => onArticle(a)}>
-                    {a.coverUrl && (
-                      <img
-                        loading="lazy"
-                        decoding="async"
-                        src={a.coverUrl}
-                        alt=""
-                        width="400"
-                        height="240"
-                      />
-                    )}
-                    <small>{a.category}</small>
-                    <h3>{a.title}</h3>
-                    <span>
-                      Baca cerita <ArrowRight size={16} />
-                    </span>
-                  </button>
-                ))}
-            </div>
+            <JournalCarousel
+              articles={articles}
+              onArticle={onArticle}
+              onSeeAll={() => setView("journal")}
+            />
           </section>
         )}
         <section className="ikr-final">

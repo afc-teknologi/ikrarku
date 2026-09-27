@@ -829,8 +829,11 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 }
 
 /* Modal Create Template dapat di-scroll saat isinya lebih tinggi dari layar */
-.template-create-dialog{max-height:min(92vh,880px);overflow:auto;overscroll-behavior:contain}
-.template-create-dialog header{position:sticky;top:0;z-index:2;background:#fff;padding-bottom:8px}
+.template-create-dialog{max-height:min(92vh,880px);overflow:auto;overscroll-behavior:contain;position:relative}
+/* Header tidak lagi sticky: latar transparannya membuat teks di bawahnya
+   tembus saat modal di-scroll. Tombol close yang dibuat menempel. */
+.template-create-dialog header{position:static;background:transparent;padding-right:44px}
+.template-create-dialog header>button{position:sticky;top:0;float:right;margin:-6px -38px 0 0;z-index:3;background:#fff;box-shadow:0 2px 10px rgba(6,22,17,.14)}
 
 /* Panel komisi Template Creator */
 .commission-panel{margin:26px 0 30px}
@@ -967,3 +970,94 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 /* Thumbnail landing: background tidak boleh dikunci ke viewport */
 .wedding-site.is-thumbnail .background-layer,
 .wedding-site.is-thumbnail .background-extra-layer{background-attachment:scroll!important}
+
+/* Keterangan Add Canvas & mode background global */
+.canvas-help-note{margin:8px 2px 0;font-size:7.5px;line-height:1.6;color:#6f817b}
+.background-mode-switch{margin-top:10px;border:1px solid #e3e8e5;border-radius:10px;padding:9px 11px;background:#fafcfb}
+
+/* =====================================================================
+   Jurnal ikrarku — kartu seragam, carousel landing, halaman tersendiri
+   ===================================================================== */
+.ikr-journal-stage{position:relative}
+.ikr-journal-viewport{overflow:hidden;touch-action:pan-y;cursor:grab}
+.ikr-journal-viewport:active{cursor:grabbing}
+.ikr-journal-nav{position:absolute;top:calc(50% - 20px);z-index:3;width:40px;height:40px;border-radius:50%;border:1px solid rgba(18,89,70,.18);background:#fff;color:#123f33;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px rgba(12,40,32,.12)}
+.ikr-journal-nav.prev{left:-18px}
+.ikr-journal-nav.next{right:-18px}
+.ikr-journal-nav:hover{background:#123f33;color:#fff}
+@media(max-width:1100px){.ikr-journal-nav.prev{left:2px}.ikr-journal-nav.next{right:2px}}
+.ikr-journal-track{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 44px)/3);gap:22px;transition:transform .6s cubic-bezier(.4,0,.2,1)}
+
+/* Kartu artikel: tinggi seragam berapa pun panjang judulnya */
+.ikr-journal-card{display:grid;grid-template-rows:180px 1fr auto;text-align:left;background:#fff;border:1px solid rgba(18,89,70,.12);border-radius:16px;overflow:hidden;cursor:pointer;padding:0;transition:.2s;min-width:0}
+.ikr-journal-card:hover{transform:translateY(-3px);box-shadow:0 14px 34px rgba(12,40,32,.12)}
+.ikr-journal-thumb{display:block;height:180px;overflow:hidden;background:#eef2f0;display:grid;place-items:center}
+.ikr-journal-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.ikr-journal-thumb em{font-style:normal;font-size:12px;letter-spacing:2px;color:#7b8b85;text-transform:uppercase}
+.ikr-journal-body{display:block;padding:16px 18px 6px;min-width:0}
+.ikr-journal-body small{display:block;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#7b8b85;margin-bottom:8px}
+.ikr-journal-body h3{margin:0 0 8px;font-size:18px;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em}
+.ikr-journal-body p{margin:0;font-size:13px;line-height:1.6;color:#5d7169;display:-webkit-box;-webkit-line-clamp:3;line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;min-height:4.8em}
+.ikr-journal-foot{display:flex;align-items:center;gap:7px;padding:14px 18px 18px;font-size:13px;color:#12684f}
+.ikr-journal-dots{display:flex;justify-content:center;gap:6px;margin-top:18px}
+.ikr-journal-dots button{width:7px;height:7px;padding:0;border:0;border-radius:999px;background:rgba(18,89,70,.22);transition:.25s;cursor:pointer}
+.ikr-journal-dots button.is-active{width:22px;background:#123f33}
+.ikr-journal-more{display:flex;justify-content:center;margin-top:22px}
+.ikr-journal-empty{padding:40px;text-align:center;color:#6f817b}
+@media(max-width:900px){.ikr-journal-track{grid-auto-columns:calc(100% - 20px)}}
+
+/* Halaman Jurnal tersendiri */
+.journal-page{min-height:100vh;background:linear-gradient(180deg,#fffdf8,#f4f7f4)}
+.journal-topbar{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:16px 28px;background:rgba(255,255,255,.9);position:sticky;top:0;z-index:10;backdrop-filter:blur(8px);border-bottom:1px solid rgba(18,89,70,.1)}
+.journal-page main{max-width:1180px;margin:0 auto;padding:40px 24px 60px}
+.journal-hero .eyebrow{font-size:11px;letter-spacing:3px;color:#8a7a4d}
+.journal-hero h1{font-size:clamp(30px,5vw,50px);line-height:1.1;margin:12px 0 14px}
+.journal-hero h1 em{font-style:italic;color:#6d8f72}
+.journal-hero p{max-width:560px;color:#5d7169;line-height:1.7;margin:0}
+.journal-offline{margin-top:14px;padding:10px 14px;border-radius:10px;background:#fdf5e9;border:1px solid #e6d3ae;color:#6b4f1d;font-size:13px}
+.journal-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:30px 0 22px}
+.journal-filter{display:flex;flex-wrap:wrap;gap:8px}
+.journal-filter button{border:1px solid rgba(18,89,70,.22);background:#fff;border-radius:999px;padding:8px 16px;font-size:13px;color:#2c4239;cursor:pointer}
+.journal-filter button.is-active{background:#123f33;border-color:#123f33;color:#fff}
+.journal-search{display:flex;align-items:center;gap:8px;border:1px solid rgba(18,89,70,.2);background:#fff;border-radius:999px;padding:0 14px;height:40px;min-width:240px}
+.journal-search input{border:0;outline:0;background:transparent;font-size:13px;width:100%}
+.journal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:22px;align-items:stretch}
+.journal-empty{grid-column:1/-1;padding:48px;text-align:center;color:#6f817b}
+.journal-footer{display:flex;align-items:center;gap:14px;padding:24px 28px;border-top:1px solid rgba(18,89,70,.1);color:#6f817b;font-size:13px}
+@media(max-width:700px){.journal-topbar{flex-wrap:wrap}.journal-search{width:100%}}
+
+
+/* Tombol lihat semua desain & grid katalog (bentuk kartu mengikuti landing) */
+.ikr-template-more{display:flex;justify-content:center;margin-top:30px}
+.design-catalog-grid{margin-top:4px}
+.task-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.task-manage-canvas{display:inline-flex;align-items:center;gap:6px;border:1px solid #cfe0d8;background:#eef6f2;color:#12684f;border-radius:8px;padding:7px 11px;font-size:8.5px;cursor:pointer;white-space:nowrap}
+.task-manage-canvas:hover{background:#12684f;border-color:#12684f;color:#fff}
+.task-footer>small{margin-left:auto}
+.journal-topbar-actions{display:flex;align-items:center;gap:10px}
+@media(max-width:700px){.journal-topbar-actions{width:100%;justify-content:flex-end}}
+.verify-row{border:1px dashed #dfe5e2;border-radius:10px;padding:10px 12px;background:#fafcfb;margin-top:4px}
+.verify-row>span{display:flex;flex-direction:column;gap:3px}
+.verify-row small{font-size:7.5px;color:#6f817b;line-height:1.5}
+
+/* Kartu task: preview template & simpan status */
+.task-template-preview{display:inline-flex;align-items:center;gap:6px;margin-top:10px;border:1px solid #e0e6e2;background:#fff;border-radius:8px;padding:7px 11px;font-size:8.5px;color:#12684f;cursor:pointer}
+.task-template-preview:hover{background:#eef6f2}
+.task-save-status{display:inline-flex;align-items:center;gap:5px;border:0;background:#12684f;color:#fff;border-radius:8px;padding:7px 11px;font-size:8.5px;cursor:pointer}
+.task-save-status:disabled{opacity:.6}
+/* Nama akun pada nav landing saat pengunjung sudah login */
+.ikr-login.is-account{font-weight:600;color:#123f33}
+/* Tombol Tasks & Tickets pada kartu Client assignments sejajar kanan */
+.client-list article:not(:has(.assignment-status)){grid-template-columns:38px 1fr 130px}
+.client-task-link{width:100%;justify-self:stretch;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap}
+.task-owner{display:inline-flex;align-items:center;gap:6px;margin:8px 0 8px;font-size:8px;color:#5d7169;background:#f3f7f5;border-radius:7px;padding:5px 9px}
+.task-save-status:disabled{opacity:.45;cursor:not-allowed}
+
+/* Dialog pemulihan draft: tombol sejajar dan berjarak */
+.revision-dialog .recovery-actions{display:flex;gap:10px;margin-top:18px}
+.revision-dialog .recovery-actions>button{flex:1;justify-content:center;border-radius:10px;padding:11px 14px}
+.revision-dialog p{margin:10px 0 0;line-height:1.6;color:#5d7169}
+.workspace-hint{margin:14px 2px 0;padding:11px 13px;background:#f3f7f5;border:1px solid #e0e9e4;border-radius:10px;font-size:8.5px;line-height:1.6;color:#4d635b}
+.revision-dialog .recovery-note{font-size:8px;background:#f7f9f8;border-radius:9px;padding:10px 12px;margin-top:10px}
+/* Thumbnail sample pada katalog desain publik */
+.ikr-template-sample{position:absolute;inset:0;background-size:cover;background-position:center top;background-repeat:no-repeat;background-color:#eef2ef}
