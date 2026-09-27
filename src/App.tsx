@@ -3088,6 +3088,9 @@ function App() {
     const firstNewId = nextSections[0]?.id || "";
     setSelectedTemplate(template);
     setSections(nextSections);
+    // Judul ikut template yang baru dipakai; sebelumnya masih memakai nama
+    // template lama sehingga kartu di Templates & Approval terlihat salah.
+    setSiteTitle(template.name);
     setSelectedDashboardCanvasId(firstNewId);
     setGuests([]);
     sessionStorage.setItem("ikrarku-edit-canvas", firstNewId);
@@ -8710,10 +8713,9 @@ function Editor({
       } else {
         // TC-149: simpan salinan lokal supaya pekerjaan tidak hilang saat
         // penyimpanan ke server gagal, termasuk ketika sesi sudah berakhir.
+        // saveSite() sudah menampilkan pesan error asli dari server; jangan
+        // ditimpa pesan generik agar penyebabnya terbaca.
         backupEditorDraft(siteTitle, sections);
-        flash(
-          "Gagal menyimpan ke server. Perubahan disalin ke perangkat ini dan akan ditawarkan kembali setelah Anda login ulang.",
-        );
       }
     } finally {
       setSaving(false);
