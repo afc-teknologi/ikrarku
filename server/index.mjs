@@ -1797,6 +1797,37 @@ app.get("/api/templates/:id/revisions", auth, (req, res) => {
       })),
   );
 });
+// Hapus template: hanya pembuatnya atau Administrator, dan ditolak bila template
+// sudah pernah dipesan agar riwayat order tetap utuh.
+app.delete("/api/templates/:id", auth, permit("templates.edit"), (req, res) => {
+  const row = policy.requireTemplate(req.user, req.params.id);
+  const used = db
+    .prepare("SELECT COUNT(*) total FROM orders WHERE template_id=?")
+    .get(row.id);
+  if (used.total > 0)
+    return res.status(409).json({
+      error:
+        "Template sudah pernah dipesan customer. Gunakan Takedown agar riwayat order tetap utuh.",
+    });
+  for (const table of [
+    "template_drafts",
+    "template_autosaves",
+    "template_revisions",
+  ]) {
+    try {
+      db.prepare(`DELETE FROM ${table} WHERE template_id=?`).run(row.id);
+    } catch {
+      /* tabel opsional */
+    }
+  }
+  db.prepare("DELETE FROM tasks WHERE template_id=?").run(row.id);
+  db.prepare("DELETE FROM templates WHERE id=?").run(row.id);
+  auditLog(req.user.id, "template.delete", "template", row.id, {
+    name: row.name,
+  });
+  res.json({ ok: true });
+});
+
 // QA TC-075 & TC-076: takedown dan republish template yang sudah live.
 app.post("/api/templates/:id/takedown", auth, (req, res) => {
   const row = db

@@ -144,6 +144,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
+  deleteTemplate: (id: string) =>
+    request<any>(`/templates/${id}`, { method: "DELETE" }),
   updateTemplate: (id: string, payload: any) =>
     request<any>(`/templates/${id}`, {
       method: "PATCH",

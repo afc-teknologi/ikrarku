@@ -216,7 +216,7 @@ html,body,#root{min-width:0!important}
 /* Object-level feature alignment */
 .canvas-column{display:flex;flex-direction:column;align-items:stretch}
 .feature-block{box-sizing:border-box}
-.feature-layout-controls{border-bottom:1px solid #e5e9e6;padding-bottom:15px;margin-bottom:15px}.feature-layout-controls .layout-help{font-size:8px;line-height:1.45;color:#7c8b85;background:#f4f7f5;padding:8px;border-radius:7px}.object-alignment button{flex:1}.object-alignment button[title=stretch]{border-left:1px solid #e3e7e4}
+.feature-layout-controls{border-bottom:1px solid #e5e9e6;padding-bottom:15px;margin-bottom:15px}.feature-layout-controls .layout-help{font-size:9px;line-height:1.5;color:#7c8b85;background:#f4f7f5;padding:9px;border-radius:7px}.object-alignment button{flex:1}.object-alignment button[title=stretch]{border-left:1px solid #e3e7e4}
 
 /* Gradient contract: inner widgets must not hide the selected feature surface */
 .feature-block.has-gradient .greetings-widget.gradient-active form,.feature-block.has-gradient .greetings-widget.gradient-active .greeting-list article{background:rgba(255,255,255,.18);border-color:rgba(255,255,255,.34);backdrop-filter:blur(8px)}
@@ -1061,3 +1061,41 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 .revision-dialog .recovery-note{font-size:8px;background:#f7f9f8;border-radius:9px;padding:10px 12px;margin-top:10px}
 /* Thumbnail sample pada katalog desain publik */
 .ikr-template-sample{position:absolute;inset:0;background-size:cover;background-position:center top;background-repeat:no-repeat;background-color:#eef2ef}
+
+/* Tombol hapus pada kartu status template */
+.template-delete-btn{display:inline-flex;align-items:center;gap:6px;margin-top:8px;border:1px solid #f0d4d4;background:#fff;color:#b4453c;border-radius:8px;padding:7px 11px;font-size:8.5px;cursor:pointer}
+.template-delete-btn:hover{background:#b4453c;border-color:#b4453c;color:#fff}
+
+/* Penanda asal pengaturan pada tab Style & Advanced */
+.inspector-scope{display:flex;align-items:flex-start;gap:9px;margin:0 0 12px;padding:9px 11px;background:#f4f7f5;border:1px solid #e3e9e5;border-radius:9px}
+.inspector-scope>span{display:flex;flex-direction:column;gap:3px;font-size:8.5px;color:#5d7169;min-width:0}
+.inspector-scope strong{font-size:9px;color:#123f33}
+.inspector-scope small{font-size:7.5px;color:#7c8b85;line-height:1.5}
+.inspector-scope svg{flex:0 0 auto;margin-top:2px}
+
+/* Opsi background global */
+.global-background-options{margin-top:10px;padding:11px;border:1px solid #e3e9e5;border-radius:10px;background:#fafcfb;display:flex;flex-direction:column;gap:10px}
+.segmented{display:flex;gap:6px}
+.segmented button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #dfe5e2;background:#fff;border-radius:8px;padding:8px;font-size:8.5px;cursor:pointer}
+.segmented button.active{background:#123f33;border-color:#123f33;color:#fff}
+
+/* Kartu konteks website customer di editor */
+.editing-context-card{margin-bottom:12px;padding:12px 13px;border-radius:11px;border:1px solid #dbe6df;background:linear-gradient(135deg,#f2f8f4,#ffffff);display:flex;flex-direction:column;gap:4px}
+.editing-context-card span{font-size:7px;letter-spacing:1.4px;color:#8a7a4d}
+.editing-context-card strong{font-size:11px;color:#123f33;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editing-context-card small{font-size:7.5px;color:#6f817b;line-height:1.5}
+
+/* Ornamen berbasis gambar */
+.decor-preview{width:100%;height:78px;display:grid;place-items:center;background:#f7f9f8;border-radius:8px;border:1px solid #e0e6e2;overflow:hidden}
+.decor-preview img{width:100%;height:100%;object-fit:cover;display:block}
+.section-decoration img{width:100%;height:100%;object-fit:contain;display:block}
+
+/* layout-help di luar feature-layout-controls ikut ukuran group-heading */
+.layout-help{font-size:9px;line-height:1.5;color:#7c8b85;background:#f4f7f5;padding:9px;border-radius:7px}
+.layout-help strong{color:#174f40}
+
+/* Jarak kiri-kanan panel Page Structure */
+.canvas-help-note{margin-left:14px;margin-right:14px}
+.setting-row.compact.background-mode-switch{margin-left:14px;margin-right:14px}
+.editing-context-card{margin-left:14px;margin-right:14px}
+.decoration-editor select:disabled{background:#f2f5f3;color:#9aa8a2;cursor:not-allowed}

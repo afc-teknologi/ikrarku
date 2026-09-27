@@ -325,6 +325,8 @@ type DecorCorner =
 type SectionDecoration = {
   id: string;
   glyph: DecorGlyph;
+  imageUrl?: string; // ornamen dari file gambar milik Web Designer
+  imageKey?: string;
   corner: DecorCorner;
   size: number;
   color: string;
@@ -581,6 +583,8 @@ type CanvasSection = {
   columnWidths?: number[]; // TC-114 lebar kolom hasil drag grid line
   showGuides?: boolean; // TC-113 garis guide/margin
   backgroundGlobal?: boolean; // TC-146 satu background untuk semua canvas
+  backgroundGlobalMode?: "image" | "color"; // sumber background global
+  backgroundScrollType?: "section" | "parallax"; // cara background bergerak
   loopEffect?: LoopEffect; // Efek berulang pada seluruh section
   loopSpeed?: number;
   backgroundLoopEffect?: LoopEffect; // Efek berulang khusus layer background
@@ -3087,6 +3091,9 @@ function App() {
     const nextSections = normalizeCoverSections(additions);
     const firstNewId = nextSections[0]?.id || "";
     setSelectedTemplate(template);
+    // Web Designer memakai Use template untuk merancang template, bukan website
+    // ber-URL. Kolom slug hanya relevan untuk website customer.
+    if (role === "Editor" && !siteOwnerUserId) setEditorMode("template");
     setSections(nextSections);
     // Judul ikut template yang baru dipakai; sebelumnya masih memakai nama
     // template lama sehingga kartu di Templates & Approval terlihat salah.
@@ -3591,6 +3598,8 @@ function App() {
         );
         if (match) setSelectedTemplate(match);
       }
+      // Canvas customer adalah website ber-URL, bukan template.
+      setEditorMode("site");
       // Manage Canvas membuka Canvas Editor, bukan kembali ke daftar template.
       setView("editor");
       const clients = await api.clients();
@@ -4337,6 +4346,7 @@ function App() {
     return (
       <>
         <Editor
+          managingCustomer={Boolean(siteOwnerUserId)}
           sections={sections}
           setSections={setSections}
           slug={slug}
@@ -8527,6 +8537,7 @@ type EditorProps = {
   selectedTemplate: Template;
   saveSite: () => Promise<boolean>;
   editorMode: "site" | "template";
+  managingCustomer?: boolean;
   saved: boolean;
   setView: (view: View) => void;
   setPreviewOpen: (value: boolean) => void;
@@ -8561,6 +8572,7 @@ function Editor({
   selectedTemplate,
   saveSite,
   editorMode,
+  managingCustomer = false,
   saved,
   setView,
   setPreviewOpen,
@@ -8709,7 +8721,7 @@ function Editor({
         futureRef.current = [];
         window.localStorage.removeItem(EDITOR_BACKUP_KEY);
         setLeavePromptOpen(false);
-        if (leave) setView("templates");
+        if (leave) setView(managingCustomer ? "tasks" : "templates");
       } else {
         // TC-149: simpan salinan lokal supaya pekerjaan tidak hilang saat
         // penyimpanan ke server gagal, termasuk ketika sesi sudah berakhir.
@@ -9589,7 +9601,7 @@ function Editor({
               className="icon-btn"
               onClick={() => {
                 if (dirty) setLeavePromptOpen(true);
-                else setView("templates");
+                else setView(managingCustomer ? "tasks" : "templates");
               }}
             >
               <ArrowLeft size={19} />
@@ -9675,6 +9687,20 @@ function Editor({
         </header>
         <div className="editor-body">
           <aside className="editor-left">
+            {/* Konteks: saat mengelola canvas customer, tampilkan template yang
+                sedang dipakai agar Web Designer tahu sedang mengedit apa. */}
+            {managingCustomer && (
+              <div
+                className={`editing-context-card preset-${selectedTemplate.preset || "classic"}`}
+              >
+                <span>WEBSITE CUSTOMER</span>
+                <strong>{siteTitle || "Website customer"}</strong>
+                <small>
+                  {selectedTemplate.name} · {selectedTemplate.category} ·{" "}
+                  {sections.length} section
+                </small>
+              </div>
+            )}
             <div className="editor-panel-title">
               <strong>Page Structure</strong>
               <button className="icon-btn small" onClick={addCanvas}>
@@ -9867,18 +9893,22 @@ function Editor({
                   <span>
                     <strong>Background global</strong>
                     <small>
-                      Semua canvas memakai background Canvas 1. Matikan untuk
-                      mengatur background sendiri tiap canvas.
+                      Semua canvas memakai background Canvas 1, edit di{" "}
+                      <strong>menu Style &gt; Canvas Background</strong>.
+                      Matikan untuk mengatur background sendiri tiap canvas.
+                      Aktif = scroll parallax, nonaktif = scroll per section.
                     </small>
                   </span>
                 </div>
                 <button
                   className={`toggle ${sections[0].backgroundGlobal ? "on" : ""}`}
-                  onClick={() =>
+                  onClick={() => {
+                    const next = !sections[0].backgroundGlobal;
                     updateSectionShared(sections[0].id, {
-                      backgroundGlobal: !sections[0].backgroundGlobal,
-                    })
-                  }
+                      backgroundGlobal: next,
+                      backgroundScrollType: next ? "parallax" : "section",
+                    });
+                  }}
                 >
                   <i />
                 </button>
@@ -10202,7 +10232,7 @@ function Editor({
               .then(() => {
                 discardToSavedBaseline();
                 setLeavePromptOpen(false);
-                setView("templates");
+                setView(managingCustomer ? "tasks" : "templates");
               });
           }}
           onSave={() => void saveAndMaybeLeave(true)}
@@ -10939,6 +10969,15 @@ function FeatureInspector({
             <span>{feature.type}</span>
           </div>
         </div>
+        <div className="inspector-scope">
+          <FeatureIcon type={feature.type} />
+          <span>
+            Mengatur <strong>{feature.title || feature.type}</strong>
+            <small>
+              Dipilih dari Content · feature {feature.type} pada Feature Library
+            </small>
+          </span>
+        </div>
         {layoutControls}
         <BackgroundDesignControls
           value={feature}
@@ -11461,6 +11500,15 @@ function FeatureInspector({
           <strong>Animation Library</strong>
           <span>Advanced live preview</span>
         </div>
+      </div>
+      <div className="inspector-scope">
+        <FeatureIcon type={feature.type} />
+        <span>
+          Mengatur <strong>{feature.title || feature.type}</strong>
+          <small>
+            Dipilih dari Content · feature {feature.type} pada Feature Library
+          </small>
+        </span>
       </div>
       {feature.type === "invitation-cover" && (
         <div className="opening-transition-controls">
@@ -12389,9 +12437,13 @@ function LoopEffectControls({
 function SectionDecorationEditor({
   section,
   update,
+  uploadLayerImage,
 }: {
   section: CanvasSection;
   update: (patch: Partial<CanvasSection>) => void;
+  uploadLayerImage: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
 }) {
   const items = section.decorations || [];
   const commit = (next: SectionDecoration[]) => update({ decorations: next });
@@ -12436,13 +12488,39 @@ function SectionDecorationEditor({
             </button>
           </div>
           <div className="decor-preview" style={{ color: item.color }}>
-            <DecorGlyphIcon glyph={item.glyph} />
+            {item.imageUrl ? (
+              <img src={assetUrl(item.imageUrl)} alt="" />
+            ) : (
+              <DecorGlyphIcon glyph={item.glyph} />
+            )}
           </div>
+          {/* Ornamen bisa memakai gambar sendiri, bukan hanya bentuk bawaan. */}
+          <LayerImageUpload
+            layer={{ id: item.id, url: "" } as BackgroundLayer}
+            uploadLayerImage={uploadLayerImage}
+            onUploaded={(saved) =>
+              patch(item.id, { imageUrl: saved.url, imageKey: saved.key })
+            }
+          />
+          {item.imageUrl && (
+            <button
+              className="secondary-btn"
+              onClick={() => patch(item.id, { imageUrl: "", imageKey: "" })}
+            >
+              Kembali ke bentuk bawaan
+            </button>
+          )}
           <div className="two-inputs">
             <label>
               Bentuk
               <select
                 value={item.glyph}
+                disabled={Boolean(item.imageUrl)}
+                title={
+                  item.imageUrl
+                    ? "Ornamen memakai gambar sendiri. Hapus gambar untuk memilih bentuk bawaan."
+                    : undefined
+                }
                 onChange={(event) =>
                   patch(item.id, { glyph: event.target.value as DecorGlyph })
                 }
@@ -12574,7 +12652,6 @@ function applyGlobalBackground(
     backgroundPosition: source.backgroundPosition,
     backgroundRepeat: source.backgroundRepeat,
     backgroundSize: source.backgroundSize,
-    backgroundFixed: source.backgroundFixed,
     backgroundGradientEnabled: source.backgroundGradientEnabled,
     backgroundGradientFrom: source.backgroundGradientFrom,
     backgroundGradientTo: source.backgroundGradientTo,
@@ -12583,6 +12660,9 @@ function applyGlobalBackground(
     backgroundLayers: source.backgroundLayers,
     backgroundLoopEffect: source.backgroundLoopEffect,
     backgroundLoopSpeed: source.backgroundLoopSpeed,
+    // Tipe scroll global: parallax mengunci background ke viewport,
+    // "section" membuat tiap canvas menggulung bersama isinya.
+    backgroundFixed: source.backgroundScrollType === "parallax",
   };
 }
 
@@ -13059,7 +13139,11 @@ function SectionInspector({
             <option value="auto">Auto</option>
           </select>
         </label>
-        <SectionDecorationEditor section={section} update={update} />
+        <SectionDecorationEditor
+          section={section}
+          update={update}
+          uploadLayerImage={uploadLayerImage}
+        />
         {/* QA TC-108: layer background tambahan di dalam background utama. */}
         <BackgroundLayerEditor
           section={section}
@@ -13472,7 +13556,15 @@ function WeddingCanvas({
                 }
                 aria-hidden
               >
-                <DecorGlyphIcon glyph={decoration.glyph} />
+                {decoration.imageUrl ? (
+                  <img
+                    src={assetUrl(decoration.imageUrl)}
+                    alt=""
+                    loading="lazy"
+                  />
+                ) : (
+                  <DecorGlyphIcon glyph={decoration.glyph} />
+                )}
               </span>
             ))}
             {/* QA TC-108: layer background tambahan di atas background utama. */}
