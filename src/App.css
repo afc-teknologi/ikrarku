@@ -1290,14 +1290,30 @@ body:has(.journey-preview-overlay) .chat-launcher{width:50px;padding:0;justify-c
 /* Jendela chat yang sedang terbuka tetap boleh tampil penuh. */
 body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 
-/* Tombol backsound ikut kotak dialog, bukan layar. Dialog diberi posisi
-   relatif supaya anchor-nya benar. */
-.template-preview-dialog{position:relative;overflow:hidden}
-.template-preview-dialog .fixed-sound-disc.is-contained,
-.template-dialog-actual-preview.live .fixed-sound-disc.is-contained{position:absolute;left:18px;right:auto;bottom:18px;z-index:6}
-.template-preview-dialog .fixed-sound-disc.is-contained.sound-pos-right{left:auto;right:18px}
-.template-preview-dialog .fixed-sound-disc.is-contained.sound-pos-center{left:50%;right:auto;transform:translateX(-50%)}
-.template-preview-dialog .fixed-sound-disc.is-contained.sound-pos-stretch{left:18px;right:auto;transform:none}
+/* Tombol backsound di dalam preview.
+
+   Sebelumnya `position:fixed`, jadi ia menempel pada layar dan tetap terlihat
+   walau preview sudah di-scroll jauh. Di dalam preview tombolnya sekarang
+   menjadi bagian dari isi undangan: diposisikan terhadap `.wedding-site`,
+   berada di dalam area putih, dan ikut bergulir bersama konten. */
+.template-preview-dialog{position:relative}
+.preview-full-stage .wedding-site,
+.actual-template-preview-shell .wedding-site,
+.template-dialog-actual-preview.live .wedding-site{position:relative}
+.fixed-sound-disc.is-contained{
+  position:absolute;
+  left:22px;
+  right:auto;
+  top:88px;
+  bottom:auto;
+  transform:none;
+  z-index:6;
+}
+.fixed-sound-disc.is-contained.sound-pos-right{left:auto;right:22px}
+.fixed-sound-disc.is-contained.sound-pos-center{left:50%;right:auto;transform:translateX(-50%)}
+.fixed-sound-disc.is-contained.sound-pos-stretch{left:22px;right:auto;transform:none}
+/* Pada cover yang masih terkunci, tombolnya tetap di bawah seperti undangan asli. */
+.wedding-site.invitation-locked .fixed-sound-disc.is-contained{top:auto;bottom:22px}
 
 /* Toggle Desktop / Mobile pada header dialog preview */
 .template-preview-dialog header{align-items:flex-start}
@@ -1427,3 +1443,67 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .template-dialog-actual-preview.live .canvas-section[style*="100vh"]{
   min-height:100%!important;
 }
+
+/* ------------------------------------------------------------------
+   Header dialog preview — toggle Desktop / Mobile
+
+   `.template-preview-dialog>header button{width:34px;height:34px;display:grid}`
+   mengenai SEMUA tombol di header, termasuk dua tombol device switch. Keduanya
+   dipaksa menjadi kotak 34x34 sehingga label "Desktop" dan "Mobile" meluber
+   keluar kotaknya. Aturan itu sekarang hanya berlaku untuk tombol tutup.
+   ------------------------------------------------------------------ */
+.template-preview-dialog>header .preview-header-actions{
+  display:flex;align-items:center;gap:10px;flex:0 0 auto;
+}
+.template-preview-dialog>header .journey-device-switch{display:flex;gap:6px}
+.template-preview-dialog>header .journey-device-switch button{
+  width:auto!important;
+  height:34px!important;
+  display:inline-flex!important;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  padding:0 12px;
+  white-space:nowrap;
+  border-radius:9px;
+  border:1px solid rgba(22,77,62,.22);
+  background:#fff;
+  color:#3c5b50;
+  font-size:9px;
+  line-height:1;
+}
+.template-preview-dialog>header .journey-device-switch button.active{
+  background:#125946;border-color:#125946;color:#fff;
+}
+.template-preview-dialog>header .preview-close-btn{
+  width:34px;height:34px;display:grid;place-items:center;flex:0 0 auto;
+}
+
+/* ------------------------------------------------------------------
+   Placeholder Image Feature mengikuti lebar layout
+
+   `.image-feature` adalah `display:flex`. Placeholder di dalamnya menjadi flex
+   item dengan `flex:0 1 auto`, sehingga lebarnya mengikuti isi (ikon + dua baris
+   teks) dan tampil sebagai kotak sempit — bukan selebar layout yang dipilih.
+   ------------------------------------------------------------------ */
+.image-feature>.media-placeholder,
+.video-feature>.media-placeholder{
+  flex:1 1 auto;
+  width:100%;
+  min-width:0;
+  align-self:stretch;
+}
+/* Tinggi placeholder mengikuti bingkai bila Web Designer sudah mengaturnya. */
+.image-feature>.media-placeholder{height:100%}
+
+/* Pagination bernomor pada katalog desain (QA TC-150 revisi) */
+.catalog-pagination{display:flex;align-items:center;justify-content:center;gap:6px;flex-wrap:wrap;margin:34px auto 10px}
+.catalog-page-number,.catalog-page-step{min-width:36px;height:36px;padding:0 10px;border:1px solid rgba(22,77,62,.18);background:#fff;color:#3c5b50;border-radius:9px;font-size:12px;display:inline-grid;place-items:center;cursor:pointer;transition:.15s}
+.catalog-page-number:hover:not(.active),.catalog-page-step:hover:not(:disabled){border-color:rgba(18,89,70,.45);background:#f6faf8}
+.catalog-page-number.active{background:#125946;border-color:#125946;color:#fff;font-weight:700}
+.catalog-page-step:disabled{opacity:.4;cursor:not-allowed}
+
+/* Canvas yang tingginya mengikuti rasio background: background menempel persis
+   pada kotak section, tanpa overscan 5px yang dipakai untuk efek gerak. */
+.canvas-section[style*="aspect-ratio"]>.background-layer,
+.canvas-section[style*="aspect-ratio"]>.background-video-layer{inset:0;width:100%;height:100%}

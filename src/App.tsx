@@ -574,6 +574,11 @@ type CanvasSection = {
   backgroundKey?: string;
   backgroundVideoUrl?: string; // TC-098 background bergerak (MP4/WebM)
   backgroundVideoKey?: string;
+  // Rasio asli background (lebar/tinggi), direkam saat upload. Dipakai agar
+  // canvas berisi desain utuh tidak terpotong `background-size:cover` ketika
+  // lebarnya berbeda antara editor dan preview.
+  backgroundAspect?: number;
+  backgroundFollowAspect?: boolean;
   backgroundEffect: BackgroundEffect;
   backgroundPosition: "center" | "top" | "bottom" | "left" | "right";
   backgroundRepeat: "no-repeat" | "repeat" | "repeat-x" | "repeat-y";
@@ -1798,6 +1803,35 @@ function hydrateSections(raw: CanvasSection[]): CanvasSection[] {
  * untuk mengelompokkan section menjadi satu card Website Design, sehingga satu
  * order = satu card.
  */
+/**
+ * Membaca rasio lebar/tinggi asli sebuah file gambar atau video.
+ *
+ * Dipakai saat upload background agar tinggi canvas bisa mengikuti rasli asli
+ * desain. Mengembalikan undefined bila dimensinya tidak terbaca.
+ */
+function readMediaAspect(file: File): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const done = (value?: number) => {
+      URL.revokeObjectURL(url);
+      resolve(value && Number.isFinite(value) && value > 0 ? value : undefined);
+    };
+    if (file.type.startsWith("video/")) {
+      const video = document.createElement("video");
+      video.preload = "metadata";
+      video.onloadedmetadata = () =>
+        done(video.videoWidth / Math.max(1, video.videoHeight));
+      video.onerror = () => done(undefined);
+      video.src = url;
+      return;
+    }
+    const image = new Image();
+    image.onload = () => done(image.naturalWidth / Math.max(1, image.naturalHeight));
+    image.onerror = () => done(undefined);
+    image.src = url;
+  });
+}
+
 function buildSectionsFromTemplate(template: Template): CanvasSection[] {
   const sourceSections = template.canvasSections?.length
     ? hydrateSections(template.canvasSections)
@@ -5226,12 +5260,16 @@ function AllDesignsPage({
       ...filtered.filter((item) => !item.recommended),
     ];
   }, [templates, category, query]);
-  // QA TC-150: katalog tidak lagi merender seluruh template sekaligus. Halaman
-  // memuat per 12 desain supaya tetap ringan ketika jumlah template bertambah.
+  // QA TC-150 (revisi): pagination bernomor, maksimal 12 desain per halaman.
   const PAGE_SIZE = 12;
-  const [shown, setShown] = useState(PAGE_SIZE);
-  useEffect(() => setShown(PAGE_SIZE), [category, query]);
-  const paged = visible.slice(0, shown);
+  const [page, setPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  useEffect(() => setPage(1), [category, query]);
+  // Daftar bisa menyusut setelah filter; jaga halaman aktif tetap valid.
+  useEffect(() => {
+    setPage((previous) => Math.min(previous, pageCount));
+  }, [pageCount]);
+  const paged = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return (
     <div className="journal-page">
       <header className="journal-topbar">
@@ -5349,18 +5387,42 @@ function AllDesignsPage({
             </div>
           )}
         </section>
-        {visible.length > paged.length && (
-          <div className="catalog-load-more">
-            <span>
-              Menampilkan {paged.length} dari {visible.length} desain
-            </span>
+        {pageCount > 1 && (
+          <nav
+            className="catalog-pagination"
+            aria-label="Navigasi halaman desain"
+          >
             <button
-              className="primary-btn"
-              onClick={() => setShown((previous) => previous + PAGE_SIZE)}
+              className="catalog-page-step"
+              disabled={page === 1}
+              aria-label="Halaman sebelumnya"
+              onClick={() => setPage((previous) => Math.max(1, previous - 1))}
             >
-              Muat lebih banyak <ArrowRight size={15} />
+              <ChevronLeft size={16} />
             </button>
-          </div>
+            {Array.from({ length: pageCount }, (_, index) => index + 1).map(
+              (number) => (
+                <button
+                  key={number}
+                  className={`catalog-page-number ${number === page ? "active" : ""}`}
+                  aria-current={number === page ? "page" : undefined}
+                  onClick={() => setPage(number)}
+                >
+                  {number}
+                </button>
+              ),
+            )}
+            <button
+              className="catalog-page-step"
+              disabled={page === pageCount}
+              aria-label="Halaman berikutnya"
+              onClick={() =>
+                setPage((previous) => Math.min(pageCount, previous + 1))
+              }
+            >
+              <ChevronRight size={16} />
+            </button>
+          </nav>
         )}
       </main>
       <footer className="journal-footer">
@@ -6988,7 +7050,11 @@ function TasksPage({
                     <Smartphone size={15} /> Mobile
                   </button>
                 </div>
-                <button onClick={() => setPreviewTemplate(null)}>
+                <button
+                  className="preview-close-btn"
+                  aria-label="Tutup preview"
+                  onClick={() => setPreviewTemplate(null)}
+                >
                   <X size={18} />
                 </button>
               </div>
@@ -9331,6 +9397,24 @@ function Editor({
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">(
     "desktop",
   );
+  // Lebar kerja canvas ditampilkan pada chip mode supaya Web Designer tahu
+  // persis pada lebar berapa desainnya sedang dilihat.
+  const canvasFrameRef = useRef<HTMLDivElement | null>(null);
+  const [canvasWidth, setCanvasWidth] = useState(0);
+  useEffect(() => {
+    const node = canvasFrameRef.current;
+    if (!node) return;
+    const read = () =>
+      setCanvasWidth(Math.round(node.getBoundingClientRect().width));
+    read();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", read);
+      return () => window.removeEventListener("resize", read);
+    }
+    const observer = new ResizeObserver(read);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [previewMode]);
   const [animationNonce, setAnimationNonce] = useState(0);
   const [widgetQuery, setWidgetQuery] = useState("");
   const [dirty, setDirty] = useState(false);
@@ -10226,15 +10310,29 @@ function Editor({
     }
     try {
       const saved = await uploadToServer(file, "canvas-background");
+      // Rasio asli direkam supaya tinggi canvas dapat mengikutinya dan desain
+      // utuh tidak terpotong `background-size:cover` pada lebar yang berbeda.
+      const aspect = await readMediaAspect(file).catch(() => undefined);
+      // Canvas yang belum punya feature berarti backgroundnya memang dipakai
+      // sebagai desain utuh, jadi defaultnya mengikuti rasio asli. Canvas yang
+      // sudah berisi feature tidak diubah perilakunya.
+      const backgroundIsTheDesign = !selectedSection.columns.some(
+        (column) => column.features.length > 0,
+      );
+      const followAspect = Boolean(aspect) && backgroundIsTheDesign;
       if (isVideo)
         updateSection(selectedSection.id, {
           backgroundVideoKey: saved.key,
           backgroundVideoUrl: saved.url,
+          backgroundAspect: aspect,
+          backgroundFollowAspect: followAspect,
         });
       else
         updateSection(selectedSection.id, {
           backgroundKey: saved.key,
           backgroundUrl: saved.url,
+          backgroundAspect: aspect,
+          backgroundFollowAspect: followAspect,
         });
       flash(
         isVideo
@@ -10722,7 +10820,9 @@ function Editor({
                 </div>
               ) : (
                 <div className="template-mode-chip">
-                  <Palette size={15} /> Template Design · URL tidak diperlukan
+                  <Palette size={15} /> Template Design · URL tidak diperlukan ·{" "}
+                  {previewMode === "mobile" ? "Mobile" : "Desktop"} Lebar{" "}
+                  {canvasWidth ? `${canvasWidth} px` : "…"}
                 </div>
               )}
               <span className="canvas-hint">
@@ -10732,7 +10832,7 @@ function Editor({
             </div>
             {/* QA TC-112: canvas dirender memakai setting device yang dipilih. */}
             <DeviceContext value={previewMode}>
-            <div className={`canvas-frame ${previewMode}`}>
+            <div ref={canvasFrameRef} className={`canvas-frame ${previewMode}`}>
               {activePage === "invitees" ? (
                 <InviteeManagementPage
                   sections={sections}
@@ -14085,6 +14185,35 @@ function SectionInspector({
                 <Trash2 size={14} /> Remove background video
               </button>
             )}
+            {/* Desain utuh yang diunggah sebagai background sebelumnya terpotong
+                atas-bawah, karena tinggi canvas tetap sementara lebarnya berbeda
+                antara editor dan preview — `background-size:cover` lalu memangkas
+                sisanya. Opsi ini membuat tinggi canvas mengikuti rasio asli
+                gambar/video, sehingga seluruh desain selalu terlihat utuh. */}
+            {section.backgroundAspect && (
+              <div className="setting-row compact">
+                <div>
+                  <ImageIcon size={16} />
+                  <span>
+                    <strong>Tinggi mengikuti rasio background</strong>
+                    <small>
+                      Seluruh desain tampil utuh di lebar berapa pun. Matikan
+                      untuk memakai Minimum height dan memotong dengan cover.
+                    </small>
+                  </span>
+                </div>
+                <button
+                  className={`toggle ${section.backgroundFollowAspect ? "on" : ""}`}
+                  onClick={() =>
+                    update({
+                      backgroundFollowAspect: !section.backgroundFollowAspect,
+                    })
+                  }
+                >
+                  <i />
+                </button>
+              </div>
+            )}
           </>
         )}
         {/* QA TC-107 & TC-127: background utama dikunci agar tidak ikut scroll. */}
@@ -14456,8 +14585,20 @@ function WeddingCanvas({
           globalBackgroundSource,
         );
         const filter = getBackgroundFilter(section.backgroundEffect);
+        // Canvas yang isinya memang hanya visual — background image/video,
+        // layer, atau ornamen — tetap harus tampil. Sebelumnya section tanpa
+        // feature langsung dibuang, sehingga Web Designer yang mengunggah
+        // desain utuh sebagai background melihat canvasnya hilang di Live
+        // Preview dan di undangan publik.
+        const hasOwnBackdrop = Boolean(
+          section.backgroundUrl ||
+            section.backgroundVideoUrl ||
+            (section.backgroundLayers || []).some((layer) => layer.url) ||
+            (section.decorations || []).length,
+        );
         const hasVisibleFeatures =
           editable ||
+          hasOwnBackdrop ||
           section.columns.some((column) =>
             column.features.some(
               (feature) =>
@@ -14502,7 +14643,16 @@ function WeddingCanvas({
                   section.backgroundGradientAngle,
                   section.backgroundColor,
                 ),
-                minHeight: section.minHeight,
+                // Mengikuti rasio asli background supaya seluruh desain terlihat
+                // di lebar berapa pun, bukan terpotong atas-bawah oleh `cover`.
+                aspectRatio:
+                  section.backgroundFollowAspect && section.backgroundAspect
+                    ? String(section.backgroundAspect)
+                    : undefined,
+                minHeight:
+                  section.backgroundFollowAspect && section.backgroundAspect
+                    ? 0
+                    : section.minHeight,
                 paddingTop:
                   section.layoutMode !== "standard" ? 0 : section.paddingY,
                 paddingBottom:
@@ -21030,6 +21180,12 @@ function PerElementColorEditor({
       </span>
     </label>
   );
+  // Pengaturan kolom/kartu hanya berpengaruh pada Gift, Greetings, dan Love
+  // Story. Untuk feature lain kontrolnya tidak melakukan apa pun, jadi
+  // disembunyikan agar panel Style tidak membingungkan.
+  const usesCardStyling = ["gift", "greetings", "love-story"].includes(
+    feature.type,
+  );
   return (
     <div className="per-element-color-editor">
       <div className="group-heading">
@@ -21043,9 +21199,10 @@ function PerElementColorEditor({
         {swatch("Heading", feature.titleColor, feature.textColor, "titleColor")}
         {swatch("Supporting", feature.bodyColor, feature.textColor, "bodyColor")}
       </div>
+      {usesCardStyling && (
+        <>
       <div className="group-heading">
         <strong>Kolom / Kartu</strong>
-        <span>Gift, Greetings, Love Story</span>
       </div>
       <div className="two-inputs">
         {swatch("Latar kolom", feature.cardBackground, "#ffffff", "cardBackground")}
@@ -21064,6 +21221,8 @@ function PerElementColorEditor({
           />
         </label>
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -22686,16 +22845,6 @@ function TemplateApprovalManager({
                 {statusLabel(template.status)}
               </em>
             </div>
-            {/* QA TC-158 (revisi): ukuran yang direkomendasikan ditulis jelas
-                supaya hasilnya responsif di desktop maupun mobile. */}
-            <p className="upload-size-hint">
-              <ImageIcon size={12} />
-              <span>
-                <strong>Gambar sample</strong> lanskap 16:9 — 1920 x 1080 px ·{" "}
-                <strong>Thumbnail</strong> potret 4:5 — 800 x 1000 px · JPG/PNG,
-                maksimal 2 MB
-              </span>
-            </p>
             <div className="template-status-actions">
               <button onClick={() => setPreview(template)}>
                 <Eye size={14} /> Preview
@@ -22788,6 +22937,16 @@ function TemplateApprovalManager({
                     ? "Ditolak Administrator. Revisi lalu ajukan republish."
                     : "Live di landing page dan dapat dipesan customer."}
             </small>
+            {/* QA TC-158 (revisi): keterangan ukuran ditempatkan di bawah
+                template-status-hint sesuai permintaan QA. */}
+            <p className="upload-size-hint">
+              <ImageIcon size={12} />
+              <span>
+                <strong>Gambar sample</strong> lanskap 16:9 — 1920 x 1080 px ·{" "}
+                <strong>Thumbnail</strong> potret 4:5 — 800 x 1000 px · JPG/PNG,
+                maksimal 2 MB
+              </span>
+            </p>
           </article>
         ))}
       </div>
@@ -22857,7 +23016,11 @@ function TemplateApprovalManager({
                     <Smartphone size={15} /> Mobile
                   </button>
                 </div>
-                <button onClick={() => setPreview(null)}>
+                <button
+                  className="preview-close-btn"
+                  aria-label="Tutup preview"
+                  onClick={() => setPreview(null)}
+                >
                   <X size={18} />
                 </button>
               </div>
