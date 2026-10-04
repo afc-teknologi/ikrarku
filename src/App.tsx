@@ -5240,11 +5240,8 @@ function AllDesignsPage({
         </button>
         <Brand />
         <div className="journal-topbar-actions">
-          {/* QA TC-152: Jurnal dapat diakses langsung dari header, tidak hanya
-              dari section di landing page. */}
-          <button className="secondary-btn" onClick={() => setView("journal")}>
-            <BookOpen size={15} /> Jurnal
-          </button>
+          {/* QA TC-152 (revisi): tombol Jurnal dihapus dari header halaman
+              katalog desain. Menu Jurnal tetap tersedia di navbar landing. */}
           <button className="secondary-btn" onClick={() => setView("login")}>
             Masuk
           </button>
@@ -10668,10 +10665,8 @@ function Editor({
                   <span>
                     <strong>Background global</strong>
                     <small>
-                      Semua canvas memakai background Canvas 1, edit di{" "}
-                      <strong>menu Style &gt; Canvas Background</strong>.
-                      Matikan untuk mengatur background sendiri tiap canvas.
-                      Aktif = scroll parallax, nonaktif = scroll per section.
+                      Aktifkan apabila semua canvas memakai background Canvas 1.
+                      Matikan untuk mengatur background sendiri setiap canvas.
                     </small>
                   </span>
                 </div>
@@ -10850,6 +10845,8 @@ function Editor({
                   }
                   backgroundInput={backgroundInput}
                   uploadBackground={uploadBackground}
+                  backgroundGlobalOn={Boolean(sections[0]?.backgroundGlobal)}
+                  isPrimaryCanvas={sections[0]?.id === selectedSection.id}
                 />
               ) : (
                 <div className="empty-inspector">
@@ -13921,6 +13918,8 @@ function SectionInspector({
   setColumnCount,
   backgroundInput,
   uploadBackground,
+  backgroundGlobalOn = false,
+  isPrimaryCanvas = true,
 }: {
   section: CanvasSection;
   tab: InspectorTab;
@@ -13934,6 +13933,9 @@ function SectionInspector({
   setColumnCount: (count: ColumnCount) => void;
   backgroundInput: React.RefObject<HTMLInputElement | null>;
   uploadBackground: (file: File | undefined) => Promise<void>;
+  // Background global aktif: hanya Canvas 1 yang boleh punya background sendiri.
+  backgroundGlobalOn?: boolean;
+  isPrimaryCanvas?: boolean;
 }) {
   if (tab === "content")
     return (
@@ -14005,6 +14007,7 @@ function SectionInspector({
         </div>
       </div>
     );
+  const backgroundLocked = backgroundGlobalOn && !isPrimaryCanvas;
   if (tab === "style")
     return (
       <div className="inspector-group">
@@ -14020,32 +14023,69 @@ function SectionInspector({
           update={(patch) => update(patch)}
           hasImage={Boolean(section.backgroundUrl)}
         />
-        <input
-          ref={backgroundInput}
-          hidden
-          type="file"
-          accept="image/*"
-          onChange={(event) => void uploadBackground(event.target.files?.[0])}
-        />
-        <button
-          className="upload-control"
-          onClick={() => backgroundInput.current?.click()}
-        >
-          <Upload size={18} />
-          <span>
-            <strong>Upload Background</strong>
-            <small>Maksimal 2 MB</small>
-          </span>
-        </button>
-        {section.backgroundUrl && (
-          <button
-            className="clear-media"
-            onClick={() =>
-              update({ backgroundUrl: undefined, backgroundKey: undefined })
-            }
-          >
-            <Trash2 size={14} /> Remove background image
-          </button>
+        {/* Background global aktif: canvas selain Canvas 1 mengikuti background
+            Canvas 1, jadi kontrol upload-nya dikunci agar tidak menimbulkan
+            background yang tidak pernah terpakai. */}
+        {backgroundLocked ? (
+          <div className="layout-help background-locked-note">
+            <Anchor size={14} />
+            <span>
+              <strong>Background global sedang aktif.</strong> Canvas ini
+              memakai background dari <strong>Canvas 1</strong>. Untuk
+              mengubahnya, buka Canvas 1 — atau matikan Background global pada
+              panel Page Structure bila setiap canvas ingin punya background
+              sendiri.
+            </span>
+          </div>
+        ) : (
+          <>
+            <input
+              ref={backgroundInput}
+              hidden
+              type="file"
+              /* QA revisi: background mendukung video, jadi picker tidak boleh
+                 dibatasi image saja. */
+              accept="image/*,video/mp4,video/webm"
+              onChange={(event) =>
+                void uploadBackground(event.target.files?.[0])
+              }
+            />
+            <button
+              className="upload-control"
+              onClick={() => backgroundInput.current?.click()}
+            >
+              <Upload size={18} />
+              <span>
+                <strong>Upload Background</strong>
+                <small>
+                  Gambar/GIF maksimal 4 MB · Video MP4/WebM maksimal 10 MB
+                </small>
+              </span>
+            </button>
+            {section.backgroundUrl && (
+              <button
+                className="clear-media"
+                onClick={() =>
+                  update({ backgroundUrl: undefined, backgroundKey: undefined })
+                }
+              >
+                <Trash2 size={14} /> Remove background image
+              </button>
+            )}
+            {section.backgroundVideoUrl && (
+              <button
+                className="clear-media"
+                onClick={() =>
+                  update({
+                    backgroundVideoUrl: undefined,
+                    backgroundVideoKey: undefined,
+                  })
+                }
+              >
+                <Trash2 size={14} /> Remove background video
+              </button>
+            )}
+          </>
         )}
         {/* QA TC-107 & TC-127: background utama dikunci agar tidak ikut scroll. */}
         <div className="setting-row compact">
@@ -14545,7 +14585,7 @@ function WeddingCanvas({
             {section.backgroundVideoUrl && (
               <video
                 className={`background-video-layer ${getBackgroundMotionClass(section.backgroundMotion)}`}
-                src={section.backgroundVideoUrl}
+                src={assetUrl(section.backgroundVideoUrl)}
                 autoPlay={!thumbnail}
                 preload={thumbnail ? "none" : "metadata"}
                 loop
@@ -22551,6 +22591,16 @@ function TemplateApprovalManager({
   const [takedownTarget, setTakedownTarget] = useState<Template | null>(null);
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState<Template | null>(null);
+  // QA TC-160 (revisi): dialog Preview pada Templates & Approval juga perlu
+  // pilihan Desktop / Mobile, bukan hanya dialog review di Tasks & Tickets.
+  const [previewDevice, setPreviewDevice] = useState<DeviceMode>("desktop");
+  const previewStageRef = useRef<HTMLDivElement | null>(null);
+  useScrollResetOnOpen(
+    previewStageRef,
+    Boolean(preview),
+    preview?.id,
+    previewDevice,
+  );
   const [uploadTarget, setUploadTarget] = useState<string>("");
   // Satu input file dipakai bergantian; "kind" menentukan field mana yang ditulis.
   const [uploadKind, setUploadKind] = useState<"sample" | "thumbnail">("sample");
@@ -22636,6 +22686,16 @@ function TemplateApprovalManager({
                 {statusLabel(template.status)}
               </em>
             </div>
+            {/* QA TC-158 (revisi): ukuran yang direkomendasikan ditulis jelas
+                supaya hasilnya responsif di desktop maupun mobile. */}
+            <p className="upload-size-hint">
+              <ImageIcon size={12} />
+              <span>
+                <strong>Gambar sample</strong> lanskap 16:9 — 1920 x 1080 px ·{" "}
+                <strong>Thumbnail</strong> potret 4:5 — 800 x 1000 px · JPG/PNG,
+                maksimal 2 MB
+              </span>
+            </p>
             <div className="template-status-actions">
               <button onClick={() => setPreview(template)}>
                 <Eye size={14} /> Preview
@@ -22649,7 +22709,7 @@ function TemplateApprovalManager({
                   setUploadKind("sample");
                   fileRef.current?.click();
                 }}
-                title="Visual besar pada heading halaman detail template"
+                title="Visual besar pada heading halaman detail template. Rasio lanskap 16:9, rekomendasi 1920 x 1080 px, maksimal 2 MB."
               >
                 <Upload size={14} /> Gambar sample
               </button>
@@ -22661,7 +22721,7 @@ function TemplateApprovalManager({
                   setUploadKind("thumbnail");
                   fileRef.current?.click();
                 }}
-                title="Cover kartu template pada halaman /template"
+                title="Cover kartu template pada halaman /template. Rasio potret 4:5, rekomendasi 800 x 1000 px, maksimal 2 MB."
               >
                 <ImageIcon size={14} /> Thumbnail
               </button>
@@ -22782,11 +22842,32 @@ function TemplateApprovalManager({
                 <span>TEMPLATE PREVIEW</span>
                 <h2>{preview.name}</h2>
               </div>
-              <button onClick={() => setPreview(null)}>
-                <X size={18} />
-              </button>
+              <div className="preview-header-actions">
+                <div className="journey-device-switch">
+                  <button
+                    className={previewDevice === "desktop" ? "active" : ""}
+                    onClick={() => setPreviewDevice("desktop")}
+                  >
+                    <Monitor size={15} /> Desktop
+                  </button>
+                  <button
+                    className={previewDevice === "mobile" ? "active" : ""}
+                    onClick={() => setPreviewDevice("mobile")}
+                  >
+                    <Smartphone size={15} /> Mobile
+                  </button>
+                </div>
+                <button onClick={() => setPreview(null)}>
+                  <X size={18} />
+                </button>
+              </div>
             </header>
-            <div className="template-dialog-actual-preview live">
+            <DeviceContext value={previewDevice}>
+            <PreviewSurfaceContext value={true}>
+            <div
+              ref={previewStageRef}
+              className={`template-dialog-actual-preview live device-${previewDevice}`}
+            >
               {preview.canvasSections?.length ? (
                 <WeddingCanvas
                   page="pages"
@@ -22805,14 +22886,8 @@ function TemplateApprovalManager({
                 />
               )}
             </div>
-            <footer>
-              <button
-                className="secondary-btn"
-                onClick={() => setPreview(null)}
-              >
-                Tutup
-              </button>
-            </footer>
+            </PreviewSurfaceContext>
+            </DeviceContext>
           </div>
         </div>
       )}

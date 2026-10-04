@@ -1274,3 +1274,156 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 .project-progress-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#1b6954,#2a866a);transition:width .35s ease}
 .project-order-card header .status.pending{background:#fdf2e0;color:#8a6220}
 .project-order-card header .status.paid{background:#e4f3ec;color:#1b6a4f}
+
+/* ------------------------------------------------------------------
+   QA TC-160 (revisi) — perapihan dialog preview
+   ------------------------------------------------------------------ */
+
+/* Live Chat menyusut jadi ikon saja selama ada pop-up terbuka, supaya tidak
+   menutupi tombol dan konten dialog. */
+body:has(.dialog-overlay) .chat-launcher span,
+body:has(.preview-overlay) .chat-launcher span,
+body:has(.journey-preview-overlay) .chat-launcher span{display:none}
+body:has(.dialog-overlay) .chat-launcher,
+body:has(.preview-overlay) .chat-launcher,
+body:has(.journey-preview-overlay) .chat-launcher{width:50px;padding:0;justify-content:center;border-radius:50%}
+/* Jendela chat yang sedang terbuka tetap boleh tampil penuh. */
+body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
+
+/* Tombol backsound ikut kotak dialog, bukan layar. Dialog diberi posisi
+   relatif supaya anchor-nya benar. */
+.template-preview-dialog{position:relative;overflow:hidden}
+.template-preview-dialog .fixed-sound-disc.is-contained,
+.template-dialog-actual-preview.live .fixed-sound-disc.is-contained{position:absolute;left:18px;right:auto;bottom:18px;z-index:6}
+.template-preview-dialog .fixed-sound-disc.is-contained.sound-pos-right{left:auto;right:18px}
+.template-preview-dialog .fixed-sound-disc.is-contained.sound-pos-center{left:50%;right:auto;transform:translateX(-50%)}
+.template-preview-dialog .fixed-sound-disc.is-contained.sound-pos-stretch{left:18px;right:auto;transform:none}
+
+/* Toggle Desktop / Mobile pada header dialog preview */
+.template-preview-dialog header{align-items:flex-start}
+
+/* Catatan background terkunci saat Background global aktif */
+.background-locked-note{display:flex;gap:8px;align-items:flex-start;line-height:1.55}
+.background-locked-note svg{flex:0 0 auto;margin-top:2px;color:#2a866a}
+
+/* Keterangan ukuran upload gambar template (QA TC-158 revisi) */
+.upload-size-hint{display:flex;align-items:flex-start;gap:7px;margin:0 0 9px;padding:9px 11px;border-radius:9px;background:#f4f7f5;color:#566e66;font-size:8px;line-height:1.6}
+.upload-size-hint svg{flex:0 0 auto;margin-top:2px;color:#2a866a}
+.upload-size-hint strong{color:#17503f}
+
+/* ==================================================================
+   Perbaikan preview template terpotong (landing page & dialog CMS)
+
+   Dua penyebab terpisah:
+
+   1. `.journey-preview-overlay` memakai `place-items:center`, yang berarti
+      `align-items:center`. Pada varian `.actual-template-preview` grid-nya
+      `grid-template-rows: auto 1fr`, tetapi karena item tidak di-stretch,
+      shell preview mengambil tinggi sesuai isinya lalu dipusatkan — bukan
+      mengisi baris 1fr. Isi yang lebih tinggi dari baris itu meluber ke atas
+      dan ke bawah, lalu terpotong oleh overlay yang `position:fixed; inset:0`.
+      Itu sebabnya potongan muncul di atas DAN di bawah sekaligus.
+
+   2. Seluruh aturan mode mobile hanya menyasar `.canvas-frame.mobile` dan
+      `.preview-full-stage.mobile`. Shell preview landing
+      (`.actual-template-preview-shell.device-mobile`) dan dialog CMS
+      (`.template-dialog-actual-preview.live.device-mobile`) tidak pernah ikut,
+      sehingga di mode Mobile section tetap memakai ukuran desktop —
+      termasuk `height:100vh` — di dalam bingkai selebar 420px.
+   ================================================================== */
+
+/* --- 1. Shell mengisi penuh baris grid, lalu men-scroll isinya sendiri --- */
+.journey-preview-overlay.actual-template-preview{
+  align-items:stretch;
+  justify-items:stretch;
+  align-content:stretch;
+}
+.journey-preview-overlay.actual-template-preview>.actual-template-preview-shell{
+  height:100%;
+  min-height:0;
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.journey-preview-overlay.actual-template-preview>.actual-template-preview-shell.device-mobile{
+  justify-self:center;
+  height:100%;
+}
+/* Toolbar dibuat solid supaya isi yang ter-scroll tidak membayang di baliknya. */
+.journey-preview-toolbar{background:#0a1a15}
+
+/* --- 2. Section setinggi viewport dibatasi ke tinggi shell, bukan layar --- */
+.actual-template-preview-shell .canvas-section.layout-split-fixed-left,
+.actual-template-preview-shell .canvas-section.layout-split-fixed-right,
+.template-dialog-actual-preview.live .canvas-section.layout-split-fixed-left,
+.template-dialog-actual-preview.live .canvas-section.layout-split-fixed-right{
+  height:auto;
+  min-height:100%!important;
+  overflow:visible;
+}
+.actual-template-preview-shell .canvas-section.layout-split-fixed-left .canvas-column,
+.actual-template-preview-shell .canvas-section.layout-split-fixed-right .canvas-column,
+.template-dialog-actual-preview.live .canvas-section.layout-split-fixed-left .canvas-column,
+.template-dialog-actual-preview.live .canvas-section.layout-split-fixed-right .canvas-column{
+  height:auto;
+  min-height:0;
+  overflow:visible;
+}
+
+/* --- 3. Mode Mobile pada kedua shell mewarisi aturan mobile yang sudah ada --- */
+.actual-template-preview-shell.device-mobile .canvas-columns,
+.template-dialog-actual-preview.live.device-mobile .canvas-columns{
+  grid-template-columns:1fr!important;
+}
+.actual-template-preview-shell.device-mobile .wedding-site>nav>div:last-child,
+.template-dialog-actual-preview.live.device-mobile .wedding-site>nav>div:last-child{
+  display:none;
+}
+.actual-template-preview-shell.device-mobile .greetings-widget,
+.actual-template-preview-shell.device-mobile .rsvp-layout,
+.template-dialog-actual-preview.live.device-mobile .greetings-widget,
+.template-dialog-actual-preview.live.device-mobile .rsvp-layout{
+  grid-template-columns:1fr;
+}
+.actual-template-preview-shell.device-mobile .gallery-grid,
+.template-dialog-actual-preview.live.device-mobile .gallery-grid{
+  grid-template-columns:1fr 1fr;
+}
+.actual-template-preview-shell.device-mobile .gallery-grid img,
+.template-dialog-actual-preview.live.device-mobile .gallery-grid img{
+  height:130px;
+}
+.actual-template-preview-shell.device-mobile .canvas-section.layout-split-fixed-left,
+.actual-template-preview-shell.device-mobile .canvas-section.layout-split-fixed-right,
+.template-dialog-actual-preview.live.device-mobile .canvas-section.layout-split-fixed-left,
+.template-dialog-actual-preview.live.device-mobile .canvas-section.layout-split-fixed-right{
+  height:auto;
+  min-height:0!important;
+  overflow:visible;
+}
+.actual-template-preview-shell.device-mobile .canvas-section.layout-split-fixed-left .canvas-columns,
+.actual-template-preview-shell.device-mobile .canvas-section.layout-split-fixed-right .canvas-columns,
+.template-dialog-actual-preview.live.device-mobile .canvas-section.layout-split-fixed-left .canvas-columns,
+.template-dialog-actual-preview.live.device-mobile .canvas-section.layout-split-fixed-right .canvas-columns{
+  display:block;
+  height:auto;
+}
+.actual-template-preview-shell.device-mobile .canvas-section.layout-split-fixed-left .canvas-column,
+.actual-template-preview-shell.device-mobile .canvas-section.layout-split-fixed-right .canvas-column,
+.template-dialog-actual-preview.live.device-mobile .canvas-section.layout-split-fixed-left .canvas-column,
+.template-dialog-actual-preview.live.device-mobile .canvas-section.layout-split-fixed-right .canvas-column{
+  position:relative;
+  height:auto;
+  min-height:0;
+  overflow:visible;
+  padding:55px 8%;
+}
+
+/* --- 4. Tidak ada section yang boleh diukur terhadap viewport di dalam preview --- */
+.actual-template-preview-shell .canvas-section,
+.template-dialog-actual-preview.live .canvas-section{
+  max-width:100%;
+}
+.actual-template-preview-shell .canvas-section[style*="100vh"],
+.template-dialog-actual-preview.live .canvas-section[style*="100vh"]{
+  min-height:100%!important;
+}
