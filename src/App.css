@@ -1229,7 +1229,6 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 .preview-full-stage,
 .actual-template-preview-shell,
 .template-dialog-actual-preview.live{position:relative}
-.fixed-sound-disc.is-contained{position:absolute;z-index:6}
 
 /* QA TC-165 — pemutar backsound ringkas (feature sound lama) dan tombol
    backsound pada Credit / Watermark */
@@ -1292,28 +1291,35 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 
 /* Tombol backsound di dalam preview.
 
-   Sebelumnya `position:fixed`, jadi ia menempel pada layar dan tetap terlihat
-   walau preview sudah di-scroll jauh. Di dalam preview tombolnya sekarang
-   menjadi bagian dari isi undangan: diposisikan terhadap `.wedding-site`,
-   berada di dalam area putih, dan ikut bergulir bersama konten. */
+   Pada undangan asli tombolnya `position:fixed` di pojok kiri bawah layar dan
+   tetap di tempat saat di-scroll. Perilaku itu dipertahankan di dalam preview,
+   hanya saja acuannya dipindah dari layar ke kotak preview.
+
+   Caranya `position:sticky` pada tombol, menempel ke dasar area scroll preview.
+   `position:fixed` tidak bisa dipakai di sini: begitu ada ancestor ber-transform
+   ia berubah menjadi absolut dan justru ikut bergulir, sementara tanpa transform
+   acuannya adalah layar — bukan kotak preview. Sticky memberi keduanya: acuan
+   kotak preview, dan posisi yang tetap saat di-scroll. */
 .template-preview-dialog{position:relative}
+/* `.wedding-site` memakai `overflow:hidden`; ancestor dengan overflow selain
+   visible mematikan sticky. Di dalam preview kliping sudah ditangani shell. */
 .preview-full-stage .wedding-site,
 .actual-template-preview-shell .wedding-site,
-.template-dialog-actual-preview.live .wedding-site{position:relative}
+.template-dialog-actual-preview.live .wedding-site{overflow:visible}
 .fixed-sound-disc.is-contained{
-  position:absolute;
-  left:22px;
+  position:sticky;
+  left:auto;
   right:auto;
-  top:88px;
-  bottom:auto;
+  top:auto;
+  bottom:22px;
+  width:fit-content;
+  margin:0 0 22px 22px;
   transform:none;
   z-index:6;
 }
-.fixed-sound-disc.is-contained.sound-pos-right{left:auto;right:22px}
-.fixed-sound-disc.is-contained.sound-pos-center{left:50%;right:auto;transform:translateX(-50%)}
-.fixed-sound-disc.is-contained.sound-pos-stretch{left:22px;right:auto;transform:none}
-/* Pada cover yang masih terkunci, tombolnya tetap di bawah seperti undangan asli. */
-.wedding-site.invitation-locked .fixed-sound-disc.is-contained{top:auto;bottom:22px}
+.fixed-sound-disc.is-contained.sound-pos-right{margin-left:auto;margin-right:22px}
+.fixed-sound-disc.is-contained.sound-pos-center{margin-left:auto;margin-right:auto}
+.fixed-sound-disc.is-contained.sound-pos-stretch{margin-left:22px;margin-right:auto}
 
 /* Toggle Desktop / Mobile pada header dialog preview */
 .template-preview-dialog header{align-items:flex-start}

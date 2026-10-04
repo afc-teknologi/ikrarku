@@ -8539,6 +8539,12 @@ function buildCustomerDesignGroups(
   return groups;
 }
 
+/**
+ * Lebar `.preview-content` pada mode Mobile. Harus sama dengan nilai di
+ * `.preview-full-stage.mobile .preview-content{width:390px}` pada App.css.
+ */
+const MOBILE_PREVIEW_WIDTH = 390;
+
 const ThumbnailContext = createContext(false);
 /**
  * QA TC-159 — menandai bahwa canvas sedang dirender di dalam kotak preview
@@ -9401,11 +9407,21 @@ function Editor({
   // persis pada lebar berapa desainnya sedang dilihat.
   const canvasFrameRef = useRef<HTMLDivElement | null>(null);
   const [canvasWidth, setCanvasWidth] = useState(0);
+  // Lebar saat Preview dibuka. Berbeda dari area kerja editor: pada mode
+  // Desktop `.preview-content` memakai width:100% sehingga selebar jendela,
+  // sementara area kerja editor hanya sisa ruang di antara dua panel.
+  const [previewWidth, setPreviewWidth] = useState(0);
   useEffect(() => {
     const node = canvasFrameRef.current;
     if (!node) return;
-    const read = () =>
+    const read = () => {
       setCanvasWidth(Math.round(node.getBoundingClientRect().width));
+      setPreviewWidth(
+        previewMode === "mobile"
+          ? MOBILE_PREVIEW_WIDTH
+          : document.documentElement.clientWidth,
+      );
+    };
     read();
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", read);
@@ -9413,7 +9429,11 @@ function Editor({
     }
     const observer = new ResizeObserver(read);
     observer.observe(node);
-    return () => observer.disconnect();
+    window.addEventListener("resize", read);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", read);
+    };
   }, [previewMode]);
   const [animationNonce, setAnimationNonce] = useState(0);
   const [widgetQuery, setWidgetQuery] = useState("");
@@ -10821,8 +10841,9 @@ function Editor({
               ) : (
                 <div className="template-mode-chip">
                   <Palette size={15} /> Template Design · URL tidak diperlukan ·{" "}
-                  {previewMode === "mobile" ? "Mobile" : "Desktop"} Lebar{" "}
-                  {canvasWidth ? `${canvasWidth} px` : "…"}
+                  {previewMode === "mobile" ? "Mobile" : "Desktop"} · Area kerja{" "}
+                  {canvasWidth ? `${canvasWidth} px` : "…"} · Preview{" "}
+                  {previewWidth ? `${previewWidth} px` : "…"}
                 </div>
               )}
               <span className="canvas-hint">
