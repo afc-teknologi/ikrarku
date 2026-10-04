@@ -10,6 +10,7 @@ import {
   MousePointer2,
   ChevronLeft,
   ChevronRight,
+  Star,
 } from "lucide-react";
 import type { Template, ArticleItem, View } from "../App";
 import "./LandingPage.css";
@@ -224,13 +225,11 @@ const rupiah = (value = 0) =>
     maximumFractionDigits: 0,
   }).format(value);
 const scrollToSection = (id: string) =>
-  document
-    .getElementById(id)
-    ?.scrollIntoView({
-      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "auto"
-        : "smooth",
-    });
+  document.getElementById(id)?.scrollIntoView({
+    behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "auto"
+      : "smooth",
+  });
 export default function LandingPage({
   setView,
   templates,
@@ -251,9 +250,17 @@ export default function LandingPage({
     () => ["Semua", ...new Set(templates.map((t) => t.category))],
     [templates],
   );
-  const visible = templates.filter(
-    (t) => category === "Semua" || t.category === category,
-  );
+  // QA TC-151: desain rekomendasi tampil lebih dulu supaya customer yang
+  // bingung memilih langsung melihatnya.
+  const visible = useMemo(() => {
+    const filtered = templates.filter(
+      (t) => category === "Semua" || t.category === category,
+    );
+    return [
+      ...filtered.filter((t) => t.recommended),
+      ...filtered.filter((t) => !t.recommended),
+    ];
+  }, [templates, category]);
   useEffect(() => {
     if (scrollTarget) {
       scrollToSection(scrollTarget);
@@ -509,6 +516,11 @@ export default function LandingPage({
                   <span className="ikr-preview-action">
                     Lihat desain <ArrowRight size={16} />
                   </span>
+                  {t.recommended && (
+                    <span className="ikr-template-badge">
+                      <Star size={12} /> Recommended
+                    </span>
+                  )}
                 </button>
                 <div className="ikr-template-info">
                   <div>

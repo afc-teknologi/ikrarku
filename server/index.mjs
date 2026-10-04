@@ -185,6 +185,8 @@ function initDb() {
       sender_type TEXT NOT NULL,
       sender_user_id TEXT REFERENCES users(id),
       body TEXT NOT NULL,
+      -- 'public' terkirim ke customer, 'internal' hanya untuk staff.
+      visibility TEXT NOT NULL DEFAULT 'public',
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sites (
@@ -311,6 +313,10 @@ function initDb() {
   ensureColumn("users", "settings_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn("templates", "canvas_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn("conversations", "public_token", "TEXT");
+  // Catatan internal antara Web Designer dan CS pada satu tiket customer.
+  // 'public'   = balasan yang dikirim ke customer (perilaku lama, jadi default)
+  // 'internal' = hanya terlihat oleh staff, tidak pernah dikirim ke customer
+  ensureColumn("messages", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   ensureColumn("orders", "user_id", "TEXT");
   ensureColumn("orders", "gateway_ref", "TEXT");
   // QA TC-101 idle session, TC-105 reset password, TC-075/076 takedown, TC-106 sample image
@@ -320,6 +326,9 @@ function initDb() {
   ensureColumn("templates", "sample_image_url", "TEXT");
   ensureColumn("templates", "header_image_url", "TEXT");
   ensureColumn("templates", "unpublished_at", "TEXT");
+  // QA TC-151: penanda "Recommended" pada katalog desain. Dikurasi Administrator,
+  // bukan bagian dari konten template, jadi tidak ikut alur approval.
+  ensureColumn("templates", "recommended", "INTEGER NOT NULL DEFAULT 0");
   // Share fee per Template Creator; NULL = ikut rate default platform.
   ensureColumn("users", "commission_rate", "REAL");
   // Web Designer perlu canvas.manage.own agar bisa menyimpan websitenya sendiri.
@@ -1034,9 +1043,10 @@ app.get(
       .prepare("SELECT * FROM conversations WHERE public_token=?")
       .get(token);
     if (!conversation) return res.json({ conversation: null, messages: [] });
+    // Catatan internal staff tidak pernah ikut terkirim ke widget customer.
     const messages = db
       .prepare(
-        "SELECT id,sender_type,body,created_at FROM messages WHERE conversation_id=? ORDER BY created_at ASC",
+        "SELECT id,sender_type,body,created_at FROM messages WHERE conversation_id=? AND visibility='public' ORDER BY created_at ASC",
       )
       .all(conversation.id);
     res.json({
@@ -1154,7 +1164,15 @@ app.post("/api/auth/signup", rateLimit("signup", 8, 60_000), (req, res) => {
   queueEmail(
     email,
     "Konfirmasi akun ikrarku",
-    `<h2>Konfirmasi email Anda</h2><p>Halo ${firstName}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`,
+    brandedEmail({
+      preheader: "Satu langkah lagi untuk mengaktifkan akun ikrarku Anda.",
+      heading: "Satu langkah lagi, " + escapeHtml(firstName) + ".",
+      intro:
+        "Terima kasih sudah bergabung dengan ikrarku. Konfirmasi alamat email Anda untuk mengaktifkan akun dan mulai menyiapkan undangan digital.",
+      ctaLabel: "Verifikasi Email",
+      ctaUrl: verifyUrl,
+      footnote: "Tautan verifikasi ini berlaku selama 24 jam.",
+    }),
   );
   const mailerReady = Boolean(process.env.SMTP_HOST);
   res.status(201).json({
@@ -1196,7 +1214,16 @@ app.post("/api/auth/verify-email", (req, res) => {
   queueEmail(
     row.email,
     "Akun ikrarku aktif",
-    `<h2>Akun berhasil diverifikasi</h2><p>Halo ${row.first_name}, akun Anda sudah aktif dan dapat digunakan untuk login.</p>`,
+    brandedEmail({
+      preheader: "Akun ikrarku Anda sudah aktif.",
+      heading: "Akun Anda sudah aktif",
+      intro:
+        "Halo " +
+        escapeHtml(row.first_name) +
+        ", verifikasi berhasil. Akun ikrarku Anda siap digunakan untuk masuk dan mulai menyiapkan undangan.",
+      ctaLabel: "Masuk ke ikrarku",
+      ctaUrl: CLIENT_ORIGIN.replace(/\/$/, "") + "/login",
+    }),
   );
   res.json({ ok: true });
 });
@@ -1222,7 +1249,17 @@ app.post(
     queueEmail(
       row.email,
       "Konfirmasi akun ikrarku",
-      `<h2>Konfirmasi email Anda</h2><p>Halo ${escapeHtml(row.first_name)}, klik tautan berikut untuk mengaktifkan akun ikrarku Anda:</p><p><a href="${verifyUrl}">Verifikasi Email</a></p><p>Tautan berlaku selama 24 jam.</p>`,
+      brandedEmail({
+        preheader: "Tautan verifikasi baru untuk akun ikrarku Anda.",
+        heading: "Tautan verifikasi baru",
+        intro:
+          "Halo " +
+          escapeHtml(row.first_name) +
+          ", berikut tautan baru untuk mengaktifkan akun ikrarku Anda.",
+        ctaLabel: "Verifikasi Email",
+        ctaUrl: verifyUrl,
+        footnote: "Tautan verifikasi ini berlaku selama 24 jam.",
+      }),
     );
     res.json({
       ok: true,
@@ -1436,6 +1473,7 @@ function mapTemplate(row) {
     accent: row.accent,
     bg: row.background,
     premium: Boolean(row.premium),
+    recommended: Boolean(row.recommended),
     preset: row.preset,
     createdBy: row.created_by,
     approvedBy: row.approved_by,
@@ -1468,6 +1506,69 @@ function mapPayment(row) {
     config: parseJson(row.config_json, {}),
   };
 }
+/**
+ * QA TC-183 — kerangka email ber-branding ikrarku.
+ *
+ * Email transaksional sebelumnya hanya <h2> + <p> polos. Layout ini memakai
+ * tabel dan inline style (satu-satunya cara yang konsisten di Gmail, Outlook,
+ * dan Apple Mail), tetap terbaca kalau gambar diblokir, dan punya versi teks
+ * yang masuk akal ketika HTML tidak dirender.
+ */
+function brandedEmail({
+  preheader = "",
+  heading,
+  intro,
+  bodyHtml = "",
+  ctaLabel = "",
+  ctaUrl = "",
+  footnote = "",
+}) {
+  const green = "#123f33";
+  const gold = "#d5ae69";
+  const cta =
+    ctaLabel && ctaUrl
+      ? `<tr><td style="padding:4px 0 8px;">
+           <a href="${ctaUrl}" style="display:inline-block;background:${green};color:#ffffff;text-decoration:none;font-weight:700;font-size:15px;padding:14px 28px;border-radius:10px;">${escapeHtml(ctaLabel)}</a>
+         </td></tr>
+         <tr><td style="padding:0 0 6px;font-size:12px;line-height:1.6;color:#7b8c85;">
+           Tombol tidak berfungsi? Salin tautan ini ke browser Anda:<br />
+           <span style="color:${green};word-break:break-all;">${ctaUrl}</span>
+         </td></tr>`
+      : "";
+  return `<!doctype html>
+<html lang="id"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>${escapeHtml(heading)}</title></head>
+<body style="margin:0;padding:0;background:#f4f6f4;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">${escapeHtml(preheader)}</div>
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f4;padding:28px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:18px;overflow:hidden;box-shadow:0 10px 30px rgba(12,40,32,.08);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;">
+        <tr><td style="background:${green};padding:26px 32px;">
+          <span style="color:#ffffff;font-size:20px;font-weight:700;letter-spacing:.5px;">ikrarku</span>
+          <span style="display:block;color:${gold};font-size:11px;letter-spacing:2.5px;margin-top:4px;">UNDANGAN DIGITAL</span>
+        </td></tr>
+        <tr><td style="padding:32px 32px 8px;">
+          <h1 style="margin:0 0 14px;font-size:22px;line-height:1.35;color:#163a30;font-weight:700;">${escapeHtml(heading)}</h1>
+          <p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#4d6159;">${intro}</p>
+        </td></tr>
+        ${bodyHtml ? `<tr><td style="padding:0 32px;">${bodyHtml}</td></tr>` : ""}
+        <tr><td style="padding:0 32px 10px;"><table role="presentation" cellpadding="0" cellspacing="0">${cta}</table></td></tr>
+        ${
+          footnote
+            ? `<tr><td style="padding:6px 32px 26px;font-size:13px;line-height:1.65;color:#7b8c85;">${footnote}</td></tr>`
+            : `<tr><td style="padding:6px 32px 26px;"></td></tr>`
+        }
+        <tr><td style="background:#f7f9f7;padding:20px 32px;border-top:1px solid #e4eae6;">
+          <p style="margin:0;font-size:12px;line-height:1.65;color:#8b9a94;">
+            Email ini dikirim otomatis oleh ikrarku Sites. Jika Anda merasa tidak
+            melakukan permintaan ini, abaikan saja email ini.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+}
+
 function queueEmail(toEmail, subject, html, attachmentPath = null) {
   const outboxId = id("mail");
   db.prepare(
@@ -1862,6 +1963,36 @@ app.post("/api/templates/:id/takedown", auth, (req, res) => {
     mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
   );
 });
+/**
+ * QA TC-151 — menandai template sebagai rekomendasi pada katalog publik.
+ *
+ * Sengaja berupa endpoint tersendiri, bukan lewat PATCH /api/templates/:id:
+ * kurasi rekomendasi bukan perubahan konten, jadi tidak boleh memicu alur
+ * approval ulang untuk template yang sudah Published.
+ */
+app.post("/api/templates/:id/recommend", auth, permit("*"), (req, res) => {
+  const row = db
+    .prepare("SELECT * FROM templates WHERE id=?")
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
+  const recommended = req.body.recommended ? 1 : 0;
+  if (recommended && !["Published", "Approved"].includes(row.status))
+    return res.status(400).json({
+      error:
+        "Hanya template yang sudah publish yang dapat ditandai sebagai rekomendasi.",
+    });
+  db.prepare("UPDATE templates SET recommended=? WHERE id=?").run(
+    recommended,
+    row.id,
+  );
+  auditLog(req.user.id, "template.recommend", "template", row.id, {
+    recommended: Boolean(recommended),
+  });
+  res.json(
+    mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
+  );
+});
+
 app.post("/api/templates/:id/republish", auth, (req, res) => {
   const row = db
     .prepare("SELECT * FROM templates WHERE id=?")
@@ -2088,6 +2219,24 @@ app.patch("/api/articles/:id", auth, permit("articles.manage"), (req, res) => {
   });
   res.json(mapArticle(updated));
 });
+
+// QA TC-174 — hapus artikel secara permanen dari Articles CMS.
+app.delete(
+  "/api/articles/:id",
+  auth,
+  permit("articles.manage"),
+  (req, res) => {
+    const row = db
+      .prepare("SELECT * FROM articles WHERE id=?")
+      .get(req.params.id);
+    if (!row) return res.status(404).json({ error: "Article tidak ditemukan" });
+    db.prepare("DELETE FROM articles WHERE id=?").run(row.id);
+    auditLog(req.user.id, "article.delete", "article", row.id, {
+      title: row.title,
+    });
+    res.json({ ok: true });
+  },
+);
 
 app.get("/api/audit-logs", auth, (req, res) => {
   if (!req.user.permissions.includes("*"))
@@ -2712,9 +2861,11 @@ app.get("/api/me/conversation", auth, (req, res) => {
     )
     .get(req.user.email);
   if (!conversation) return res.json({ conversation: null, messages: [] });
+  // Endpoint ini dibaca oleh customer sendiri, jadi catatan internal staff
+  // harus disaring di sini juga.
   const messages = db
     .prepare(
-      `SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at`,
+      `SELECT * FROM messages WHERE conversation_id=? AND visibility='public' ORDER BY created_at`,
     )
     .all(conversation.id);
   res.json({ conversation, messages });
@@ -3908,19 +4059,103 @@ app.get("/api/orders/:id", auth, (req, res) => {
   res.json({ ...row, guest_token: undefined, receiptUrl: receiptUrl(row) });
 });
 
+// Kalimat progres yang dikirim ke customer untuk tiap status task. Ditulis
+// sebagai pesan siap baca, bukan nama status mentah.
+const TASK_STATUS_NOTICE = {
+  "In Progress": (title) =>
+    `Pengerjaan "${title}" sudah dimulai oleh Web Designer kami. Kami kabari lagi begitu ada perkembangan.`,
+  "Waiting Customer": (title) =>
+    `Pengerjaan "${title}" menunggu konfirmasi atau materi dari Anda. Balas pesan ini kalau ada yang perlu kami bantu.`,
+  Pending: (title) =>
+    `Pengerjaan "${title}" menunggu konfirmasi atau materi dari Anda. Balas pesan ini kalau ada yang perlu kami bantu.`,
+  Done: (title) =>
+    `"${title}" sudah selesai dikerjakan. Silakan cek hasilnya pada dashboard Anda, dan beri tahu kami bila masih ada revisi.`,
+  Cancelled: (title) =>
+    `Pengerjaan "${title}" dibatalkan. Hubungi kami bila ini tidak sesuai harapan Anda.`,
+};
+
+/**
+ * Mengirim notifikasi perubahan status task ke customer.
+ *
+ * Sebelumnya PATCH /api/tasks/:id hanya meng-update baris tasks, sehingga
+ * customer tidak pernah tahu progres pekerjaannya. Sekarang setiap perubahan
+ * status menulis pesan ke conversation customer (muncul di live chat), dan
+ * status "Done" juga mengantre email penyelesaian.
+ *
+ * Dibuat tidak pernah melempar: notifikasi yang gagal tidak boleh membatalkan
+ * update status yang sudah tersimpan.
+ */
+function notifyTaskStatusChange(task, nextStatus, actorUserId) {
+  try {
+    const build = TASK_STATUS_NOTICE[nextStatus];
+    if (!build || !task) return;
+    const order = task.order_id
+      ? db.prepare("SELECT * FROM orders WHERE id=?").get(task.order_id)
+      : null;
+    const customerEmail = order?.email || "";
+    if (!customerEmail) return;
+    const body = build(task.title || "pesanan Anda");
+    const conversation = createOrFindConversation({
+      customerName: order?.customer_name || "Customer",
+      customerEmail,
+      customerPhone: order?.phone || "",
+      orderId: task.order_id,
+      channel: "Web",
+      trusted: true,
+    });
+    if (conversation) {
+      db.prepare(
+        `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`,
+      ).run(id("msg"), conversation.id, "support", actorUserId || null, body, now());
+      db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+        now(),
+        conversation.id,
+      );
+    }
+    if (nextStatus === "Done") {
+      const orderLabel = order?.order_no ? ` (${order.order_no})` : "";
+      queueEmail(
+        customerEmail,
+        `Pekerjaan selesai${orderLabel} — ikrarku Sites`,
+        brandedEmail({
+          preheader: "Pekerjaan undangan Anda sudah selesai.",
+          heading: "Undangan Anda sudah selesai",
+          intro:
+            "Halo " +
+            escapeHtml(order?.customer_name || "Customer") +
+            ", " +
+            escapeHtml(body),
+          ctaLabel: "Buka dashboard",
+          ctaUrl: CLIENT_ORIGIN.replace(/\/$/, "") + "/login",
+          footnote:
+            "Terima kasih sudah mempercayakan undangan Anda kepada ikrarku Sites.",
+        }),
+      );
+    }
+  } catch (error) {
+    console.error("[task-notify] gagal mengirim notifikasi status:", error);
+  }
+}
+
 app.get("/api/tasks", auth, permit("tasks.view"), (req, res) => {
+  // QA TC-167: order yang masih checkout/belum bayar tidak boleh memenuhi
+  // Tasks & Tickets. Task operasional memang baru dibuat setelah pembayaran
+  // dikonfirmasi, tapi filter ini menjamin tiket dari order yang belum bayar
+  // tidak pernah tampil — termasuk bila ada alur lain yang membuatnya lebih awal.
+  // Task tanpa order (mis. Approval template) tidak terpengaruh.
+  const paidOnly = `(t.order_id IS NULL OR o.payment_status='Paid')`;
   const selectSql = `SELECT t.*,o.order_no,o.customer_name,o.email,o.phone,o.user_id customer_user_id,au.first_name||' '||au.last_name assigned_user_name,tp.name template_name,tp.status template_status,u.first_name||' '||u.last_name requestor_name,u.email requestor_email FROM tasks t LEFT JOIN orders o ON o.id=t.order_id LEFT JOIN templates tp ON tp.id=t.template_id LEFT JOIN users u ON u.id=t.requestor_id LEFT JOIN users au ON au.id=t.assigned_user_id`;
   const rows = req.user.permissions.includes("*")
-    ? db.prepare(`${selectSql} ORDER BY t.created_at DESC`).all()
+    ? db.prepare(`${selectSql} WHERE ${paidOnly} ORDER BY t.created_at DESC`).all()
     : req.user.permissions.includes("templates.approve")
       ? db
           .prepare(
-            `${selectSql} WHERE t.task_type='Approval' OR t.assigned_user_id=? OR t.assigned_role_id=? ORDER BY t.created_at DESC`,
+            `${selectSql} WHERE ${paidOnly} AND (t.task_type='Approval' OR t.assigned_user_id=? OR t.assigned_role_id=?) ORDER BY t.created_at DESC`,
           )
           .all(req.user.id, req.user.roleId)
       : db
           .prepare(
-            `${selectSql} WHERE t.assigned_user_id=? OR (t.assigned_user_id IS NULL AND t.assigned_role_id=?) ORDER BY t.created_at DESC`,
+            `${selectSql} WHERE ${paidOnly} AND (t.assigned_user_id=? OR (t.assigned_user_id IS NULL AND t.assigned_role_id=?)) ORDER BY t.created_at DESC`,
           )
           .all(req.user.id, req.user.roleId);
   res.json(rows);
@@ -3938,15 +4173,23 @@ app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
     )
   )
     return res.status(400).json({ error: "Status task tidak valid" });
+  const before = db
+    .prepare("SELECT * FROM tasks WHERE id=?")
+    .get(req.params.id);
+  const nextStatus = req.body.status || "Open";
   db.prepare(
     "UPDATE tasks SET status=?,priority=?,assigned_user_id=COALESCE(?,assigned_user_id),updated_at=? WHERE id=?",
   ).run(
-    req.body.status || "Open",
+    nextStatus,
     req.body.priority || "Normal",
     req.body.assignedUserId || null,
     now(),
     req.params.id,
   );
+  // Hanya kirim saat status benar-benar berubah, supaya menyimpan ulang
+  // prioritas tidak membanjiri live chat customer dengan pesan yang sama.
+  if (before && before.status !== nextStatus)
+    notifyTaskStatusChange(before, nextStatus, req.user.id);
   res.json({ ok: true });
 });
 
@@ -3991,9 +4234,11 @@ app.get(
       const latestCustomer = [...messages]
         .reverse()
         .find((m) => m.sender_type === "customer");
+      // Catatan internal bukan balasan ke customer, jadi tidak boleh
+      // menghentikan hitungan SLA "perlu dibalas".
       const latestSupport = [...messages]
         .reverse()
-        .find((m) => m.sender_type === "support");
+        .find((m) => m.sender_type === "support" && m.visibility !== "internal");
       const needsReply = Boolean(
         latestCustomer &&
           (!latestSupport ||
@@ -4059,15 +4304,19 @@ app.post(
       .get(req.params.id);
     if (!conversation)
       return res.status(404).json({ error: "Conversation tidak ditemukan" });
+    // Catatan internal antara Web Designer dan CS pada satu tiket. Tidak pernah
+    // dikirim ke customer dan tidak memicu email balasan.
+    const internal = req.body.visibility === "internal";
     const messageId = id("msg");
     db.prepare(
-      `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`,
+      `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,visibility,created_at) VALUES(?,?,?,?,?,?,?)`,
     ).run(
       messageId,
       req.params.id,
       "support",
       req.user.id,
       req.body.body,
+      internal ? "internal" : "public",
       now(),
     );
     db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
@@ -4076,18 +4325,18 @@ app.post(
     );
     auditLog(
       req.user.id,
-      "conversation.reply",
+      internal ? "conversation.note" : "conversation.reply",
       "conversation",
       req.params.id,
-      {},
+      internal ? { visibility: "internal" } : {},
     );
-    if (conversation.customer_email)
+    if (!internal && conversation.customer_email)
       queueEmail(
         conversation.customer_email,
         "Balasan baru dari ikrarku",
         `<p>${escapeHtml(req.body.body)}</p>`,
       );
-    res.status(201).json({ id: messageId });
+    res.status(201).json({ id: messageId, visibility: internal ? "internal" : "public" });
   },
 );
 app.patch(

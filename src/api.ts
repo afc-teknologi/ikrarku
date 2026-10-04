@@ -29,12 +29,62 @@ export function assetUrl(value?: string | null) {
     : `${ASSET_BASE}${value}`;
 }
 
+// Batas waktu satu request. Tanpa ini sebuah request yang menggantung
+// (koneksi putus, server tidak membalas) membuat promise-nya tidak pernah
+// selesai; rantai autosave pada Editor ikut macet dan editor terlihat freeze.
+export const REQUEST_TIMEOUT_MS = 20_000;
+const UPLOAD_TIMEOUT_MS = 120_000;
+
+export class RequestTimeoutError extends Error {
+  constructor(path: string) {
+    super(
+      `Koneksi ke server timeout saat memproses ${path}. Perubahan terakhir disimpan sementara di perangkat ini.`,
+    );
+    this.name = "RequestTimeoutError";
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
-  if (!(options.body instanceof FormData))
-    headers.set("Content-Type", "application/json");
+  const isUpload = options.body instanceof FormData;
+  if (!isUpload) headers.set("Content-Type", "application/json");
   if (token()) headers.set("Authorization", `Bearer ${token()}`);
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  // AbortController dipakai manual (bukan AbortSignal.timeout) supaya signal
+  // dari pemanggil tetap bisa dihormati dan timer selalu dibersihkan.
+  const controller = new AbortController();
+  const external = options.signal;
+  if (external) {
+    if (external.aborted) controller.abort(external.reason);
+    else
+      external.addEventListener(
+        "abort",
+        () => controller.abort(external.reason),
+        {
+          once: true,
+        },
+      );
+  }
+  const timer = window.setTimeout(
+    () => controller.abort(new RequestTimeoutError(path)),
+    isUpload ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS,
+  );
+  let response: Response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      headers,
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (
+      controller.signal.aborted &&
+      controller.signal.reason instanceof RequestTimeoutError
+    )
+      throw controller.signal.reason;
+    throw error;
+  } finally {
+    window.clearTimeout(timer);
+  }
   const data = await response.json().catch(() => ({}));
   if (
     response.status === 401 &&
@@ -174,6 +224,12 @@ export const api = {
     }),
   republishTemplate: (id: string) =>
     request<any>(`/templates/${id}/republish`, { method: "POST" }),
+  // QA TC-151 — kurasi badge "Recommended" pada katalog publik.
+  setTemplateRecommended: (id: string, recommended: boolean) =>
+    request<any>(`/templates/${id}/recommend`, {
+      method: "POST",
+      body: JSON.stringify({ recommended }),
+    }),
   articles: () => request<any[]>("/articles"),
   createArticle: (payload: any) =>
     request<any>("/articles", {
@@ -185,6 +241,9 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload),
     }),
+  // QA TC-174 — hapus artikel permanen dari Articles CMS.
+  deleteArticle: (id: string) =>
+    request(`/articles/${id}`, { method: "DELETE" }),
   paymentMethods: () => request<any[]>("/payment-methods"),
   updatePaymentMethod: (id: string, payload: any) =>
     request<any>(`/payment-methods/${id}`, {
@@ -308,10 +367,16 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
-  reply: (id: string, body: string) =>
+  // visibility "internal" = catatan antar staff pada satu tiket; tidak dikirim
+  // ke customer dan tidak memicu email balasan.
+  reply: (
+    id: string,
+    body: string,
+    visibility: "public" | "internal" = "public",
+  ) =>
     request(`/conversations/${id}/messages`, {
       method: "POST",
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body, visibility }),
     }),
   csMetrics: () => request<any>("/cs/metrics"),
   emailOutbox: () => request<any[]>("/email-outbox"),

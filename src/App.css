@@ -99,12 +99,12 @@
 
 /* v0.7 session, CMS, customer service, sound, and gallery refinements */
 .profile-menu-wrap{position:relative}.profile-dropdown{position:absolute;right:0;top:52px;width:245px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:8px;box-shadow:0 18px 55px rgba(16,43,34,.16);z-index:120}.profile-dropdown button{width:100%;border:0;background:none;border-radius:10px;padding:11px;display:flex;align-items:center;gap:10px;text-align:left;color:#29483e}.profile-dropdown button:hover{background:#eef4f1}.profile-dropdown button.danger{color:#a14e48}.profile-dropdown button span{display:flex;flex-direction:column;gap:2px}.profile-dropdown strong{font-size:11px}.profile-dropdown small{font-size:8px;color:#8a9691}.topbar-chat:hover{background:#edf4f1}.account-settings-dialog{width:min(560px,92vw)}
-.website-canvas-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.website-canvas-card{background:#fff;border:1px solid var(--line);border-radius:17px;overflow:hidden;box-shadow:0 8px 24px rgba(33,52,46,.04);transition:.2s}.website-canvas-card:hover{transform:translateY(-3px);box-shadow:0 18px 45px rgba(33,52,46,.09)}.website-canvas-cover{position:relative;background:#eef1ed}.website-canvas-cover .canvas-manager-preview{height:300px;border-radius:0}.canvas-index{position:absolute;right:16px;top:14px;font-family:'Playfair Display',Georgia,serif;font-size:26px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.5)}.website-canvas-meta{padding:17px;display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.website-canvas-meta h3{font-family:'Playfair Display',Georgia,serif;margin:6px 0 3px;font-size:20px}.website-canvas-meta p,.website-canvas-meta small{margin:0;color:#7d8a85;font-size:10px}.website-canvas-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.website-canvas-actions button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;display:flex;align-items:center;gap:5px;font-size:9px;color:#3c554c}.website-canvas-actions button.primary{background:#125946;color:#fff;border-color:#125946}.website-canvas-actions button.danger{color:#a6534d;border-color:#ecd5d2}
+.website-canvas-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:20px;overflow-x:hidden}.website-canvas-card{background:#fff;border:1px solid var(--line);border-radius:17px;overflow:hidden;box-shadow:0 8px 24px rgba(33,52,46,.04);transition:.2s}.website-canvas-card:hover{transform:translateY(-3px);box-shadow:0 18px 45px rgba(33,52,46,.09)}.website-canvas-cover{position:relative;background:#eef1ed}.website-canvas-cover .canvas-manager-preview{height:300px;border-radius:0}.canvas-index{position:absolute;right:16px;top:14px;font-family:'Playfair Display',Georgia,serif;font-size:26px;color:#fff;text-shadow:0 2px 10px rgba(0,0,0,.5)}.website-canvas-meta{padding:17px;display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.website-canvas-meta h3{font-family:'Playfair Display',Georgia,serif;margin:6px 0 3px;font-size:20px}.website-canvas-meta p,.website-canvas-meta small{margin:0;color:#7d8a85;font-size:10px}.website-canvas-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.website-canvas-actions button{border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 10px;display:flex;align-items:center;gap:5px;font-size:9px;color:#3c554c}.website-canvas-actions button.primary{background:#125946;color:#fff;border-color:#125946}.website-canvas-actions button.danger{color:#a6534d;border-color:#ecd5d2}
 .cs-metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:15px;margin-bottom:18px}.cs-metric-grid button{border:1px solid var(--line);background:#fff;border-radius:15px;padding:18px;text-align:left;display:flex;flex-direction:column;align-items:flex-start;color:#21443a;transition:.2s}.cs-metric-grid button:hover{transform:translateY(-2px);border-color:#b8d2c8;box-shadow:0 10px 25px rgba(20,66,52,.08)}.cs-metric-grid button>svg{color:#12604b}.cs-metric-grid button span{font-size:10px;color:#7f8b87;margin-top:13px}.cs-metric-grid button strong{font-size:29px;margin:5px 0}.cs-metric-grid button small{font-size:8px;color:#9aa49f}.support-activity-list{margin-top:15px}.support-activity-list article{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #eef1ee}.support-activity-list article>div:nth-child(2){display:flex;flex-direction:column;flex:1;min-width:0}.support-activity-list strong{font-size:10px}.support-activity-list span{font-size:8px;color:#77857f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.support-activity-list small{font-size:7px;color:#9aa49f}.activity-icon{width:30px;height:30px;border-radius:9px;display:grid;place-items:center}.activity-icon.user{background:#e5f1ec;color:#125946}.activity-icon.support{background:#f4eadb;color:#8d6c30}.conversation-health{display:grid;gap:12px;margin-top:18px}.conversation-health>div{padding:15px;border:1px solid var(--line);border-radius:11px;display:flex;justify-content:space-between;align-items:center}.conversation-health span{font-size:10px;color:#7a8782}.conversation-health strong{font-size:23px;color:#173f33}.conversation-state{padding:4px 7px;border-radius:999px}.conversation-state.open{background:#e4f2eb;color:#187151}.conversation-state.pending{background:#f7efdc;color:#8b6d27}.conversation-state.resolved{background:#ecefee;color:#65736e}.conversation-empty,.cs-empty{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;color:#84918c;gap:7px}.conversation-empty{height:210px}.conversation-empty strong,.cs-empty h3{color:#334d44}.conversation-empty span,.cs-empty p{font-size:9px;max-width:220px}.chat-empty{text-align:center;color:#7f8d88;padding:45px 20px}.chat-empty p{font-size:9px}
 .public-articles{background:#f7f6f2}.public-article-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:1180px;margin:35px auto 0}.public-article-grid article{background:#fff;border:1px solid #e7e9e5;border-radius:17px;overflow:hidden;cursor:pointer;transition:.25s}.public-article-grid article:hover{transform:translateY(-5px);box-shadow:0 18px 45px rgba(28,52,44,.1)}.public-article-cover{height:180px;background:linear-gradient(135deg,#164f40,#d3b070);background-size:cover;background-position:center;padding:16px}.public-article-cover span{background:rgba(255,255,255,.9);padding:6px 9px;border-radius:999px;font-size:8px;color:#173f33}.public-article-grid article>div:last-child{padding:18px}.public-article-grid small{font-size:8px;color:#8b9692}.public-article-grid h3{font-family:'Playfair Display',Georgia,serif;font-size:20px;margin:8px 0}.public-article-grid p{font-size:10px;line-height:1.6;color:#6e7c76}.public-article-grid button,.article-title-button{border:0;background:none;color:#125946;padding:0;display:flex;align-items:center;gap:6px;font-size:9px}.article-title-button{flex-direction:column;align-items:flex-start;text-align:left}.article-title-button span{font-size:8px;color:#84908b;max-width:420px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.article-editor-overlay{align-items:flex-start;padding:25px;overflow:auto}.article-editor-dialog{width:min(1280px,96vw);background:#f5f6f3;border-radius:18px;overflow:hidden;box-shadow:0 30px 90px rgba(8,30,23,.25)}.article-editor-dialog>header{height:70px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 22px}.article-editor-dialog>header span{font-size:8px;letter-spacing:2px;color:#a17d42}.article-editor-dialog>header h2{font-family:'Playfair Display',Georgia,serif;margin:4px 0 0}.article-editor-dialog>header button{border:0;background:none}.article-editor-layout{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;padding:20px}.article-editor-layout>main,.article-editor-layout>aside section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px}.article-editor-layout>aside{display:flex;flex-direction:column;gap:14px}.article-editor-layout label{display:flex;flex-direction:column;gap:6px;font-size:9px;color:#66756f;margin-top:12px}.article-editor-layout input,.article-editor-layout textarea,.article-editor-layout select{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff;font-size:10px}.article-title-input{width:100%;border:0!important;border-bottom:1px solid var(--line)!important;border-radius:0!important;font-family:'Playfair Display',Georgia,serif!important;font-size:34px!important;padding:8px 0 15px!important;outline:none}.article-permalink{display:flex;align-items:center;gap:3px;font-size:9px;color:#71807b;margin:10px 0}.article-permalink input{border:0!important;padding:4px!important;color:#125946;width:300px}.rich-toolbar{display:flex;gap:5px;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px 9px 0 0;padding:7px;background:#f7f8f6}.rich-toolbar button{width:32px;height:32px;border:1px solid transparent;background:#fff;border-radius:6px;display:grid;place-items:center;color:#3d554c}.rich-toolbar button:hover{border-color:#bfd3cb;color:#125946}.article-rich-editor{min-height:430px;border:1px solid var(--line);border-top:0;border-radius:0 0 9px 9px;padding:24px;outline:none;line-height:1.75;background:#fff}.article-rich-editor h1,.article-rich-editor h2{font-family:'Playfair Display',Georgia,serif}.article-rich-editor img{max-width:100%;border-radius:12px}.article-rich-editor blockquote{border-left:4px solid #c9a35e;margin:20px 0;padding:12px 18px;background:#f8f3e9}.publish-actions{display:flex;gap:8px;margin-top:15px}.article-cover-preview{height:150px;background-size:cover;background-position:center;border-radius:10px;margin-top:10px;position:relative}.article-cover-preview button{position:absolute;right:8px;top:8px;width:30px;height:30px;border:0;border-radius:8px;background:rgba(105,37,30,.85);color:#fff}.article-reader-overlay{padding:25px;align-items:flex-start;overflow:auto}.article-reader{width:min(860px,94vw);background:#fff;border-radius:20px;overflow:hidden;position:relative;margin:auto}.reader-close{position:absolute;right:14px;top:14px;z-index:3;width:38px;height:38px;border:0;border-radius:50%;background:rgba(255,255,255,.9)}.reader-cover{height:320px;background:linear-gradient(135deg,#164f40,#d2ad69);background-size:cover;background-position:center;padding:24px}.reader-cover span{background:#fff;padding:7px 11px;border-radius:999px;font-size:9px}.reader-content{padding:40px 55px}.reader-content>small{color:#86918d}.reader-content h1{font-family:'Playfair Display',Georgia,serif;font-size:42px;line-height:1.15;color:#173f33}.reader-excerpt{font-size:15px;color:#687872;line-height:1.7}.reader-content>div{font-size:14px;line-height:1.8;color:#334b43}.reader-content>div img{max-width:100%;border-radius:13px}.reader-content footer{display:flex;gap:7px;margin-top:30px}.reader-content footer span{background:#eef3f0;padding:6px 9px;border-radius:999px;font-size:9px}
 .fixed-sound-disc{position:fixed;left:22px;bottom:22px;z-index:1000;border:1px solid rgba(255,255,255,.3);background:rgba(12,34,28,.82);color:#fff;border-radius:28px;padding:8px 13px 8px 9px;display:flex;align-items:center;gap:8px;box-shadow:0 12px 35px rgba(7,25,19,.3);backdrop-filter:blur(12px)}.fixed-sound-disc>svg{width:38px;height:38px;padding:7px;border-radius:50%;background:radial-gradient(circle,#101010 0 24%,#4a4a4a 25% 35%,#111 36% 100%);border:1px solid #777}.fixed-sound-disc.playing>svg,.spinning{animation:discSpin 2.2s linear infinite}.fixed-sound-disc span{font-size:9px;max-width:120px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}@keyframes discSpin{to{transform:rotate(360deg)}}
 .gallery-media-manager{display:grid;gap:7px;margin-top:10px}.gallery-media-item{display:grid;grid-template-columns:48px 1fr 30px;align-items:center;gap:8px;border:1px solid var(--line);border-radius:9px;padding:6px}.gallery-media-item img{width:48px;height:42px;object-fit:cover;border-radius:6px}.gallery-media-item span{font-size:9px}.gallery-media-item button{border:0;background:#f7e9e7;color:#a34f48;width:28px;height:28px;border-radius:7px;display:grid;place-items:center}.gallery-carousel{position:relative;overflow:hidden;border-radius:inherit;width:100%}.gallery-carousel-track{display:flex;width:100%;transition-property:transform;transition-timing-function:cubic-bezier(.22,.61,.36,1);will-change:transform}.gallery-carousel-slide{min-width:100%;height:460px}.gallery-carousel-slide img{width:100%;height:100%;object-fit:cover;display:block}.gallery-carousel.full-width,.gallery-grid.full-width,.gallery-filmstrip.full-width{width:100vw;left:50%;margin-left:-50vw;position:relative;border-radius:0}.gallery-carousel.full-width .gallery-carousel-slide{height:min(72vh,720px)}.gallery-grid.full-width{grid-template-columns:repeat(4,1fr);gap:0}.gallery-grid.full-width img{border-radius:0;height:30vw}.gallery-filmstrip.full-width{padding-left:4vw;padding-right:4vw}.gallery-carousel>button{z-index:4}
-@media(max-width:1280px){.website-canvas-grid{grid-template-columns:1fr}.public-article-grid{grid-template-columns:repeat(2,1fr)}.cs-metric-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:1280px){.website-canvas-grid{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}.public-article-grid{grid-template-columns:repeat(2,1fr)}.cs-metric-grid{grid-template-columns:repeat(2,1fr)}}
 /* No default imagery for Fixed layouts or Invitation Cover. User-uploaded Canvas/Feature backgrounds remain available. */
 .wedding-site.theme-split .canvas-section.layout-split-fixed-left .canvas-column:first-child,
 .wedding-site.theme-split .canvas-section.layout-split-fixed-left .canvas-column:nth-child(2),
@@ -1099,3 +1099,178 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 .setting-row.compact.background-mode-switch{margin-left:14px;margin-right:14px}
 .editing-context-card{margin-left:14px;margin-right:14px}
 .decoration-editor select:disabled{background:#f2f5f3;color:#9aa8a2;cursor:not-allowed}
+
+/* ------------------------------------------------------------------
+   Perbaikan preview (item 2)
+   Scroll anchoring browser menggeser viewport ke bawah ketika foto dan
+   background di bagian atas undangan selesai dimuat, sehingga preview
+   terlihat langsung terbuka di slide tengah. Anchoring dimatikan pada
+   seluruh container preview; reset scrollTop ditangani di useScrollResetOnOpen.
+   ------------------------------------------------------------------ */
+.preview-full-stage,
+.actual-template-preview-shell,
+.template-dialog-actual-preview.live{overflow-anchor:none}
+.preview-full-stage *,
+.actual-template-preview-shell *,
+.template-dialog-actual-preview.live *{overflow-anchor:none}
+
+/* Toggle Desktop / Mobile pada dialog review template */
+.template-preview-dialog header .preview-header-actions{display:flex;align-items:center;gap:10px}
+.template-preview-dialog header .journey-device-switch button{border-color:rgba(20,70,56,.22);color:#3c5b50}
+.template-preview-dialog header .journey-device-switch button.active{background:#125946;color:#fff;border-color:#125946}
+.template-dialog-actual-preview.live.device-mobile{padding:18px;display:block}
+.template-dialog-actual-preview.live.device-mobile>*{width:390px;max-width:100%;margin:0 auto;box-shadow:0 15px 50px rgba(18,48,39,.2);border-radius:14px;overflow:hidden}
+.template-dialog-actual-preview.live.device-mobile .canvas-columns{grid-template-columns:1fr!important}
+.template-dialog-actual-preview.live.device-mobile .wedding-site>nav>div:last-child{display:none}
+.template-dialog-actual-preview.live.device-mobile .greetings-widget,
+.template-dialog-actual-preview.live.device-mobile .rsvp-layout{grid-template-columns:1fr}
+.template-dialog-actual-preview.live.device-mobile .gallery-grid{grid-template-columns:1fr 1fr}
+.template-dialog-actual-preview.live.device-mobile .gallery-grid img{height:130px}
+
+/* ------------------------------------------------------------------
+   Pemilih layout berbasis ikon (item 10)
+   Menggantikan dropdown nama layout pada feature Image dan Gallery.
+   ------------------------------------------------------------------ */
+.layout-option-picker{display:flex;flex-direction:column;gap:7px;margin:4px 0 2px}
+.layout-option-legend{font-size:8px;letter-spacing:.4px;color:#5c6f68;font-weight:600}
+.layout-option-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:7px}
+.layout-option{display:flex;flex-direction:column;align-items:center;gap:6px;padding:8px 5px 7px;border:1px solid rgba(22,77,62,.16);border-radius:10px;background:#fff;color:#4a635b;cursor:pointer;transition:.16s}
+.layout-option:hover{border-color:rgba(18,89,70,.45);background:#f6faf8}
+.layout-option.active{border-color:#125946;background:#eaf4f0;color:#11513f;box-shadow:0 0 0 1px #125946 inset}
+.layout-option-glyph{display:grid;place-items:center;width:100%}
+.layout-option-glyph svg{display:block}
+.layout-option-label{font-size:7.5px;line-height:1.25;text-align:center;letter-spacing:.2px}
+.layout-option .glyph-block{fill:#c6d8d0}
+.layout-option .glyph-block-overlap{fill:#9dbdb1}
+.layout-option .glyph-line{fill:#c6d8d0}
+.layout-option .glyph-line.on-block{fill:#fff}
+.layout-option .glyph-frame{stroke:#9dbdb1;stroke-width:1.5}
+.layout-option.active .glyph-block{fill:#2a866a}
+.layout-option.active .glyph-block-overlap{fill:#16604b}
+.layout-option.active .glyph-line{fill:#2a866a}
+.layout-option.active .glyph-line.on-block{fill:#fff}
+.layout-option.active .glyph-frame{stroke:#2a866a}
+
+/* ------------------------------------------------------------------
+   Manage Canvas — pemilih order customer (item 3 & 9)
+   ------------------------------------------------------------------ */
+.manage-canvas-picker{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.manage-canvas-picker label{display:flex;flex-direction:column;gap:5px;min-width:260px;flex:1}
+.manage-canvas-legend{font-size:8px;letter-spacing:.4px;color:#5c6f68;font-weight:600}
+.manage-canvas-picker select{height:38px;border:1px solid rgba(22,77,62,.2);border-radius:9px;padding:0 10px;background:#fff;font-size:9px;color:#23453c;max-width:420px}
+.manage-canvas-picker select:disabled{background:#f2f5f3;color:#9aa8a2}
+.manage-canvas-picker .primary-btn{display:inline-flex;align-items:center;gap:7px;height:38px;white-space:nowrap}
+.manage-canvas-picker.compact label{min-width:230px}
+.manage-canvas-picker.empty{display:flex;align-items:center;gap:9px;max-width:460px;padding:11px 13px;border:1px dashed rgba(22,77,62,.28);border-radius:11px;background:rgba(246,250,248,.9);color:#537065;font-size:8.5px;line-height:1.5}
+.manage-canvas-picker.empty svg{flex:0 0 auto;color:#2a866a}
+
+.canvas-order-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:13px;margin-top:18px}
+.canvas-order-card{display:flex;flex-direction:column;gap:6px;padding:16px;border:1px solid rgba(22,77,62,.14);border-radius:14px;background:#fff}
+.canvas-order-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.canvas-order-no{font-size:7.5px;letter-spacing:1px;color:#7b8c85}
+.canvas-order-status{font-style:normal;font-size:7px;letter-spacing:.5px;text-transform:uppercase;padding:3px 7px;border-radius:20px;background:#eef2ef;color:#547066}
+.canvas-order-status.in-progress{background:#e8f1ff;color:#2a5590}
+.canvas-order-status.done{background:#e4f3ec;color:#1b6a4f}
+.canvas-order-status.waiting-customer{background:#fdf2e0;color:#8a6220}
+.canvas-order-card h3{margin:2px 0 0;font-size:13px;color:#163f34}
+.canvas-order-card small{font-size:8px;color:#7d8d87}
+.canvas-order-card p{margin:4px 0 10px;font-size:8.5px;line-height:1.55;color:#5e736b}
+.canvas-order-card .primary-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;margin-top:auto}
+
+.canvas-order-footnote{display:flex;align-items:center;gap:8px;margin-top:20px;font-size:8.5px;color:#6b7d76}
+.canvas-order-footnote svg{flex:0 0 auto;color:#2a866a}
+.link-btn{border:0;background:none;padding:0;color:#125946;font-weight:700;text-decoration:underline;cursor:pointer;font-size:inherit}
+
+/* ------------------------------------------------------------------
+   Dashboard customer: List Undangan & RSVP Confirmation (item 4)
+   ------------------------------------------------------------------ */
+.rsvp-filter-bar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:18px 0 12px}
+.rsvp-filter-bar label{display:flex;flex-direction:column;gap:5px;font-size:8px;color:#5c6f68;font-weight:600}
+.rsvp-filter-bar select{height:36px;border:1px solid rgba(22,77,62,.2);border-radius:9px;padding:0 10px;background:#fff;font-size:9px;color:#23453c;min-width:170px}
+.rsvp-filter-count{margin-left:auto;font-size:8.5px;color:#7b8c85}
+.rsvp-confirmation-list{background:#fff;border:1px solid rgba(22,77,62,.12);border-radius:14px;padding:6px 16px}
+
+/* Card order customer yang canvasnya belum dikerjakan */
+.website-canvas-card.pending-order{opacity:.96}
+.website-canvas-cover.pending{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;min-height:200px;padding:22px;text-align:center;background:repeating-linear-gradient(135deg,#f4f7f5,#f4f7f5 10px,#eef2ef 10px,#eef2ef 20px);color:#527065;position:relative}
+.website-canvas-cover.pending strong{font-size:11px;color:#1b5a47}
+.website-canvas-cover.pending span:not(.canvas-index){font-size:8.5px;line-height:1.5;max-width:200px}
+
+/* ------------------------------------------------------------------
+   Catatan internal CS ↔ Web Designer (item 5)
+   ------------------------------------------------------------------ */
+.reply-mode-switch{display:flex;gap:6px;margin-bottom:8px}
+.reply-mode-switch button{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(22,77,62,.18);background:#fff;color:#557066;border-radius:8px;padding:7px 11px;font-size:8px;cursor:pointer;transition:.15s}
+.reply-mode-switch button:hover{border-color:rgba(18,89,70,.45)}
+.reply-mode-switch button.active{background:#125946;border-color:#125946;color:#fff}
+.reply-mode-switch button.active:nth-child(2){background:#8a6220;border-color:#8a6220}
+.cs-chat form.internal-mode textarea{background:#fffaf0;border-color:rgba(138,98,32,.4)}
+.cs-chat form.internal-mode .primary-btn{background:#8a6220}
+.cs-message.internal-note{background:#fffaf0!important;border:1px dashed rgba(138,98,32,.5);color:#5d4714}
+.cs-message.internal-note p{color:#5d4714}
+.internal-note-badge{display:inline-flex;align-items:center;gap:5px;font-style:normal;font-size:7px;letter-spacing:.4px;text-transform:uppercase;color:#8a6220;margin-bottom:5px}
+
+/* ------------------------------------------------------------------
+   Katalog desain: badge rekomendasi & load more (QA TC-150, TC-151)
+   ------------------------------------------------------------------ */
+.ikr-template-preview{position:relative}
+.ikr-template-badge{position:absolute;top:12px;left:12px;z-index:3;display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:999px;background:rgba(18,89,70,.95);color:#f3e6c8;font-size:11px;letter-spacing:.4px;box-shadow:0 6px 16px rgba(8,30,24,.28)}
+.ikr-template-badge svg{color:#e3c178}
+.catalog-load-more{display:flex;flex-direction:column;align-items:center;gap:12px;margin:34px auto 10px}
+.catalog-load-more span{font-size:12px;color:#6c7d76}
+.catalog-load-more .primary-btn{display:inline-flex;align-items:center;gap:8px}
+.template-status-actions button.recommended-on{background:#125946;border-color:#125946;color:#fff}
+.template-status-actions button.recommended-on svg{color:#e3c178}
+.template-status-actions button:disabled{opacity:.45;cursor:not-allowed}
+
+/* ------------------------------------------------------------------
+   QA TC-159 — tombol backsound tidak lagi mengambang keluar dari preview
+   ------------------------------------------------------------------ */
+.preview-full-stage,
+.actual-template-preview-shell,
+.template-dialog-actual-preview.live{position:relative}
+.fixed-sound-disc.is-contained{position:absolute;z-index:6}
+
+/* QA TC-165 — pemutar backsound ringkas (feature sound lama) dan tombol
+   backsound pada Credit / Watermark */
+.sound-feature.compact{display:flex;justify-content:center;padding:4px 0}
+.sound-feature.compact button{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(22,77,62,.2);background:rgba(255,255,255,.8);color:#1b5a47;border-radius:999px;padding:8px 15px;font-size:9px;cursor:pointer}
+.credit-audio-toggle{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border:1px solid currentColor;border-radius:50%;background:transparent;color:inherit;cursor:pointer;opacity:.85}
+.credit-audio-toggle:hover{opacity:1}
+
+/* QA TC-172 — aksi aktif/nonaktif akun pada list user */
+.row-deactivate,.row-activate{display:inline-grid;place-items:center;width:30px;height:30px;border-radius:8px;border:1px solid rgba(22,77,62,.18);background:#fff;cursor:pointer}
+.row-deactivate{color:#8a6220}
+.row-deactivate:hover{background:#fdf4e6;border-color:rgba(138,98,32,.45)}
+.row-activate{color:#1b6a4f}
+.row-activate:hover{background:#eaf4f0;border-color:rgba(27,106,79,.45)}
+
+/* ------------------------------------------------------------------
+   QA TC-164 — card canvas customer tersusun grid multi-baris.
+   Sebelumnya kartu melebar sehingga daftar hanya bisa digeser ke samping;
+   sekarang kartu membungkus ke baris berikutnya mengikuti lebar layar.
+   ------------------------------------------------------------------ */
+.canvas-manager-section{overflow-x:hidden}
+.canvas-manager-grid{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))!important;overflow-x:hidden}
+@media(max-width:720px){
+  .website-canvas-grid{grid-template-columns:1fr}
+  .canvas-manager-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))!important}
+}
+
+/* QA TC-171 — teks tambahan dengan posisi bebas */
+.extra-text-line.is-free{position:absolute;max-width:88%;z-index:4}
+.extra-text-drag{position:absolute;top:-9px;left:-9px;display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#1b6954;color:#fff;cursor:move;z-index:5;user-select:none}
+
+/* ------------------------------------------------------------------
+   QA TC-176 — tampilan My Order
+   ------------------------------------------------------------------ */
+.my-order-summary{margin-bottom:22px}
+.project-order-date{display:block;margin-top:5px;font-size:8px;color:#8b9a94}
+.project-progress{padding:0 20px 4px}
+.project-progress-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:7px}
+.project-progress-head span{font-size:8px;letter-spacing:.4px;color:#6c7d76}
+.project-progress-head strong{font-size:12px;color:#125946}
+.project-progress-bar{height:7px;border-radius:999px;background:#e9efec;overflow:hidden}
+.project-progress-bar i{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#1b6954,#2a866a);transition:width .35s ease}
+.project-order-card header .status.pending{background:#fdf2e0;color:#8a6220}
+.project-order-card header .status.paid{background:#e4f3ec;color:#1b6a4f}

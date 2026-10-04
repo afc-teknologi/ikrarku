@@ -39,10 +39,37 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
   child.stderr.on("data", (d) => (logs += d));
   child.stdout.on("data", (d) => (logs += d));
   let db;
-  t.after(() => {
+  t.after(async () => {
     db?.close();
-    child.kill();
-    rmSync(dir, { recursive: true, force: true });
+    // Tunggu server benar-benar berhenti sebelum menghapus folder sementara.
+    // child.kill() hanya mengirim sinyal; di Windows handle file SQLite masih
+    // dipegang proses anak saat rmSync dipanggil, sehingga teardown gagal
+    // dengan EPERM dan menandai seluruh suite sebagai failed padahal semua
+    // assertion-nya lolos.
+    if (child.exitCode === null && child.signalCode === null) {
+      await new Promise((resolve) => {
+        const done = () => resolve();
+        child.once("exit", done);
+        child.kill();
+        // Jangan menggantung kalau proses sudah mati lebih dulu.
+        setTimeout(done, 3000).unref?.();
+      });
+    }
+    try {
+      // maxRetries menutup sisa jeda pelepasan handle di Windows.
+      rmSync(dir, {
+        recursive: true,
+        force: true,
+        maxRetries: 10,
+        retryDelay: 100,
+      });
+    } catch (error) {
+      // Folder sementara bukan bagian dari yang diuji; OS akan membersihkan
+      // %TEMP% sendiri. Jangan jatuhkan hasil tes karenanya.
+      console.warn(
+        `[qa-integration] folder sementara tidak dapat dihapus (${error.code}): ${dir}`,
+      );
+    }
   });
   const base = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 100; i++) {
@@ -226,6 +253,103 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       403,
     );
   });
+  // Catatan internal: koordinasi staff pada satu tiket, tidak boleh pernah
+  // sampai ke customer lewat widget chat maupun email.
+  await t.test(
+    "QA-05c internal notes stay inside the staff inbox",
+    async () => {
+      const publicBefore = (
+        await call(
+          "GET",
+          "/public/chat?token=" + conversation.conversationToken,
+        )
+      ).data.messages.length;
+      const mailBefore = Number(
+        db
+          .prepare(
+            "SELECT COUNT(*) n FROM email_outbox WHERE subject='Balasan baru dari ikrarku'",
+          )
+          .get().n,
+      );
+      assert.equal(
+        (
+          await call(
+            "POST",
+            `/conversations/${conversation.conversationId}/messages`,
+            { body: "Minta WD cek revisi cover dulu", visibility: "internal" },
+            cs.token,
+          )
+        ).status,
+        201,
+      );
+      const stored = db
+        .prepare(
+          "SELECT visibility FROM messages WHERE conversation_id=? ORDER BY created_at DESC LIMIT 1",
+        )
+        .get(conversation.conversationId);
+      assert.equal(stored.visibility, "internal");
+
+      // Widget customer tidak melihat catatan itu.
+      const publicAfter = (
+        await call(
+          "GET",
+          "/public/chat?token=" + conversation.conversationToken,
+        )
+      ).data.messages.length;
+      assert.equal(
+        publicAfter,
+        publicBefore,
+        "catatan internal tidak boleh muncul di widget chat customer",
+      );
+
+      // Tidak ada email balasan yang terkirim untuk catatan internal.
+      assert.equal(
+        Number(
+          db
+            .prepare(
+              "SELECT COUNT(*) n FROM email_outbox WHERE subject='Balasan baru dari ikrarku'",
+            )
+            .get().n,
+        ),
+        mailBefore,
+        "catatan internal tidak boleh memicu email ke customer",
+      );
+
+      // Staff tetap melihatnya pada inbox.
+      const inbox = await call("GET", "/conversations", undefined, cs.token);
+      const thread = inbox.data.find(
+        (item) => item.id === conversation.conversationId,
+      );
+      assert.ok(
+        (thread?.messages || []).some(
+          (message) => message.visibility === "internal",
+        ),
+        "staff harus tetap melihat catatan internal",
+      );
+
+      // Balasan publik tetap berperilaku seperti semula.
+      assert.equal(
+        (
+          await call(
+            "POST",
+            `/conversations/${conversation.conversationId}/messages`,
+            { body: "Balasan normal ke customer" },
+            cs.token,
+          )
+        ).status,
+        201,
+      );
+      assert.equal(
+        (
+          await call(
+            "GET",
+            "/public/chat?token=" + conversation.conversationToken,
+          )
+        ).data.messages.length,
+        publicBefore + 1,
+      );
+    },
+  );
   await t.test("QA-04 editor cannot replace another assignment", async () => {
     assert.equal(
       (
@@ -615,6 +739,253 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       200,
     );
   });
+  // Notifikasi progres otomatis: perubahan status task harus sampai ke customer
+  // lewat live chat, dan status Done juga mengantre email penyelesaian.
+  await t.test(
+    "QA-05b task status change notifies the customer and queues a Done email",
+    async () => {
+      const task = db
+        .prepare(
+          "SELECT id,status FROM tasks WHERE order_id=? AND assigned_role_id='role_editor'",
+        )
+        .get(order.id);
+      // Test sebelumnya sudah menyentuh task ini, jadi hitung dari baseline.
+      const countMail = () =>
+        Number(
+          db
+            .prepare(
+              "SELECT COUNT(*) n FROM email_outbox WHERE to_email=? AND subject LIKE 'Pekerjaan selesai%'",
+            )
+            .get("customer@example.test").n,
+        );
+      const countMessages = (like) =>
+        Number(
+          db
+            .prepare(
+              `SELECT COUNT(*) n FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.order_id=? AND m.body LIKE ?`,
+            )
+            .get(order.id, like).n,
+        );
+      const mailBefore = countMail();
+      const progressBefore = countMessages("%sudah dimulai%");
+      const doneBefore = countMessages("%sudah selesai dikerjakan%");
+      // QA-05 sudah menyetel task ini menjadi Done; kembalikan dulu agar
+      // perubahan status berikutnya benar-benar berupa transisi.
+      assert.equal(
+        (
+          await call(
+            "PATCH",
+            `/tasks/${task.id}`,
+            { status: "In Progress" },
+            editor.token,
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        countMessages("%sudah dimulai%") - progressBefore,
+        1,
+        "status In Progress harus menulis satu pesan ke conversation customer",
+      );
+
+      assert.equal(
+        (
+          await call(
+            "PATCH",
+            `/tasks/${task.id}`,
+            { status: "Done" },
+            editor.token,
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        countMail() - mailBefore,
+        1,
+        "status Done harus mengantre email penyelesaian ke customer",
+      );
+      assert.equal(countMessages("%sudah selesai dikerjakan%") - doneBefore, 1);
+
+      // Menyimpan ulang tanpa mengubah status tidak boleh membanjiri live chat
+      // atau mengirim email penyelesaian untuk kedua kalinya.
+      await call(
+        "PATCH",
+        `/tasks/${task.id}`,
+        { status: "Done" },
+        editor.token,
+      );
+      assert.equal(countMessages("%sudah selesai dikerjakan%") - doneBefore, 1);
+      assert.equal(countMail() - mailBefore, 1);
+    },
+  );
+  // QA TC-167 — order yang belum dibayar tidak boleh memenuhi Tasks & Tickets.
+  await t.test(
+    "QA-16 unpaid orders never surface in Tasks & Tickets",
+    async () => {
+      const created = await call("POST", "/orders", {
+        customerName: "Belum Bayar",
+        email: "belum-bayar@example.test",
+        phone: "081234567890",
+        templateId: template.id,
+      });
+      assert.equal(created.status, 201);
+      const unpaidId = created.data.id;
+      // Tanam task untuk order yang belum bayar; endpoint harus tetap menyaringnya.
+      db.prepare(
+        "INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_role_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)",
+      ).run(
+        "task_unpaid_probe",
+        unpaidId,
+        "Onboarding order belum bayar",
+        "Seharusnya tidak tampil",
+        "Open",
+        "High",
+        "role_cs",
+        new Date().toISOString(),
+        new Date().toISOString(),
+      );
+      assert.equal(
+        db.prepare("SELECT payment_status FROM orders WHERE id=?").get(unpaidId)
+          .payment_status,
+        "Pending",
+      );
+      for (const actor of [admin, cs, editor]) {
+        const list = await call("GET", "/tasks", undefined, actor.token);
+        assert.equal(list.status, 200);
+        assert.ok(
+          !list.data.some((task) => task.order_id === unpaidId),
+          "task dari order yang belum bayar tidak boleh tampil di Tasks & Tickets",
+        );
+      }
+      // Task dari order yang sudah dibayar tetap tampil.
+      const paidList = await call("GET", "/tasks", undefined, admin.token);
+      assert.ok(
+        paidList.data.some((task) => task.order_id === order.id),
+        "task dari order yang sudah bayar harus tetap tampil",
+      );
+    },
+  );
+
+  // QA TC-151 — badge rekomendasi hanya untuk template yang sudah publish,
+  // dan hanya Administrator yang boleh mengaturnya.
+  await t.test(
+    "QA-17 recommended badge is admin-only and publish-gated",
+    async () => {
+      assert.equal(
+        (
+          await call(
+            "POST",
+            `/templates/${template.id}/recommend`,
+            { recommended: true },
+            editor.token,
+          )
+        ).status,
+        403,
+      );
+      const ok = await call(
+        "POST",
+        `/templates/${template.id}/recommend`,
+        { recommended: true },
+        admin.token,
+      );
+      assert.equal(ok.status, 200);
+      assert.equal(ok.data.recommended, true);
+      assert.equal(
+        Number(
+          db
+            .prepare("SELECT recommended FROM templates WHERE id=?")
+            .get(template.id).recommended,
+        ),
+        1,
+      );
+      const off = await call(
+        "POST",
+        `/templates/${template.id}/recommend`,
+        { recommended: false },
+        admin.token,
+      );
+      assert.equal(off.data.recommended, false);
+    },
+  );
+
+  // QA TC-173 & TC-174 — takedown dan hapus artikel dari Articles CMS.
+  await t.test("QA-18 article takedown and delete", async () => {
+    const created = await call(
+      "POST",
+      "/articles",
+      {
+        title: "Artikel QA",
+        slug: "artikel-qa-" + Date.now(),
+        category: "Tips",
+        excerpt: "Ringkasan",
+        content: "Isi artikel",
+        status: "Published",
+      },
+      admin.token,
+    );
+    assert.equal(created.status, 201);
+    const articleId = created.data.id;
+    // Takedown = tarik dari publikasi, datanya tetap ada.
+    const down = await call(
+      "PATCH",
+      `/articles/${articleId}`,
+      { status: "Draft" },
+      admin.token,
+    );
+    assert.equal(down.status, 200);
+    assert.equal(down.data.status, "Draft");
+    assert.ok(
+      db.prepare("SELECT id FROM articles WHERE id=?").get(articleId),
+      "takedown tidak boleh menghapus artikel",
+    );
+    // Web Designer tidak boleh menghapus artikel.
+    assert.equal(
+      (await call("DELETE", `/articles/${articleId}`, undefined, editor.token))
+        .status,
+      403,
+    );
+    assert.equal(
+      (await call("DELETE", `/articles/${articleId}`, undefined, admin.token))
+        .status,
+      200,
+    );
+    assert.equal(
+      db.prepare("SELECT id FROM articles WHERE id=?").get(articleId),
+      undefined,
+    );
+  });
+
+  // QA TC-183 — email verifikasi memakai kerangka ber-branding, bukan HTML polos.
+  await t.test("QA-19 verification email uses the branded layout", async () => {
+    const email = `branded-${Date.now()}@example.test`;
+    assert.equal(
+      (
+        await call("POST", "/auth/signup", {
+          firstName: "Branded",
+          lastName: "Tester",
+          email,
+          username: `branded${Date.now()}`,
+          password: "Audit-fixture-123",
+          passwordConfirm: "Audit-fixture-123",
+        })
+      ).status,
+      201,
+    );
+    const mail = db
+      .prepare(
+        "SELECT html FROM email_outbox WHERE to_email=? ORDER BY created_at DESC LIMIT 1",
+      )
+      .get(email);
+    assert.ok(mail, "email verifikasi harus masuk outbox");
+    assert.match(mail.html, /<!doctype html>/i);
+    assert.match(mail.html, /ikrarku/);
+    assert.match(mail.html, /Verifikasi Email/);
+    assert.ok(
+      mail.html.includes("verify-email?token="),
+      "email harus memuat tautan verifikasi",
+    );
+  });
+
   await t.test(
     "QA-11 paid template can now publish; draft is cleared",
     async () => {

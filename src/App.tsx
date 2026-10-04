@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -62,6 +63,10 @@ import {
   Send,
   Settings,
   ShieldCheck,
+  Lock,
+  Star,
+  Ban,
+  Move,
   Smartphone,
   Sparkles,
   Trash2,
@@ -155,7 +160,9 @@ export type View =
   | "sound-library"
   | "commissions"
   | "journal"
-  | "designs";
+  | "designs"
+  | "invitee-management"
+  | "rsvp-confirmation";
 type PageKey = "pages" | "invitees" | "rsvp-page";
 type InspectorTab = "content" | "style" | "advanced";
 type Alignment = "left" | "center" | "right" | "justify";
@@ -232,6 +239,12 @@ type ExtraText = {
   italic?: boolean;
   fontFamily?: string;
   spacing?: number;
+  // QA TC-171 — teks tambahan tidak lagi selalu menempel di bawah section.
+  // `free` membuatnya dapat digeser bebas; posX dalam persen lebar section,
+  // posY dalam piksel dari atas section.
+  free?: boolean;
+  posX?: number;
+  posY?: number;
 };
 type GiftAccount = {
   id: string;
@@ -545,6 +558,8 @@ type AuthAccount = {
   permissions?: string[];
   settings?: Record<string, unknown>;
   emailVerified?: boolean;
+  // QA TC-172: akun bisa dinonaktifkan sementara tanpa dihapus permanen.
+  active?: boolean;
   linkedManagedUserId?: string;
 };
 
@@ -644,6 +659,8 @@ export type Template = {
   accent: string;
   bg: string;
   premium: boolean;
+  // QA TC-151 — ditandai Administrator sebagai pilihan rekomendasi.
+  recommended?: boolean;
   preset?: "classic" | "split" | "cinematic" | "storybook";
   preview?: string;
   createdBy?: string;
@@ -1453,12 +1470,10 @@ const widgetLibrary: {
     description: "Informasi hadiah pernikahan",
     icon: Crown,
   },
-  {
-    type: "sound",
-    label: "Sound",
-    description: "Preset backsound untuk opening atau section",
-    icon: PlayCircle,
-  },
+  // QA TC-165: feature "Sound" di-takedown dari library. Judul lagu dan
+  // pemutarnya kini menjadi bagian dari Credit / Watermark supaya tidak tampil
+  // dua kali ketika keduanya diaktifkan bersamaan. Feature sound yang terlanjur
+  // ada pada template lama tetap berjalan sebagai pemutar latar.
   {
     type: "love-story",
     label: "Love Story",
@@ -1468,7 +1483,7 @@ const widgetLibrary: {
   {
     type: "credit",
     label: "Credit / Watermark",
-    description: "Created by dan judul lagu di halaman penutup",
+    description: "Created by, judul lagu, dan backsound undangan",
     icon: BadgeCheck,
   },
   {
@@ -1770,6 +1785,37 @@ function hydrateSections(raw: CanvasSection[]): CanvasSection[] {
         guestNameText:
           feature.guestNameText ||
           (feature.type === "invitation-cover" ? "Tamu Terhormat" : undefined),
+      })),
+    })),
+  }));
+}
+
+/**
+ * Menyalin canvas sebuah template menjadi section baru dengan id sendiri.
+ *
+ * Setiap salinan ditandai `templateInstanceId`, `sourceTemplateId`, dan
+ * `sourceTemplateName` — tanda inilah yang dipakai buildWebsiteDesignGroups()
+ * untuk mengelompokkan section menjadi satu card Website Design, sehingga satu
+ * order = satu card.
+ */
+function buildSectionsFromTemplate(template: Template): CanvasSection[] {
+  const sourceSections = template.canvasSections?.length
+    ? hydrateSections(template.canvasSections)
+    : buildTemplateSections(template.id);
+  const templateInstanceId = uid("template-instance");
+  return sourceSections.map((section) => ({
+    ...section,
+    id: uid("canvas"),
+    name: section.name,
+    templateInstanceId,
+    sourceTemplateId: template.id,
+    sourceTemplateName: template.name,
+    columns: section.columns.map((column) => ({
+      ...column,
+      id: uid("column"),
+      features: column.features.map((feature) => ({
+        ...feature,
+        id: uid(feature.type),
       })),
     })),
   }));
@@ -2583,6 +2629,7 @@ function App() {
                   permissions: user.permissions || [],
                   settings: user.settings || {},
                   emailVerified: user.emailVerified,
+                  active: user.active !== false,
                 })),
               );
             } catch {
@@ -3065,30 +3112,40 @@ function App() {
     window.setTimeout(() => setToast(""), 2300);
   };
 
+  // ---- Manage Canvas: order customer sebagai sumber canvas (item 3 & 9) ----
+  const canvasOrderOptions = useMemo(
+    () => buildCanvasOrderOptions(taskItems),
+    [taskItems],
+  );
+  const [canvasOrderBusy, setCanvasOrderBusy] = useState(false);
+  // Menu Canvas Editor menampilkan pemilih order selama Web Designer belum
+  // memilih customer dan belum ada canvas yang terbuka.
+  const needsCanvasOrderPick =
+    view === "editor" &&
+    role === "Editor" &&
+    !siteOwnerUserId &&
+    !sections.length;
+  const openCanvasOrder = async (
+    option: CanvasOrderOption,
+    openEditor = true,
+  ) => {
+    if (canvasOrderBusy) return;
+    setCanvasOrderBusy(true);
+    try {
+      await manageUserCanvas(option.customerUserId, {
+        seedTemplateId: option.templateId,
+        openEditor,
+      });
+    } finally {
+      setCanvasOrderBusy(false);
+    }
+  };
+
   const applyTemplate = (template: Template) => {
     setEditorMode("site");
-    const sourceSections = template.canvasSections?.length
-      ? hydrateSections(template.canvasSections)
-      : buildTemplateSections(template.id);
-    const templateInstanceId = uid("template-instance");
-    const generated = sourceSections.map((section) => ({
-      ...section,
-      id: uid("canvas"),
-      name: section.name,
-      templateInstanceId,
-      sourceTemplateId: template.id,
-      sourceTemplateName: template.name,
-      columns: section.columns.map((column) => ({
-        ...column,
-        id: uid("column"),
-        features: column.features.map((feature) => ({
-          ...feature,
-          id: uid(feature.type),
-        })),
-      })),
-    }));
-    const additions = generated;
-    const nextSections = normalizeCoverSections(additions);
+    const nextSections = normalizeCoverSections(
+      buildSectionsFromTemplate(template),
+    );
     const firstNewId = nextSections[0]?.id || "";
     setSelectedTemplate(template);
     // Web Designer memakai Use template untuk merancang template, bukan website
@@ -3105,33 +3162,10 @@ function App() {
     flash(`Template ${template.name} dipakai sebagai design website.`);
   };
 
-  const addBlankCanvasFromTemplates = () => {
-    setEditorMode("site");
-    const section: CanvasSection = {
-      id: uid("canvas"),
-      name: "New Canvas",
-      columns: [{ id: uid("column"), features: [] }],
-      backgroundColor: "#fffdf8",
-      backgroundEffect: "none",
-      backgroundPosition: "center",
-      backgroundRepeat: "no-repeat",
-      backgroundGradientEnabled: false,
-      backgroundGradientFrom: "#fffdf8",
-      backgroundGradientTo: "#d7b66f",
-      backgroundGradientAngle: 135,
-      backgroundMotion: "none",
-      paddingX: 32,
-      paddingY: 60,
-      minHeight: 420,
-      layoutMode: "standard",
-      invitees: [],
-      templateInstanceId: uid("custom-design"),
-      sourceTemplateName: "Custom Design",
-    };
-    setSections((previous) => [...previous, section]);
-    sessionStorage.setItem("ikrarku-edit-canvas", section.id);
-    setView("editor");
-  };
+  // addBlankCanvasFromTemplates() dihapus. Tombol Add Canvas menambahkan satu
+  // section kosong ke state tanpa pernah menyimpannya, sehingga setiap kali
+  // ditekan lalu ditinggalkan, autosave membuat draft baru lagi. Penggantinya
+  // adalah dropdown Manage Canvas yang memuat canvas dari order customer.
 
   const deleteCanvasFromTemplates = (sectionIds: string[]) => {
     setConfirmCanvasDeleteIds(sectionIds);
@@ -3304,6 +3338,7 @@ function App() {
             permissions: user.permissions || [],
             settings: user.settings || {},
             emailVerified: user.emailVerified,
+            active: user.active !== false,
           })),
         );
       } catch {
@@ -3312,7 +3347,11 @@ function App() {
       flash(
         payload.password
           ? "Password user berhasil direset. Sesi lama otomatis dicabut."
-          : "Data user berhasil diperbarui.",
+          : payload.active === false
+            ? "Akun dinonaktifkan. User tidak dapat login sampai diaktifkan lagi."
+            : payload.active === true
+              ? "Akun diaktifkan kembali."
+              : "Data user berhasil diperbarui.",
       );
       return true;
     } catch (error) {
@@ -3399,6 +3438,42 @@ function App() {
   const openArticleEditor = (id = "new") => {
     setArticleEditorId(id);
     setView("article-editor");
+  };
+
+  // QA TC-173 — takedown/publish artikel langsung dari list, tanpa membuka editor.
+  const toggleArticleStatus = async (article: ArticleItem, next: string) => {
+    try {
+      const updated = await api.updateArticle(article.id, { status: next });
+      setArticleItems((previous) =>
+        previous.map((item) =>
+          item.id === article.id ? { ...item, ...updated } : item,
+        ),
+      );
+      flash(
+        next === "Published"
+          ? `Artikel "${article.title}" dipublikasikan.`
+          : `Artikel "${article.title}" ditarik dari publikasi.`,
+      );
+    } catch (error) {
+      flash(
+        error instanceof Error ? error.message : "Gagal mengubah status artikel.",
+      );
+    }
+  };
+
+  // QA TC-174 — hapus artikel permanen dari Articles CMS.
+  const deleteArticle = async (article: ArticleItem) => {
+    try {
+      await api.deleteArticle(article.id);
+      setArticleItems((previous) =>
+        previous.filter((item) => item.id !== article.id),
+      );
+      flash(`Artikel "${article.title}" dihapus.`);
+    } catch (error) {
+      flash(
+        error instanceof Error ? error.message : "Gagal menghapus artikel.",
+      );
+    }
   };
 
   const addSoundToCatalog = async (
@@ -3567,7 +3642,21 @@ function App() {
     setSlug("");
   };
 
-  const manageUserCanvas = async (userId: string) => {
+  /**
+   * Membuka canvas milik seorang customer pada ruang kerja Web Designer.
+   *
+   * @param options.seedTemplateId Template yang dipesan customer. Dipakai hanya
+   *   ketika website customer masih kosong: canvas template itu di-load sebagai
+   *   titik awal supaya Web Designer tidak mulai dari canvas kosong.
+   * @param options.openEditor  false untuk memuat canvas tanpa langsung pindah
+   *   ke Canvas Editor — dipakai oleh dropdown Manage Canvas pada halaman
+   *   Templates, supaya hasilnya muncul dulu sebagai card Website Design.
+   */
+  const manageUserCanvas = async (
+    userId: string,
+    options: { seedTemplateId?: string; openEditor?: boolean } = {},
+  ) => {
+    const { seedTemplateId, openEditor = true } = options;
     // Customer dari task bisa saja belum tercatat pada daftar assignment lokal,
     // jadi jangan berhenti diam-diam — ambil datanya langsung dari server.
     const user = managedUsers.find((item) => item.id === userId);
@@ -3582,7 +3671,26 @@ function App() {
       }
       setActiveManagedUserId(userId);
       setSiteOwnerUserId(userId);
-      setSiteTitle(site?.title || user?.siteTitle || user?.name || "Website customer");
+      // Template yang dipesan customer: dipakai untuk judul dan sebagai sumber
+      // canvas awal bila website-nya belum pernah diisi.
+      const orderedTemplate = seedTemplateId
+        ? templateCatalog.find((item) => item.id === seedTemplateId)
+        : undefined;
+      const existingSections = site?.sections || [];
+      const seedSections =
+        !existingSections.length && orderedTemplate?.canvasSections?.length
+          ? buildSectionsFromTemplate(orderedTemplate)
+          : [];
+      const nextSections = existingSections.length
+        ? existingSections
+        : seedSections;
+      setSiteTitle(
+        site?.title ||
+          user?.siteTitle ||
+          user?.name ||
+          orderedTemplate?.name ||
+          "Website customer",
+      );
       setSlug(
         site?.slug ||
           user?.slug ||
@@ -3591,17 +3699,15 @@ function App() {
             .replace(/[^a-z0-9-]/gi, "-")
             .toLowerCase(),
       );
-      setSections(hydrateSections(site?.sections || []));
-      if (site?.templateId) {
-        const match = templateCatalog.find(
-          (item) => item.id === site.templateId,
-        );
-        if (match) setSelectedTemplate(match);
-      }
+      setSections(hydrateSections(nextSections));
+      const activeTemplate =
+        (site?.templateId &&
+          templateCatalog.find((item) => item.id === site.templateId)) ||
+        orderedTemplate;
+      if (activeTemplate) setSelectedTemplate(activeTemplate);
       // Canvas customer adalah website ber-URL, bukan template.
       setEditorMode("site");
-      // Manage Canvas membuka Canvas Editor, bukan kembali ke daftar template.
-      setView("editor");
+      if (openEditor) setView("editor");
       const clients = await api.clients();
       setManagedUsers(
         clients.map((item: any) => ({
@@ -3617,7 +3723,12 @@ function App() {
           canvasIds: item.canvasIds || [],
         })),
       );
-      flash(`Sekarang mengelola Canvas milik ${user?.name || "customer"}.`);
+      const owner = user?.name || "customer";
+      flash(
+        seedSections.length
+          ? `Canvas ${orderedTemplate?.name || "template"} dimuat sebagai titik awal untuk ${owner}. Tekan Save untuk menyimpannya.`
+          : `Sekarang mengelola Canvas milik ${owner}.`,
+      );
     } catch (error) {
       flash(
         error instanceof Error
@@ -3748,26 +3859,40 @@ function App() {
       );
     }
   };
-  // QA TC-106: kolom upload gambar sample untuk thumbnail landing page & heading detail template.
-  const uploadTemplateSample = async (templateId: string, file: File) => {
+  // QA TC-106: kolom upload gambar untuk template.
+  //
+  // Sebelumnya satu upload menimpa sampleImage + headerImage + preview sekaligus,
+  // jadi thumbnail kartu di /template selalu ikut gambar sample dan tidak bisa
+  // dibedakan. Sekarang keduanya terpisah:
+  //   - "Gambar sample"  -> sampleImage + headerImage (visual besar di halaman detail)
+  //   - "Thumbnail"      -> preview (kartu di landing /template)
+  const uploadTemplateImage = async (
+    templateId: string,
+    file: File,
+    kind: "sample" | "thumbnail",
+  ) => {
+    const label = kind === "thumbnail" ? "Thumbnail" : "Gambar sample";
     if (!file.type.startsWith("image/")) {
-      flash("Gambar sample harus berupa image.");
+      flash(`${label} harus berupa image.`);
       return;
     }
     if (file.size > 2 * 1024 * 1024) {
-      flash("Gambar sample maksimal 2 MB.");
+      flash(`${label} maksimal 2 MB.`);
       return;
     }
     try {
       const payload = new FormData();
       payload.append("file", file);
-      payload.append("category", "template-sample");
+      payload.append(
+        "category",
+        kind === "thumbnail" ? "template-thumbnail" : "template-sample",
+      );
       const saved = await api.uploadMedia(payload);
-      const updated = await api.updateTemplate(templateId, {
-        sampleImage: saved.url,
-        headerImage: saved.url,
-        preview: saved.url,
-      });
+      const patch =
+        kind === "thumbnail"
+          ? { preview: saved.url }
+          : { sampleImage: saved.url, headerImage: saved.url };
+      const updated = await api.updateTemplate(templateId, patch);
       const mapped = {
         ...updated,
         preview: updated.preview ? assetUrl(updated.preview) : undefined,
@@ -3785,11 +3910,43 @@ function App() {
         previous.map((item) => (item.id === templateId ? mapped : item)),
       );
       flash(
-        "Gambar sample tersimpan dan dipakai sebagai thumbnail serta heading template.",
+        kind === "thumbnail"
+          ? "Thumbnail tersimpan dan dipakai pada kartu template di halaman /template."
+          : "Gambar sample tersimpan dan dipakai sebagai heading halaman detail template.",
       );
     } catch (error) {
       flash(
-        error instanceof Error ? error.message : "Upload gambar sample gagal.",
+        error instanceof Error
+          ? error.message
+          : `Upload ${label.toLowerCase()} gagal.`,
+      );
+    }
+  };
+  const uploadTemplateSample = (templateId: string, file: File) =>
+    uploadTemplateImage(templateId, file, "sample");
+  const uploadTemplateThumbnail = (templateId: string, file: File) =>
+    uploadTemplateImage(templateId, file, "thumbnail");
+  // QA TC-151 — tandai/lepas tanda rekomendasi pada katalog publik.
+  const toggleTemplateRecommended = async (
+    templateId: string,
+    next: boolean,
+  ) => {
+    try {
+      const updated = await api.setTemplateRecommended(templateId, next);
+      const patch = (item: Template) =>
+        item.id === templateId ? { ...item, recommended: updated.recommended } : item;
+      setTemplateCatalog((previous) => previous.map(patch));
+      setPublicTemplates((previous) => previous.map(patch));
+      flash(
+        next
+          ? "Template ditandai sebagai desain rekomendasi."
+          : "Tanda rekomendasi dilepas.",
+      );
+    } catch (error) {
+      flash(
+        error instanceof Error
+          ? error.message
+          : "Gagal mengubah status rekomendasi.",
       );
     }
   };
@@ -3932,6 +4089,36 @@ function App() {
       );
       return false;
     }
+  };
+
+  // ---- Dashboard customer: List Undangan & RSVP (item 4) ----
+  // Halaman List Undangan kini berdiri sendiri di luar Canvas Editor, jadi
+  // perubahan daftar tamu disimpan langsung ke website customer.
+  const [dashboardSavingInvitees, setDashboardSavingInvitees] = useState(false);
+  const updateDashboardSection = (
+    sectionId: string,
+    patch: Partial<CanvasSection>,
+  ) => {
+    const nextSections = sections.map((section) =>
+      section.id === sectionId ? { ...section, ...patch } : section,
+    );
+    setSections(nextSections);
+    setDashboardSavingInvitees(true);
+    void api
+      .autosaveSite({
+        title: siteTitle,
+        slug,
+        templateId:
+          nextSections.find((section) => section.sourceTemplateId)
+            ?.sourceTemplateId || selectedTemplate.id,
+        sections: nextSections,
+      })
+      .catch(() =>
+        flash(
+          "Perubahan daftar undangan belum tersimpan ke server. Coba lagi sebentar.",
+        ),
+      )
+      .finally(() => setDashboardSavingInvitees(false));
   };
 
   const openTemplateJourney = (template: Template) => {
@@ -4342,7 +4529,7 @@ function App() {
       />
     );
 
-  if (view === "editor") {
+  if (view === "editor" && !needsCanvasOrderPick) {
     return (
       <>
         <Editor
@@ -4508,7 +4695,6 @@ function App() {
             templateCatalog={templateCatalog}
             sections={sections}
             applyTemplate={applyTemplate}
-            addBlankCanvas={addBlankCanvasFromTemplates}
             deleteCanvas={deleteCanvasFromTemplates}
             duplicateCanvas={duplicateCanvasFromTemplates}
             editCanvas={editCanvasFromTemplates}
@@ -4521,7 +4707,23 @@ function App() {
             onTakedown={takedownTemplate}
             onRepublish={republishTemplate}
             onUploadSample={uploadTemplateSample}
+            onUploadThumbnail={uploadTemplateThumbnail}
+            onToggleRecommended={toggleTemplateRecommended}
             onEditTemplate={openTemplateCanvas}
+            canvasOrders={canvasOrderOptions}
+            canvasOrderBusy={canvasOrderBusy}
+            customerOrders={myOrders}
+            // Dari halaman Templates canvas dimuat tanpa pindah ke editor,
+            // supaya hasilnya muncul dulu sebagai card Website Design.
+            onOpenCanvasOrder={(option) => void openCanvasOrder(option, false)}
+          />
+        )}
+        {needsCanvasOrderPick && (
+          <CanvasEditorStartPage
+            options={canvasOrderOptions}
+            onOpen={(option) => void openCanvasOrder(option, true)}
+            busy={canvasOrderBusy}
+            onBrowseTemplates={() => setView("templates")}
           />
         )}
         {view === "users" && hasPermission("users.manage") && (
@@ -4539,20 +4741,15 @@ function App() {
             onUpdateUser={updateManagedAccount}
           />
         )}
-        {view === "users" &&
-          !hasPermission("users.manage") &&
-          hasPermission("users.view") && (
-            <ClientManagement
-              clients={managedUsers}
-              onAssign={(userId) => assignClient(userId, currentAccountId)}
-              onManage={manageUserCanvas}
-            />
-          )}
+        {/* QA TC-168: halaman Client Assignment mandiri dihapus. Assign dan
+            kelola canvas customer sekarang lewat Manage Canvas. */}
         {view === "articles" && (
           <Articles
             articles={articleItems}
             openEditor={openArticleEditor}
             canManage={hasPermission("articles.manage")}
+            onToggleStatus={toggleArticleStatus}
+            onDelete={deleteArticle}
           />
         )}
         {view === "article-editor" && (
@@ -4584,6 +4781,41 @@ function App() {
         )}
         {view === "my-orders" && (
           <MyOrdersPage orders={myOrders} setView={setView} />
+        )}
+        {view === "invitee-management" && (
+          <div className="page">
+            <div className="page-heading">
+              <div>
+                <div className="eyebrow">GUEST MANAGEMENT</div>
+                <h1>List Undangan</h1>
+                <p>
+                  Kelola daftar tamu per Canvas, impor dari CSV, dan ekspor
+                  kembali kapan saja. Perubahan tersimpan otomatis.
+                </p>
+              </div>
+              {dashboardSavingInvitees && (
+                <span className="autosave-indicator saving">Menyimpan...</span>
+              )}
+            </div>
+            <InviteeManagementPage
+              sections={sections}
+              selectedSectionId={selectedDashboardCanvasId}
+              selectSection={(section) =>
+                setSelectedDashboardCanvasId(section.id)
+              }
+              updateSection={updateDashboardSection}
+              flash={flash}
+              slug={slug}
+            />
+          </div>
+        )}
+        {view === "rsvp-confirmation" && (
+          <RsvpConfirmationPage
+            guests={guests}
+            sections={sections}
+            siteTitle={siteTitle}
+            flash={flash}
+          />
         )}
         {view === "audit-log" && (
           <AuditLogPage
@@ -4713,11 +4945,14 @@ function App() {
               setServerConversations(await api.conversations());
               setCsMetricData(await api.csMetrics());
             }}
-            onReply={async (conversationId, text) => {
-              await api.reply(conversationId, text);
+            onReply={async (conversationId, text, visibility = "public") => {
+              await api.reply(conversationId, text, visibility);
               setServerConversations(await api.conversations());
               setCsMetricData(await api.csMetrics());
-              void refreshMyChat(false);
+              // Catatan internal tidak pernah masuk ke chat customer, jadi
+              // tidak perlu menyegarkan widget chat sendiri.
+              if (visibility !== "internal") void refreshMyChat(false);
+              if (visibility === "internal") flash("Catatan internal tersimpan.");
             }}
             onOutbound={async (userId, text) => {
               await api.outboundMessage({ userId, body: text, channel: "Web" });
@@ -4913,6 +5148,51 @@ function useViewportDevice(): DeviceMode {
   return device;
 }
 
+/**
+ * Mengembalikan posisi scroll sebuah container preview ke paling atas setiap
+ * kali preview dibuka atau mode device-nya berganti.
+ *
+ * Dua hal yang diperbaiki di sini:
+ * 1. Container preview memakai `overflow:auto` dan dipakai ulang, sehingga
+ *    scrollTop dari sesi preview sebelumnya ikut terbawa.
+ * 2. Scroll anchoring browser: saat foto dan background di bagian atas undangan
+ *    selesai dimuat, tingginya bertambah dan browser menggeser viewport supaya
+ *    elemen yang terlihat tetap di tempatnya — efeknya preview seolah langsung
+ *    berada di slide tengah. Karena itu reset diulang beberapa frame dan
+ *    container diberi `overflow-anchor: none` lewat CSS.
+ */
+function useScrollResetOnOpen(
+  ref: React.RefObject<HTMLElement | null>,
+  open: boolean,
+  ...deps: unknown[]
+) {
+  useLayoutEffect(() => {
+    if (!open) return;
+    const node = ref.current;
+    if (!node) return;
+    let cancelled = false;
+    const toTop = () => {
+      if (cancelled || !ref.current) return;
+      ref.current.scrollTop = 0;
+      ref.current.scrollLeft = 0;
+    };
+    toTop();
+    const frame = window.requestAnimationFrame(() => {
+      toTop();
+      window.requestAnimationFrame(toTop);
+    });
+    // Media yang baru selesai dimuat masih bisa menggeser konten setelah frame
+    // pertama; satu reset susulan menutup celah itu.
+    const settle = window.setTimeout(toTop, 180);
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, ...deps]);
+}
+
 // Halaman katalog desain lengkap. Landing hanya menampilkan 9 desain; sisanya
 // dibuka di sini dengan filter kategori dan pencarian.
 function AllDesignsPage({
@@ -4932,17 +5212,26 @@ function AllDesignsPage({
     () => ["Semua", ...new Set(templates.map((item) => item.category))],
     [templates],
   );
-  const visible = useMemo(
-    () =>
-      templates.filter(
-        (item) =>
-          (category === "Semua" || item.category === category) &&
-          `${item.name} ${item.description || ""}`
-            .toLowerCase()
-            .includes(query.trim().toLowerCase()),
-      ),
-    [templates, category, query],
-  );
+  const visible = useMemo(() => {
+    const filtered = templates.filter(
+      (item) =>
+        (category === "Semua" || item.category === category) &&
+        `${item.name} ${item.description || ""}`
+          .toLowerCase()
+          .includes(query.trim().toLowerCase()),
+    );
+    // QA TC-151: desain rekomendasi selalu di urutan depan.
+    return [
+      ...filtered.filter((item) => item.recommended),
+      ...filtered.filter((item) => !item.recommended),
+    ];
+  }, [templates, category, query]);
+  // QA TC-150: katalog tidak lagi merender seluruh template sekaligus. Halaman
+  // memuat per 12 desain supaya tetap ringan ketika jumlah template bertambah.
+  const PAGE_SIZE = 12;
+  const [shown, setShown] = useState(PAGE_SIZE);
+  useEffect(() => setShown(PAGE_SIZE), [category, query]);
+  const paged = visible.slice(0, shown);
   return (
     <div className="journal-page">
       <header className="journal-topbar">
@@ -4951,6 +5240,11 @@ function AllDesignsPage({
         </button>
         <Brand />
         <div className="journal-topbar-actions">
+          {/* QA TC-152: Jurnal dapat diakses langsung dari header, tidak hanya
+              dari section di landing page. */}
+          <button className="secondary-btn" onClick={() => setView("journal")}>
+            <BookOpen size={15} /> Jurnal
+          </button>
           <button className="secondary-btn" onClick={() => setView("login")}>
             Masuk
           </button>
@@ -4999,18 +5293,18 @@ function AllDesignsPage({
           </label>
         </section>
         <section className="ikr-template-grid design-catalog-grid">
-          {visible.map((template) => (
+          {paged.map((template) => (
             <article className="ikr-template" key={template.id}>
               <button
                 className="ikr-template-preview"
                 aria-label={`Lihat desain ${template.name}`}
                 onClick={() => onTemplate(template)}
               >
-                {template.sampleImage || template.preview ? (
+                {template.preview || template.sampleImage ? (
                   <div
                     className="ikr-template-sample"
                     style={{
-                      backgroundImage: `url(${template.sampleImage || template.preview})`,
+                      backgroundImage: `url(${template.preview || template.sampleImage})`,
                     }}
                     role="img"
                     aria-label={`Sample ${template.name}`}
@@ -5037,6 +5331,11 @@ function AllDesignsPage({
                 <span className="ikr-preview-action">
                   Lihat desain <ArrowRight size={16} />
                 </span>
+                {template.recommended && (
+                  <span className="ikr-template-badge">
+                    <Star size={12} /> Recommended
+                  </span>
+                )}
               </button>
               <div className="ikr-template-info">
                 <div>
@@ -5053,6 +5352,19 @@ function AllDesignsPage({
             </div>
           )}
         </section>
+        {visible.length > paged.length && (
+          <div className="catalog-load-more">
+            <span>
+              Menampilkan {paged.length} dari {visible.length} desain
+            </span>
+            <button
+              className="primary-btn"
+              onClick={() => setShown((previous) => previous + PAGE_SIZE)}
+            >
+              Muat lebih banyak <ArrowRight size={15} />
+            </button>
+          </div>
+        )}
       </main>
       <footer className="journal-footer">
         <Brand />
@@ -5698,8 +6010,13 @@ function TemplateJourneyPage({
   const [previewOpen, setPreviewOpen] = useState(false);
   // QA TC-136: mode preview (Desktop / Mobile) pada halaman detail template.
   const [journeyDevice, setJourneyDevice] = useState<DeviceMode>("desktop");
+  const previewShellRef = useRef<HTMLDivElement | null>(null);
+  // Preview harus selalu mulai dari section pembuka. Container-nya overflow:auto
+  // dan posisi scroll-nya bertahan saat preview dibuka ulang atau mode device
+  // diganti, sehingga preview sebelumnya terbuka di tengah undangan.
+  useScrollResetOnOpen(previewShellRef, previewOpen, journeyDevice);
   const heroImage =
-    template.headerImage || template.sampleImage || template.preview;
+    template.headerImage || template.preview || template.sampleImage;
   return (
     <div className="journey-page">
       <header>
@@ -5842,7 +6159,11 @@ function TemplateJourneyPage({
           </div>
           {/* QA TC-137: mode Desktop memakai lebar penuh layar, bukan ukuran tablet. */}
           <DeviceContext value={journeyDevice}>
-          <div className={`actual-template-preview-shell device-${journeyDevice}`}>
+          <PreviewSurfaceContext value={true}>
+          <div
+            ref={previewShellRef}
+            className={`actual-template-preview-shell device-${journeyDevice}`}
+          >
             {template.canvasSections?.length ? (
               <WeddingCanvas
                 page="pages"
@@ -5869,6 +6190,7 @@ function TemplateJourneyPage({
               </div>
             )}
           </div>
+          </PreviewSurfaceContext>
           </DeviceContext>
         </div>
       )}
@@ -6363,6 +6685,16 @@ function TasksPage({
   const [filter, setFilter] = useState("All");
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  // Preview approval sebelumnya hanya punya satu tampilan; reviewer tidak bisa
+  // memeriksa versi mobile sebelum menyetujui template.
+  const [previewDevice, setPreviewDevice] = useState<DeviceMode>("desktop");
+  const previewStageRef = useRef<HTMLDivElement | null>(null);
+  useScrollResetOnOpen(
+    previewStageRef,
+    Boolean(previewTemplate),
+    previewTemplate?.id,
+    previewDevice,
+  );
   const [draftStatus, setDraftStatus] = useState<Record<string, string>>({});
   const [savingStatus, setSavingStatus] = useState("");
   const approvalTasks = tasks.filter((task) => task.task_type === "Approval");
@@ -6644,11 +6976,32 @@ function TasksPage({
                   {previewTemplate.status}
                 </small>
               </div>
-              <button onClick={() => setPreviewTemplate(null)}>
-                <X size={18} />
-              </button>
+              <div className="preview-header-actions">
+                <div className="journey-device-switch">
+                  <button
+                    className={previewDevice === "desktop" ? "active" : ""}
+                    onClick={() => setPreviewDevice("desktop")}
+                  >
+                    <Monitor size={15} /> Desktop
+                  </button>
+                  <button
+                    className={previewDevice === "mobile" ? "active" : ""}
+                    onClick={() => setPreviewDevice("mobile")}
+                  >
+                    <Smartphone size={15} /> Mobile
+                  </button>
+                </div>
+                <button onClick={() => setPreviewTemplate(null)}>
+                  <X size={18} />
+                </button>
+              </div>
             </header>
-            <div className="template-dialog-actual-preview live">
+            <DeviceContext value={previewDevice}>
+            <PreviewSurfaceContext value={true}>
+            <div
+              ref={previewStageRef}
+              className={`template-dialog-actual-preview live device-${previewDevice}`}
+            >
               {previewTemplate.canvasSections?.length ? (
                 <WeddingCanvas
                   page="pages"
@@ -6667,6 +7020,8 @@ function TasksPage({
                 />
               )}
             </div>
+            </PreviewSurfaceContext>
+            </DeviceContext>
             <footer>
               <span className="preview-hint">
                 <CircleHelp size={14} /> Periksa seluruh section, harga, dan
@@ -6935,15 +7290,17 @@ function Sidebar({
       can("dashboard.editor") ? "Web Designer Dashboard" : "Wedding Dashboard",
       can("dashboard.editor") ? "dashboard.editor" : "dashboard.user",
     ],
-    ["my-orders", PackageCheck, "My Project", "dashboard.user"],
+    // QA TC-175: dari sudut pandang customer istilahnya "order", bukan "project".
+    ["my-orders", PackageCheck, "My Order", "dashboard.user"],
+    // Dashboard customer: Add Canvas diganti pengelolaan tamu dan RSVP.
+    ["invitee-management", Users, "List Undangan", "dashboard.user"],
+    ["rsvp-confirmation", CheckCircle, "RSVP Confirmation", "dashboard.user"],
     ["cs-dashboard", BarChart3, "CS Dashboard", "dashboard.cs"],
     ["tasks", ClipboardList, "Tasks & Tickets", "tasks.view"],
-    [
-      "users",
-      UserCog,
-      can("users.manage") ? "Users & Roles" : "Client Assignment",
-      can("users.manage") ? "users.manage" : "users.view",
-    ],
+    // QA TC-168: "Client Assignment" dilebur ke Manage Canvas — assign dan
+    // kelola canvas customer kini satu alur. Menu ini tinggal "Users & Roles"
+    // untuk Administrator.
+    ["users", UserCog, "Users & Roles", "users.manage"],
     ["roles", KeyRound, "Roles & Permissions", "roles.manage"],
     [
       "templates",
@@ -6951,15 +7308,28 @@ function Sidebar({
       can("templates.create") ? "Templates & Approval" : "Templates & Canvas",
       "templates.view",
     ],
-    ["editor", WandSparkles, "Canvas Editor", "canvas.manage"],
+    // QA TC-170 & TC-181: Canvas Editor bukan lagi menu mandiri untuk Admin
+    // maupun Customer. Alurnya sekarang lewat Manage Canvas / Templates, jadi
+    // menu ini hanya relevan bagi Web Designer yang mengerjakan order.
+    ...(role === "Editor"
+      ? ([["editor", WandSparkles, "Canvas Editor", "canvas.manage"]] as [
+          View,
+          typeof LayoutDashboard,
+          string,
+          string,
+        ][])
+      : []),
 
-    // Articles CMS dikelola Administrator; Web Designer tidak perlu menu ini.
-    [
-      "articles",
-      BookOpen,
-      "Articles CMS",
-      "articles.manage",
-    ],
+    // Articles CMS dikelola Administrator; Web Designer dan Customer tidak
+    // perlu menu ini (QA TC-182) — artikel diakses dari landing page.
+    ...(role === "Admin"
+      ? ([["articles", BookOpen, "Articles CMS", "articles.manage"]] as [
+          View,
+          typeof LayoutDashboard,
+          string,
+          string,
+        ][])
+      : []),
     [
       "commissions",
       Wallet,
@@ -7448,13 +7818,14 @@ function EditorDashboard({
           <div className="eyebrow">WEB DESIGNER STUDIO</div>
           <h1>Creative operations dashboard</h1>
           <p>
-            Kelola template, assignment Customer, dan website client dalam satu
-            tempat.
+            Kelola template dan canvas website customer dalam satu tempat.
           </p>
         </div>
         <div className="heading-actions">
-          <button className="secondary-btn" onClick={() => setView("users")}>
-            <UserCog size={17} /> Assign Customer
+          {/* QA TC-168: assign & kelola canvas customer kini satu alur, jadi
+              tombol ini mengarah ke Manage Canvas, bukan Client Assignment. */}
+          <button className="secondary-btn" onClick={() => setView("editor")}>
+            <WandSparkles size={17} /> Manage Canvas
           </button>
           <button className="primary-btn" onClick={() => setView("templates")}>
             <LayoutTemplate size={17} /> Manage Templates
@@ -7496,11 +7867,11 @@ function EditorDashboard({
         <section className="panel">
           <div className="panel-head">
             <div>
-              <h3>Client assignments</h3>
-              <p>Customer yang dapat Anda kelola</p>
+              <h3>Customer saya</h3>
+              <p>Customer yang canvasnya dapat Anda kelola</p>
             </div>
-            <button className="text-btn" onClick={() => setView("users")}>
-              Lihat semua
+            <button className="text-btn" onClick={() => setView("editor")}>
+              Manage Canvas
             </button>
           </div>
           <div className="client-list">
@@ -7545,11 +7916,11 @@ function EditorDashboard({
             </span>
             <ArrowRight size={16} />
           </button>
-          <button onClick={() => setView("users")}>
+          <button onClick={() => setView("editor")}>
             <UserCog size={18} />
             <span>
-              <strong>Assign a Customer</strong>
-              <small>Connect a Customer to your Web Designer account.</small>
+              <strong>Manage Canvas customer</strong>
+              <small>Pilih order customer, canvasnya langsung termuat.</small>
             </span>
             <ArrowRight size={16} />
           </button>
@@ -7690,6 +8061,33 @@ function UserManagement({
                     >
                       <UserRoundCog size={15} />
                     </button>
+                    {/* QA TC-172: nonaktifkan akun sementara (mis. user cuti
+                        atau resign) tanpa menghapus datanya. */}
+                    {account.id !== currentAccountId && onUpdateUser && (
+                      <button
+                        className={
+                          account.active === false
+                            ? "row-activate"
+                            : "row-deactivate"
+                        }
+                        title={
+                          account.active === false
+                            ? "Aktifkan kembali akun"
+                            : "Nonaktifkan akun (tanpa menghapus)"
+                        }
+                        onClick={() =>
+                          void onUpdateUser(account.id, {
+                            active: account.active === false,
+                          })
+                        }
+                      >
+                        {account.active === false ? (
+                          <CheckCircle size={15} />
+                        ) : (
+                          <Ban size={15} />
+                        )}
+                      </button>
+                    )}
                     {account.id !== currentAccountId && (
                       <button
                         className="row-delete"
@@ -8002,7 +8400,94 @@ function buildWebsiteDesignGroups(
   return Array.from(groups.values());
 }
 
+type WebsiteDesignGroup = {
+  id: string;
+  template?: Template;
+  name: string;
+  sections: CanvasSection[];
+  orderNo?: string;
+  orderStatus?: string;
+  pending?: boolean;
+};
+
+/**
+ * Daftar design pada dashboard customer dibangun dari ORDER, bukan dari isi
+ * canvas yang kebetulan tersimpan.
+ *
+ * Sebelumnya customer yang memesan tiga template tetap hanya melihat satu card,
+ * karena pengelompokan hanya membaca `sections` lokal. Sekarang setiap order
+ * berbayar selalu punya satu card: kalau canvasnya sudah dikerjakan, section
+ * miliknya ikut ditampilkan; kalau belum, card-nya tampil sebagai "sedang
+ * disiapkan" supaya customer tahu pesanannya terdaftar.
+ */
+function buildCustomerDesignGroups(
+  orders: any[],
+  sections: CanvasSection[],
+  templateCatalog: Template[],
+): WebsiteDesignGroup[] {
+  const paidOrders = orders.filter(
+    (order) => order?.payment_status === "Paid" && order?.template_id,
+  );
+  if (!paidOrders.length) return [];
+  const used = new Set<string>();
+  const groups: WebsiteDesignGroup[] = paidOrders.map((order) => {
+    const template = templateCatalog.find(
+      (item) => item.id === order.template_id,
+    );
+    // Satu order memakai satu kelompok section; kelompok yang sudah terpakai
+    // tidak diklaim lagi oleh order lain dengan template yang sama.
+    const owned = sections.filter(
+      (section) =>
+        section.sourceTemplateId === order.template_id &&
+        !used.has(section.templateInstanceId || section.id),
+    );
+    const instanceId = owned[0]?.templateInstanceId;
+    const claimed = instanceId
+      ? sections.filter((section) => section.templateInstanceId === instanceId)
+      : owned.slice(0, 0);
+    claimed.forEach((section) =>
+      used.add(section.templateInstanceId || section.id),
+    );
+    return {
+      id: `order-${order.id}`,
+      template,
+      name: order.template_name || template?.name || "Template",
+      sections: claimed,
+      orderNo: order.order_no,
+      orderStatus:
+        order.fulfillment_status === "Complete"
+          ? "Selesai"
+          : order.order_status || "Sedang dikerjakan",
+      pending: claimed.length === 0,
+    } satisfies WebsiteDesignGroup;
+  });
+  // Section yang tidak terkait order mana pun (design custom) tetap ditampilkan.
+  const leftovers = sections.filter(
+    (section) => !used.has(section.templateInstanceId || section.id),
+  );
+  if (leftovers.length)
+    groups.push(
+      ...buildWebsiteDesignGroups(
+        leftovers,
+        templateCatalog,
+        templateCatalog[0] || ({} as Template),
+      ),
+    );
+  return groups;
+}
+
 const ThumbnailContext = createContext(false);
+/**
+ * QA TC-159 — menandai bahwa canvas sedang dirender di dalam kotak preview
+ * (dialog approval, preview template, preview editor), bukan sebagai undangan
+ * publik.
+ *
+ * Tombol backsound memakai `position: fixed`, sehingga di dalam preview ia
+ * keluar dari kotaknya dan mengambang di atas seluruh layar — terlihat sebagai
+ * icon musik yang nyangkut pada cover thumbnail. Di dalam preview tombolnya
+ * ditempel pada kotak preview itu sendiri.
+ */
+const PreviewSurfaceContext = createContext(false);
 
 function WebsiteTemplatePreview({
   template,
@@ -8073,6 +8558,188 @@ function WebsiteTemplatePreview({
   );
 }
 
+/* ------------------------------------------------------------------
+   Manage Canvas — pemilih order customer (item 3 & 9)
+
+   Menggantikan tombol "Add Canvas" yang dulu hanya menambah section kosong ke
+   state tanpa pernah menyimpannya (setiap klik lalu ditinggalkan menghasilkan
+   draft baru). Sekarang Web Designer memilih salah satu order yang menjadi
+   task-nya; canvas customer itulah yang dimuat, lengkap dengan template yang
+   dia pesan, sehingga pengerjaan tidak dimulai dari canvas kosong.
+   ------------------------------------------------------------------ */
+type CanvasOrderOption = {
+  taskId: string;
+  orderId: string;
+  orderNo: string;
+  customerUserId: string;
+  customerName: string;
+  customerEmail: string;
+  templateId: string;
+  templateName: string;
+  status: string;
+};
+
+/**
+ * Menyaring task menjadi daftar order yang canvas-nya bisa dibuka.
+ * Task approval dan task tanpa order/customer tidak termasuk.
+ */
+function buildCanvasOrderOptions(tasks: TaskItem[]): CanvasOrderOption[] {
+  const seen = new Set<string>();
+  const options: CanvasOrderOption[] = [];
+  tasks.forEach((task) => {
+    if (task.task_type === "Approval") return;
+    if (!task.order_id || !task.customer_user_id) return;
+    if (task.status === "Cancelled") return;
+    const key = `${task.order_id}-${task.customer_user_id}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    options.push({
+      taskId: task.id,
+      orderId: task.order_id,
+      orderNo: task.order_no || task.order_id,
+      customerUserId: task.customer_user_id,
+      customerName: task.customer_name || task.email || "Customer",
+      customerEmail: task.email || "",
+      templateId: task.template_id || "",
+      templateName: task.template_name || "",
+      status: task.status,
+    });
+  });
+  return options;
+}
+
+function ManageCanvasPicker({
+  options,
+  onOpen,
+  busy = false,
+  compact = false,
+}: {
+  options: CanvasOrderOption[];
+  onOpen: (option: CanvasOrderOption) => void;
+  busy?: boolean;
+  compact?: boolean;
+}) {
+  const [selected, setSelected] = useState("");
+  // Pilihan yang tersimpan bisa hilang saat daftar task di-refresh.
+  const current = options.find((item) => item.taskId === selected);
+  useEffect(() => {
+    if (selected && !options.some((item) => item.taskId === selected))
+      setSelected("");
+  }, [options, selected]);
+  if (!options.length)
+    return (
+      <div className={`manage-canvas-picker empty ${compact ? "compact" : ""}`}>
+        <Users size={compact ? 15 : 18} />
+        <span>
+          Belum ada order customer yang menjadi task Anda. Canvas akan muncul di
+          sini begitu order masuk dan di-assign.
+        </span>
+      </div>
+    );
+  return (
+    <div className={`manage-canvas-picker ${compact ? "compact" : ""}`}>
+      <label>
+        <span className="manage-canvas-legend">Manage Canvas</span>
+        <select
+          value={selected}
+          onChange={(event) => setSelected(event.target.value)}
+          disabled={busy}
+        >
+          <option value="">Pilih order customer...</option>
+          {options.map((option) => (
+            <option key={option.taskId} value={option.taskId}>
+              {option.customerName} · {option.orderNo}
+              {option.templateName ? ` · ${option.templateName}` : ""} —{" "}
+              {option.status}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button
+        className="primary-btn"
+        disabled={!current || busy}
+        onClick={() => current && onOpen(current)}
+      >
+        <WandSparkles size={15} />
+        {busy ? "Memuat..." : "Buka Canvas"}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Halaman pembuka menu Canvas Editor untuk Web Designer.
+ *
+ * Menggantikan canvas kosong: Web Designer memilih order lebih dulu, lalu
+ * canvas customer beserta template yang dipesannya langsung termuat.
+ */
+function CanvasEditorStartPage({
+  options,
+  onOpen,
+  busy,
+  onBrowseTemplates,
+}: {
+  options: CanvasOrderOption[];
+  onOpen: (option: CanvasOrderOption) => void;
+  busy: boolean;
+  onBrowseTemplates: () => void;
+}) {
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">CANVAS EDITOR</div>
+          <h1>Pilih order yang akan dikerjakan</h1>
+          <p>
+            Canvas Editor memuat design dari order customer. Pilih salah satu
+            order di bawah — template yang dipesan customer ikut termuat, jadi
+            Anda tidak perlu menyusun ulang dari canvas kosong.
+          </p>
+        </div>
+      </div>
+      <ManageCanvasPicker options={options} onOpen={onOpen} busy={busy} />
+      {options.length > 0 && (
+        <div className="canvas-order-grid">
+          {options.map((option) => (
+            <article className="canvas-order-card" key={option.taskId}>
+              <div className="canvas-order-head">
+                <span className="canvas-order-no">{option.orderNo}</span>
+                <em className={`canvas-order-status ${option.status.toLowerCase().replace(/\s+/g, "-")}`}>
+                  {option.status}
+                </em>
+              </div>
+              <h3>{option.customerName}</h3>
+              {option.customerEmail && <small>{option.customerEmail}</small>}
+              <p>
+                {option.templateName
+                  ? `Template dipesan: ${option.templateName}`
+                  : "Template belum ditentukan pada order ini."}
+              </p>
+              <button
+                className="primary-btn"
+                disabled={busy}
+                onClick={() => onOpen(option)}
+              >
+                <WandSparkles size={15} /> Buka Canvas
+              </button>
+            </article>
+          ))}
+        </div>
+      )}
+      <div className="canvas-order-footnote">
+        <CircleHelp size={14} />
+        <span>
+          Mau merancang template baru, bukan website customer? Buka{" "}
+          <button className="link-btn" onClick={onBrowseTemplates}>
+            Templates &amp; Approval
+          </button>{" "}
+          lalu gunakan Create Template.
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Templates({
   role,
   siteTitle,
@@ -8081,7 +8748,6 @@ function Templates({
   templateCatalog,
   sections,
   applyTemplate,
-  addBlankCanvas: _addBlankCanvas,
   deleteCanvas,
   duplicateCanvas,
   editCanvas,
@@ -8094,8 +8760,14 @@ function Templates({
   onTakedown,
   onRepublish,
   onUploadSample,
+  onUploadThumbnail,
   onCaptureSample,
   onEditTemplate,
+  onToggleRecommended,
+  canvasOrders = [],
+  onOpenCanvasOrder,
+  canvasOrderBusy = false,
+  customerOrders = [],
 }: {
   role: Role;
   siteTitle: string;
@@ -8104,7 +8776,6 @@ function Templates({
   templateCatalog: Template[];
   sections: CanvasSection[];
   applyTemplate: (template: Template) => void;
-  addBlankCanvas: () => void;
   deleteCanvas: (sectionIds: string[]) => void;
   duplicateCanvas: (sectionIds: string[]) => void;
   editCanvas: (sectionId: string) => void;
@@ -8117,8 +8788,14 @@ function Templates({
   onTakedown?: (templateId: string, reason: string) => Promise<void>;
   onRepublish?: (templateId: string) => Promise<void>;
   onUploadSample?: (templateId: string, file: File) => Promise<void>;
+  onUploadThumbnail?: (templateId: string, file: File) => Promise<void>;
   onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
+  onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
+  canvasOrders?: CanvasOrderOption[];
+  onOpenCanvasOrder?: (option: CanvasOrderOption) => void;
+  canvasOrderBusy?: boolean;
+  customerOrders?: any[];
 }) {
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -8128,11 +8805,12 @@ function Templates({
       (filter === "All" || template.category === filter) &&
       template.name.toLowerCase().includes(query.toLowerCase()),
   );
-  const websiteDesigns = buildWebsiteDesignGroups(
-    sections,
-    templateCatalog,
-    selectedTemplate,
-  );
+  // Customer melihat satu card per order; Web Designer tetap melihat
+  // pengelompokan berdasarkan isi canvas yang sedang dibuka.
+  const websiteDesigns: WebsiteDesignGroup[] =
+    role === "User" && customerOrders.length
+      ? buildCustomerDesignGroups(customerOrders, sections, templateCatalog)
+      : buildWebsiteDesignGroups(sections, templateCatalog, selectedTemplate);
   return (
     <div className="page">
       <div className="page-heading">
@@ -8146,6 +8824,17 @@ function Templates({
           </p>
         </div>
         <div className="heading-actions">
+          {/* Dropdown Manage Canvas menggantikan tombol Add Canvas: Web Designer
+              memilih order yang menjadi task-nya, lalu canvasnya muncul sebagai
+              card Website Design di bawah. */}
+          {onOpenCanvasOrder && role === "Editor" && (
+            <ManageCanvasPicker
+              options={canvasOrders}
+              onOpen={onOpenCanvasOrder}
+              busy={canvasOrderBusy}
+              compact
+            />
+          )}
           {canCreate && (
             <button className="secondary-btn" onClick={openTemplateCreator}>
               <Palette size={17} /> Create Template
@@ -8155,12 +8844,14 @@ function Templates({
       </div>
       {role === "Editor" && managingCustomer && (
         <p className="canvas-help-note workspace-hint">
-          Anda sedang mengelola website milik customer. Website customer diedit
-          lewat <strong>Tasks &amp; Tickets → Manage Canvas</strong>, bukan dari
-          halaman ini.
+          Anda sedang mengelola website milik customer. Pilih order lain pada
+          dropdown <strong>Manage Canvas</strong> di atas untuk berpindah
+          customer.
         </p>
       )}
-      {!(role === "Editor" && managingCustomer) && (
+      {/* Card Website Design dulu disembunyikan saat Web Designer mengelola
+          customer. Sekarang justru di sinilah hasil pilihan Manage Canvas
+          ditampilkan, jadi section ini selalu tampil. */}
       <section className="canvas-manager-section">
         <div className="section-heading">
           <div>
@@ -8206,6 +8897,37 @@ function Templates({
               (total, section) => total + section.invitees.length,
               0,
             );
+            // Order yang canvasnya belum dikerjakan tetap tampil sebagai card,
+            // supaya jumlah card selalu sama dengan jumlah order customer.
+            if (design.pending)
+              return (
+                <article
+                  className="website-canvas-card website-template-card pending-order"
+                  key={design.id}
+                >
+                  <div className="website-canvas-cover pending">
+                    <Clock3 size={26} />
+                    <strong>Sedang disiapkan</strong>
+                    <span>Web Designer sedang mengerjakan design Anda.</span>
+                    <span className="canvas-index">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                  </div>
+                  <div className="website-canvas-meta">
+                    <div>
+                      <span className="published-dot">
+                        {design.orderNo ? `${design.orderNo} · ` : ""}
+                        {design.orderStatus}
+                      </span>
+                      <h3>{design.name}</h3>
+                      <p>Canvas belum tersedia untuk diedit.</p>
+                      <small>
+                        Anda akan diberi tahu lewat live chat begitu design siap.
+                      </small>
+                    </div>
+                  </div>
+                </article>
+              );
             return (
               <article
                 className="website-canvas-card website-template-card"
@@ -8256,7 +8978,6 @@ function Templates({
           })}
         </div>
       </section>
-      )}
 
       {(canCreate || canApprove) && (
         <TemplateApprovalManager
@@ -8266,10 +8987,16 @@ function Templates({
           onTakedown={onTakedown}
           onRepublish={onRepublish}
           onUploadSample={onUploadSample}
+          onUploadThumbnail={onUploadThumbnail}
           onCaptureSample={onCaptureSample}
           onEditTemplate={onEditTemplate}
+          onToggleRecommended={onToggleRecommended}
         />
       )}
+      {/* QA TC-177: customer tidak lagi browse seluruh katalog dari sini —
+          yang mereka butuhkan hanya canvas dari ordernya sendiri. Toolbar
+          pencarian/filter template hanya untuk staff. */}
+      {role !== "User" && (
       <div className="template-toolbar">
         <div className="search-field">
           <Search size={17} />
@@ -8300,6 +9027,8 @@ function Templates({
           ))}
         </div>
       </div>
+      )}
+      {role !== "User" && (
       <div className="template-grid">
         {filtered.map((template) => (
           <div
@@ -8399,6 +9128,7 @@ function Templates({
           </div>
         ))}
       </div>
+      )}
       {previewTemplate && (
         <div className="dialog-overlay template-quick-preview">
           <div className="template-preview-dialog">
@@ -8461,7 +9191,7 @@ function CanvasThumbnail({
   const coverFeature = section.columns
     .flatMap((column) => column.features)
     .find((feature) => feature.type === "invitation-cover");
-  const image = coverFeature?.mediaUrl || section.backgroundUrl;
+  const image = assetUrl(coverFeature?.mediaUrl || section.backgroundUrl);
   const filter = getBackgroundFilter(
     coverFeature?.backgroundEffect || section.backgroundEffect,
   );
@@ -8618,6 +9348,10 @@ function Editor({
       autosaveContent(draft),
   );
   const pendingAutosave = useRef<Promise<void>>(Promise.resolve());
+  // Penanda autosave yang masih berjalan. Dipakai supaya rantai promise tidak
+  // pernah menahan tombol Save: kalau autosave terakhir menggantung, Save tetap
+  // jalan dan memakai isi editor terbaru.
+  const autosaveInFlight = useRef(false);
   useEffect(() => {
     let alive = true;
     void readDraft()
@@ -8660,13 +9394,18 @@ function Editor({
     setDirty(false);
     setAutosaveState("idle");
   };
+  // Undo history dibatasi 15 langkah. Sebelumnya 40 salinan penuh pohon section
+  // ditahan di memori dan setiap edit membuat satu structuredClone baru; pada
+  // canvas besar itu memblokir main thread sampai editor terasa freeze.
+  const HISTORY_LIMIT = 15;
   const commitSections = (
     updater: React.SetStateAction<CanvasSection[]>,
     record = true,
   ) => {
     if (record) {
       historyRef.current.push(structuredClone(sections));
-      if (historyRef.current.length > 40) historyRef.current.shift();
+      while (historyRef.current.length > HISTORY_LIMIT)
+        historyRef.current.shift();
       futureRef.current = [];
     }
     setDirty(true);
@@ -8690,12 +9429,32 @@ function Editor({
     if (!dirty || saving || recovery) return;
     setAutosaveState("saving");
     const timer = window.setTimeout(() => {
+      // Jaring pengaman lokal ditulis SEBELUM request ke server. Kalau tab
+      // ditutup atau editor berhenti merespons di tengah autosave, pekerjaan
+      // terakhir tetap bisa dipulihkan dari localStorage.
+      backupEditorDraft(siteTitle, sections, {
+        slug,
+        templateId: selectedTemplate.id,
+      });
+      autosaveInFlight.current = true;
       pendingAutosave.current = pendingAutosave.current
         .catch(() => {})
         .then(() => writeDraft({ sections, slug, siteTitle }));
       void pendingAutosave.current
-        .then(() => setAutosaveState("saved"))
-        .catch(() => setAutosaveState("error"));
+        .then(() => {
+          setAutosaveState("saved");
+          // Draft sudah aman di server, jaring pengaman lokal tidak diperlukan
+          // lagi. Tanpa ini dialog pemulihan akan muncul setiap buka editor.
+          try {
+            window.localStorage.removeItem(EDITOR_BACKUP_KEY);
+          } catch {
+            /* penyimpanan lokal diblokir */
+          }
+        })
+        .catch(() => setAutosaveState("error"))
+        .finally(() => {
+          autosaveInFlight.current = false;
+        });
     }, 1400);
     return () => window.clearTimeout(timer);
   }, [
@@ -8712,7 +9471,20 @@ function Editor({
     if (saving) return;
     setSaving(true);
     try {
-      await pendingAutosave.current.catch(() => {});
+      // Tunggu autosave yang sedang berjalan, tapi jangan selamanya. Request
+      // autosave yang menggantung dulu membuat tombol Save ikut mati total
+      // (editor "freeze"); sekarang Save tetap lanjut setelah 5 detik dan
+      // memakai isi editor terbaru, yang memang lebih baru dari draft autosave.
+      await Promise.race([
+        pendingAutosave.current.catch(() => {}),
+        new Promise<void>((resolve) => window.setTimeout(resolve, 5000)),
+      ]);
+      if (autosaveInFlight.current) {
+        // Putus rantai supaya autosave lama yang masih menggantung tidak
+        // menahan autosave berikutnya setelah Save selesai.
+        pendingAutosave.current = Promise.resolve();
+        autosaveInFlight.current = false;
+      }
       if (await saveSite()) {
         captureSavedBaseline();
         setDirty(false);
@@ -8727,7 +9499,10 @@ function Editor({
         // penyimpanan ke server gagal, termasuk ketika sesi sudah berakhir.
         // saveSite() sudah menampilkan pesan error asli dari server; jangan
         // ditimpa pesan generik agar penyebabnya terbaca.
-        backupEditorDraft(siteTitle, sections);
+        backupEditorDraft(siteTitle, sections, {
+          slug,
+          templateId: selectedTemplate.id,
+        });
       }
     } finally {
       setSaving(false);
@@ -10492,7 +11267,7 @@ function FeatureInspector({
             <div className="gallery-media-manager">
               {(feature.galleryUrls || []).map((url, index) => (
                 <div key={`${url}-${index}`} className="gallery-media-item">
-                  <img src={url} alt={`Gallery ${index + 1}`} />
+                  <img src={assetUrl(url)} alt={`Gallery ${index + 1}`} />
                   <span>Image {index + 1}</span>
                   <button
                     onClick={() =>
@@ -10537,7 +11312,7 @@ function FeatureInspector({
             {feature.mediaUrl && (
               <div
                 className="cover-bg-thumb"
-                style={{ backgroundImage: `url(${feature.mediaUrl})` }}
+                style={{ backgroundImage: `url(${assetUrl(feature.mediaUrl)})` }}
               >
                 <button
                   onClick={() =>
@@ -10693,7 +11468,9 @@ function FeatureInspector({
             </label>
           </>
         )}
-        {feature.type === "sound" && (
+        {/* QA TC-165: kontrol backsound dipakai bersama oleh feature sound
+            lama dan Credit / Watermark yang kini menampungnya. */}
+        {(feature.type === "sound" || feature.type === "credit") && (
           <>
             <label>
               Sound catalog
@@ -11324,19 +12101,17 @@ function FeatureInspector({
         )}
         {feature.type === "gallery" && (
           <>
-            <label>
-              Gallery layout
-              <select
-                value={feature.galleryStyle}
-                onChange={(event) =>
-                  update({ galleryStyle: event.target.value as GalleryStyle })
-                }
-              >
-                <option value="grid">Grid</option>
-                <option value="carousel">Carousel</option>
-                <option value="filmstrip">Filmstrip</option>
-              </select>
-            </label>
+            <LayoutOptionPicker
+              legend="Gallery layout"
+              options={[
+                { value: "grid", label: "Grid", hint: "Semua foto sekaligus" },
+                { value: "carousel", label: "Carousel", hint: "Satu per satu, geser" },
+                { value: "filmstrip", label: "Filmstrip", hint: "Gulir mendatar" },
+              ]}
+              value={feature.galleryStyle || "grid"}
+              onSelect={(galleryStyle: GalleryStyle) => update({ galleryStyle })}
+              glyph={(value) => <GalleryStyleGlyph style={value} />}
+            />
             <div className="setting-row compact">
               <div>
                 <Repeat2 size={16} />
@@ -11461,24 +12236,21 @@ function FeatureInspector({
           </div>
         )}
         {feature.type === "gallery" && (
-          <label>
-            Template posisi gambar
-            <select
-              value={feature.galleryLayoutTemplate || "even"}
-              onChange={(event) =>
-                update({
-                  galleryLayoutTemplate: event.target
-                    .value as GalleryLayoutTemplate,
-                })
-              }
-            >
-              <option value="even">Even grid</option>
-              <option value="masonry">Masonry</option>
-              <option value="hero-left">Hero kiri + grid kanan</option>
-              <option value="hero-top">Hero atas + grid bawah</option>
-              <option value="mosaic">Mosaic</option>
-            </select>
-          </label>
+          <LayoutOptionPicker
+            legend="Gallery Layout Style"
+            options={[
+              { value: "even", label: "Grid Standard", hint: "Kolom rata 2x2" },
+              { value: "masonry", label: "Masonry View", hint: "Tinggi bervariasi" },
+              { value: "hero-left", label: "Hero Kiri", hint: "Satu besar di kiri" },
+              { value: "hero-top", label: "Hero Atas", hint: "Satu besar di atas" },
+              { value: "mosaic", label: "Multi-Size", hint: "Mosaic campuran" },
+            ]}
+            value={feature.galleryLayoutTemplate || "even"}
+            onSelect={(galleryLayoutTemplate: GalleryLayoutTemplate) =>
+              update({ galleryLayoutTemplate })
+            }
+            glyph={(value) => <GalleryLayoutGlyph layout={value} />}
+          />
         )}
         <PerElementColorEditor feature={feature} update={update} />
         <FeatureBackgroundImageEditor
@@ -11967,6 +12739,151 @@ function BoxStyle({
   );
 }
 
+/**
+ * Halaman RSVP Confirmation pada dashboard customer.
+ *
+ * Menggantikan Add Canvas di sisi customer: ringkasan kehadiran, daftar
+ * konfirmasi per Canvas, dan ekspor CSV untuk katering/seating.
+ */
+function RsvpConfirmationPage({
+  guests,
+  sections,
+  siteTitle,
+  flash,
+}: {
+  guests: Guest[];
+  sections: CanvasSection[];
+  siteTitle: string;
+  flash: (message: string) => void;
+}) {
+  const [canvasFilter, setCanvasFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const canvasName = (canvasId: string) =>
+    sections.find((section) => section.id === canvasId)?.name || "Tanpa Canvas";
+  const visible = guests.filter(
+    (guest) =>
+      (canvasFilter === "all" || guest.canvasId === canvasFilter) &&
+      (statusFilter === "all" || guest.status === statusFilter),
+  );
+  const count = (status: Guest["status"]) =>
+    guests.filter((guest) => guest.status === status).length;
+  const totalPax = guests
+    .filter((guest) => guest.status === "Hadir")
+    .reduce((total, guest) => total + (guest.pax || 0), 0);
+  const exportCsv = () => {
+    if (!visible.length) {
+      flash("Belum ada konfirmasi RSVP untuk diekspor.");
+      return;
+    }
+    const escape = (value: string) => `"${String(value).replace(/"/g, '""')}"`;
+    const rows = [
+      "name,status,pax,canvas,waktu",
+      ...visible.map((guest) =>
+        [
+          escape(guest.name),
+          escape(guest.status),
+          String(guest.pax ?? 0),
+          escape(canvasName(guest.canvasId)),
+          escape(guest.time || ""),
+        ].join(","),
+      ),
+    ];
+    const blob = new Blob([rows.join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `rsvp-${(siteTitle || "website").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+    flash(`${visible.length} konfirmasi RSVP diekspor.`);
+  };
+  return (
+    <div className="page">
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow">RSVP CONFIRMATION</div>
+          <h1>Konfirmasi kehadiran tamu</h1>
+          <p>
+            Rekap jawaban RSVP dari undangan Anda, lengkap dengan jumlah pax
+            untuk kebutuhan katering dan seating.
+          </p>
+        </div>
+        <button className="secondary-btn" onClick={exportCsv}>
+          <Download size={16} /> Export CSV
+        </button>
+      </div>
+      <section className="invitee-summary">
+        <article>
+          <CheckCircle size={20} />
+          <strong>{count("Hadir")}</strong>
+          <span>Hadir</span>
+        </article>
+        <article>
+          <X size={20} />
+          <strong>{count("Tidak hadir")}</strong>
+          <span>Tidak hadir</span>
+        </article>
+        <article>
+          <Clock3 size={20} />
+          <strong>{count("Menunggu")}</strong>
+          <span>Menunggu</span>
+        </article>
+        <article>
+          <Users size={20} />
+          <strong>{totalPax}</strong>
+          <span>Total pax hadir</span>
+        </article>
+      </section>
+      <div className="rsvp-filter-bar">
+        <label>
+          Canvas
+          <select
+            value={canvasFilter}
+            onChange={(event) => setCanvasFilter(event.target.value)}
+          >
+            <option value="all">Semua Canvas</option>
+            {sections.map((section) => (
+              <option key={section.id} value={section.id}>
+                {section.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Status
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+          >
+            <option value="all">Semua status</option>
+            <option value="Hadir">Hadir</option>
+            <option value="Tidak hadir">Tidak hadir</option>
+            <option value="Menunggu">Menunggu</option>
+          </select>
+        </label>
+        <span className="rsvp-filter-count">{visible.length} konfirmasi</span>
+      </div>
+      {visible.length ? (
+        <div className="rsvp-confirmation-list">
+          {visible.map((guest, index) => (
+            <GuestRow key={`${guest.name}-${index}`} guest={guest} index={index} />
+          ))}
+        </div>
+      ) : (
+        <div className="empty-state">
+          <Users size={32} />
+          <h2>Belum ada konfirmasi</h2>
+          <p>
+            Konfirmasi dari tamu akan muncul di sini begitu mereka mengisi form
+            RSVP pada undangan Anda.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InviteeManagementPage({
   sections,
   selectedSectionId,
@@ -12041,18 +12958,40 @@ function InviteeManagementPage({
     updateSection(section.id, { invitees: [...section.invitees, ...imported] });
     flash(`${imported.length} undangan berhasil diimpor.`);
   };
-  const download = () => {
-    const blob = new Blob(
-      [
-        "name,email,phone,city\nAdi Pratama,adi@example.com,08123456789,Jakarta",
-      ],
-      { type: "text/csv" },
-    );
+  const saveCsv = (filename: string, content: string) => {
+    const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "format-list-undangan.csv";
+    link.download = filename;
     link.click();
     URL.revokeObjectURL(link.href);
+  };
+  const download = () =>
+    saveCsv(
+      "format-list-undangan.csv",
+      "name,email,phone,city\nAdi Pratama,adi@example.com,08123456789,Jakarta",
+    );
+  // Ekspor daftar tamu yang sebenarnya — sebelumnya hanya tersedia unduhan
+  // format kosong, jadi daftar yang sudah diisi tidak bisa dibawa keluar.
+  const exportCsv = () => {
+    if (!section.invitees.length) {
+      flash("Belum ada undangan pada Canvas ini untuk diekspor.");
+      return;
+    }
+    const escape = (value: string) => `"${String(value || "").replace(/"/g, '""')}"`;
+    const rows = [
+      "name,email,phone,city",
+      ...section.invitees.map((invitee) =>
+        [invitee.name, invitee.email, invitee.phone, invitee.city]
+          .map(escape)
+          .join(","),
+      ),
+    ];
+    const safeName = (section.name || "canvas")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-");
+    saveCsv(`list-undangan-${safeName}.csv`, rows.join("\n"));
+    flash(`${section.invitees.length} undangan diekspor.`);
   };
   return (
     <div className="invitee-page">
@@ -12137,8 +13076,12 @@ function InviteeManagementPage({
             <Upload size={14} />
             Import CSV
           </button>
-          <button onClick={download}>
+          <button onClick={exportCsv}>
             <Download size={14} />
+            Export CSV
+          </button>
+          <button onClick={download}>
+            <FileText size={14} />
             Download Format
           </button>
         </div>
@@ -12762,7 +13705,7 @@ function LayerImageUpload({
       </button>
       {layer.url && (
         <div className="layer-thumb">
-          <img src={layer.url} alt="Preview layer" />
+          <img src={assetUrl(layer.url)} alt="Preview layer" />
         </div>
       )}
     </div>
@@ -13292,6 +14235,7 @@ function WeddingCanvas({
   guestName?: string;
 }) {
   const thumbnail = useContext(ThumbnailContext);
+  const previewSurface = useContext(PreviewSurfaceContext);
   // background-attachment: fixed memakai ukuran viewport, bukan ukuran elemen.
   // Di thumbnail yang di-scale, efeknya gambar tampak sangat ter-zoom, jadi
   // penguncian background hanya diterapkan pada tampilan publik berukuran penuh.
@@ -13318,7 +14262,14 @@ function WeddingCanvas({
       sections
         .flatMap((section) => section.columns)
         .flatMap((column) => column.features)
-        .find((feature) => feature.type === "sound" && !thumbnail),
+        .find(
+          (feature) =>
+            !thumbnail &&
+            (feature.type === "sound" ||
+              // QA TC-165: backsound kini dapat berasal dari Credit / Watermark.
+              (feature.type === "credit" &&
+                Boolean(feature.mediaUrl || feature.soundPreset))),
+        ),
     [sections, thumbnail],
   );
   const [opened, setOpened] = useState(editable || !hasCover);
@@ -13375,6 +14326,7 @@ function WeddingCanvas({
       feature={soundFeature}
       playing={soundPlaying}
       onToggle={() => (soundPlaying ? stopSound() : startSound())}
+      contained={previewSurface}
     />
   ) : null;
 
@@ -13525,7 +14477,7 @@ function WeddingCanvas({
               className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed && allowFixedBackground ? "is-fixed" : ""} loop-${section.backgroundLoopEffect || "none"}`}
               style={{
                 backgroundImage: section.backgroundUrl
-                  ? `url(${section.backgroundUrl})`
+                  ? `url(${assetUrl(section.backgroundUrl)})`
                   : undefined,
                 backgroundPosition: section.backgroundPosition,
                 backgroundRepeat: section.backgroundRepeat,
@@ -13573,7 +14525,9 @@ function WeddingCanvas({
                 key={layer.id}
                 className={`background-extra-layer ${layer.fixed ? "is-fixed" : ""}`}
                 style={{
-                  backgroundImage: layer.url ? `url(${layer.url})` : undefined,
+                  backgroundImage: layer.url
+                    ? `url(${assetUrl(layer.url)})`
+                    : undefined,
                   backgroundSize: layer.size,
                   backgroundPosition: `${layer.offsetX ?? 50}% ${layer.offsetY ?? 50}%`,
                   backgroundRepeat: layer.repeat,
@@ -13814,7 +14768,7 @@ function InvitationCover({
         className={`invitation-section-bg ${getBackgroundMotionClass(section.backgroundMotion)}`}
         style={{
           backgroundImage: section.backgroundUrl
-            ? `url(${section.backgroundUrl})`
+            ? `url(${assetUrl(section.backgroundUrl)})`
             : undefined,
           backgroundPosition: section.backgroundPosition,
           backgroundRepeat: section.backgroundRepeat,
@@ -14087,7 +15041,7 @@ function FeatureBlock({
     // QA TC-117: background image per feature. TC-107: opsi tetap diam saat scroll.
     ...(feature.backgroundImageUrl
       ? {
-          backgroundImage: `url(${feature.backgroundImageUrl})`,
+          backgroundImage: `url(${assetUrl(feature.backgroundImageUrl)})`,
           backgroundSize: feature.backgroundImageSize || "cover",
           backgroundPosition: feature.backgroundImagePosition || "center",
           backgroundRepeat: "no-repeat",
@@ -14245,7 +15199,7 @@ function FeatureBlock({
             className={`cover-editor-bg ${getBackgroundMotionClass(feature.backgroundMotion)}`}
             style={{
               backgroundImage: feature.mediaUrl
-                ? `url(${feature.mediaUrl})`
+                ? `url(${assetUrl(feature.mediaUrl)})`
                 : undefined,
               backgroundPosition: feature.backgroundPosition || "center",
               backgroundRepeat: feature.backgroundRepeat || "no-repeat",
@@ -14488,7 +15442,11 @@ function LoveStoryFeature({
           >
             {item.imageUrl && (
               <div className="love-story-image">
-                <img src={item.imageUrl} alt={item.title} loading="lazy" />
+                <img
+                  src={assetUrl(item.imageUrl)}
+                  alt={item.title}
+                  loading="lazy"
+                />
               </div>
             )}
             <div className="love-story-copy">
@@ -14559,6 +15517,22 @@ function CreditFeature({
     className: string,
   ) => React.ReactNode;
 }) {
+  // QA TC-165: pemutar backsound kini menyatu dengan watermark, bukan feature
+  // Sound terpisah, sehingga judul lagu hanya muncul di satu tempat.
+  const hasAudio = Boolean(feature.mediaUrl || feature.soundPreset);
+  const playerRef = useRef<{ stop: () => void } | null>(null);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => () => playerRef.current?.stop(), []);
+  const toggleAudio = () => {
+    if (playing) {
+      playerRef.current?.stop();
+      playerRef.current = null;
+      setPlaying(false);
+      return;
+    }
+    playerRef.current = createSoundPlayback(feature, true);
+    setPlaying(true);
+  };
   return (
     <div className="credit-feature">
       {editableText("title", "editable-title")}
@@ -14566,8 +15540,19 @@ function CreditFeature({
       <div className="credit-meta" style={giftCardStyle(feature)}>
         {feature.creditSongTitle && (
           <span className="credit-song">
-            <Disc3 size={14} /> {feature.creditSongTitle}
+            <Disc3 size={14} className={playing ? "spinning" : ""} />{" "}
+            {feature.creditSongTitle}
           </span>
+        )}
+        {hasAudio && (
+          <button
+            type="button"
+            className="credit-audio-toggle"
+            onClick={toggleAudio}
+            title={playing ? "Hentikan backsound" : "Putar backsound"}
+          >
+            {playing ? <VolumeX size={14} /> : <Volume2 size={14} />}
+          </button>
         )}
         <span className="credit-created">
           {feature.creditLink ? (
@@ -14915,7 +15900,9 @@ function LocationFeature({ feature }: { feature: Feature }) {
 
 function GalleryFeature({ feature }: { feature: Feature }) {
   const [activeIndex, setActiveIndex] = useState(0);
-  const images = feature.galleryUrls || [];
+  // Galeri bisa menyimpan path relatif dari upload lama; assetUrl membuat
+  // keduanya (relatif maupun absolut) tetap tampil di preview dan di publik.
+  const images = (feature.galleryUrls || []).map((url) => assetUrl(url));
   useEffect(() => {
     if (activeIndex >= images.length)
       setActiveIndex(Math.max(0, images.length - 1));
@@ -15118,7 +16105,7 @@ function ImageLayoutFeature({
   const media = (url?: string, extraClass = "") =>
     url ? (
       <img
-        src={url}
+        src={assetUrl(url)}
         alt={feature.title}
         loading="lazy"
         className={extraClass}
@@ -15537,6 +16524,10 @@ function PreviewModal({
 }) {
   const [page, setPage] = useState<PageKey>("pages");
   const [mode, setMode] = useState<"desktop" | "mobile">("desktop");
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  // Preview selalu dibuka dari section pembuka, termasuk saat berpindah
+  // tab Pages/RSVP atau mengganti mode Desktop/Mobile.
+  useScrollResetOnOpen(stageRef, true, page, mode);
   return (
     <div className="preview-overlay">
       <div className="preview-full">
@@ -15578,7 +16569,8 @@ function PreviewModal({
           </div>
         </header>
         <DeviceContext value={mode}>
-        <div className={`preview-full-stage ${mode}`}>
+        <PreviewSurfaceContext value={true}>
+        <div ref={stageRef} className={`preview-full-stage ${mode}`}>
           <div className="preview-content">
             <WeddingCanvas
               page={page}
@@ -15591,6 +16583,7 @@ function PreviewModal({
             />
           </div>
         </div>
+        </PreviewSurfaceContext>
         </DeviceContext>
       </div>
     </div>
@@ -15801,14 +16794,20 @@ function Articles({
   articles,
   openEditor,
   canManage,
+  onToggleStatus,
+  onDelete,
 }: {
   articles: ArticleItem[];
   openEditor: (id?: string) => void;
   canManage: boolean;
+  onToggleStatus?: (article: ArticleItem, next: string) => Promise<void>;
+  onDelete?: (article: ArticleItem) => Promise<void>;
 }) {
   const [selectedArticle, setSelectedArticle] = useState<ArticleItem | null>(
     null,
   );
+  // QA TC-174: hapus permanen selalu lewat konfirmasi.
+  const [deleteTarget, setDeleteTarget] = useState<ArticleItem | null>(null);
   const [query, setQuery] = useState("");
   const sourceArticles = canManage
     ? articles
@@ -15922,26 +16921,77 @@ function Articles({
                 </td>
                 <td>{article.views}</td>
                 <td>
-                  <button
-                    className="icon-btn small"
-                    onClick={() =>
-                      canManage
-                        ? openEditor(article.id)
-                        : setSelectedArticle(article)
-                    }
-                  >
-                    {canManage ? (
-                      <WandSparkles size={15} />
-                    ) : (
-                      <ExternalLink size={15} />
+                  <div className="row-actions">
+                    <button
+                      className="icon-btn small"
+                      title={canManage ? "Edit artikel" : "Baca artikel"}
+                      onClick={() =>
+                        canManage
+                          ? openEditor(article.id)
+                          : setSelectedArticle(article)
+                      }
+                    >
+                      {canManage ? (
+                        <WandSparkles size={15} />
+                      ) : (
+                        <ExternalLink size={15} />
+                      )}
+                    </button>
+                    {/* QA TC-173: tarik publish artikel tanpa menghapusnya. */}
+                    {canManage && onToggleStatus && (
+                      <button
+                        className="icon-btn small"
+                        title={
+                          article.status === "Published"
+                            ? "Takedown (tarik dari publikasi)"
+                            : "Publish artikel"
+                        }
+                        onClick={() =>
+                          void onToggleStatus(
+                            article,
+                            article.status === "Published"
+                              ? "Draft"
+                              : "Published",
+                          )
+                        }
+                      >
+                        {article.status === "Published" ? (
+                          <EyeOff size={15} />
+                        ) : (
+                          <Eye size={15} />
+                        )}
+                      </button>
                     )}
-                  </button>
+                    {/* QA TC-174: hapus artikel permanen. */}
+                    {canManage && onDelete && (
+                      <button
+                        className="row-delete"
+                        title="Hapus artikel permanen"
+                        onClick={() => setDeleteTarget(article)}
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {deleteTarget && (
+        <ConfirmModal
+          title="Hapus artikel ini?"
+          description={`"${deleteTarget.title}" akan dihapus permanen dan tidak bisa dikembalikan.`}
+          confirmLabel="Hapus permanen"
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            const target = deleteTarget;
+            setDeleteTarget(null);
+            void onDelete?.(target);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -16937,13 +17987,19 @@ function CustomerServiceDatabase({
   conversations: any[];
   users: any[];
   onRefresh: () => Promise<void>;
-  onReply: (id: string, text: string) => Promise<void>;
+  onReply: (
+    id: string,
+    text: string,
+    visibility?: "public" | "internal",
+  ) => Promise<void>;
   onOutbound: (userId: string, text: string) => Promise<void>;
   onStatus: (id: string, status: string) => Promise<void>;
   onRead: (id: string) => Promise<void>;
 }) {
   const [selectedId, setSelectedId] = useState(conversations[0]?.id || "");
   const [reply, setReply] = useState("");
+  // Mode pengiriman: balasan ke customer, atau catatan internal antar staff.
+  const [replyMode, setReplyMode] = useState<"public" | "internal">("public");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<
     "All" | "Needs Reply" | "Unread" | "Open" | "Pending" | "Resolved"
@@ -17140,8 +18196,14 @@ function CustomerServiceDatabase({
                 {(selected.messages || []).map((message: any) => (
                   <div
                     key={message.id}
-                    className={`cs-message ${message.sender_type === "support" ? "support" : message.sender_type === "system" ? "system" : "user"}`}
+                    className={`cs-message ${message.sender_type === "support" ? "support" : message.sender_type === "system" ? "system" : "user"} ${message.visibility === "internal" ? "internal-note" : ""}`}
                   >
+                    {message.visibility === "internal" && (
+                      <em className="internal-note-badge">
+                        <Lock size={11} /> Catatan internal · tidak terlihat oleh
+                        customer
+                      </em>
+                    )}
                     <p>{message.body}</p>
                     <span>
                       {new Date(message.created_at).toLocaleString("id-ID")}
@@ -17150,31 +18212,59 @@ function CustomerServiceDatabase({
                 ))}
               </div>
               <form
+                className={replyMode === "internal" ? "internal-mode" : ""}
                 onSubmit={async (event) => {
                   event.preventDefault();
                   if (!reply.trim()) return;
                   const value = reply;
                   setReply("");
                   try {
-                    await onReply(selected.id, value);
+                    await onReply(selected.id, value, replyMode);
                   } catch {
                     setReply(value);
                   }
                 }}
               >
+                {/* Catatan internal untuk koordinasi Web Designer dengan CS pada
+                    satu tiket, mirip internal comment di Jira. */}
+                <div className="reply-mode-switch">
+                  <button
+                    type="button"
+                    className={replyMode === "public" ? "active" : ""}
+                    onClick={() => setReplyMode("public")}
+                  >
+                    <Send size={13} /> Balasan ke customer
+                  </button>
+                  <button
+                    type="button"
+                    className={replyMode === "internal" ? "active" : ""}
+                    onClick={() => setReplyMode("internal")}
+                  >
+                    <Lock size={13} /> Catatan internal
+                  </button>
+                </div>
                 <textarea
                   value={reply}
                   onChange={(event) => setReply(event.target.value)}
-                  placeholder="Balas customer..."
+                  placeholder={
+                    replyMode === "internal"
+                      ? "Catatan untuk tim (CS / Web Designer). Customer tidak melihat ini..."
+                      : "Balas customer..."
+                  }
                 />
                 <div>
                   <span>
-                    Balasan tersimpan pada conversation dan notifikasi email
-                    dikirim sesuai konfigurasi.
+                    {replyMode === "internal"
+                      ? "Catatan ini hanya terlihat oleh staff. Tidak dikirim ke live chat maupun email customer."
+                      : "Balasan tersimpan pada conversation dan notifikasi email dikirim sesuai konfigurasi."}
                   </span>
                   <button className="primary-btn" type="submit">
-                    <Send size={15} />
-                    Send reply
+                    {replyMode === "internal" ? (
+                      <Lock size={15} />
+                    ) : (
+                      <Send size={15} />
+                    )}
+                    {replyMode === "internal" ? "Simpan catatan" : "Send reply"}
                   </button>
                 </div>
               </form>
@@ -17328,8 +18418,8 @@ function MyOrdersPage({
       <div className="page">
         <div className="page-heading">
           <div>
-            <div className="eyebrow">MY PROJECT</div>
-            <h1>Orders & project journey</h1>
+            <div className="eyebrow">MY ORDER</div>
+            <h1>Order undangan Anda</h1>
             <p>
               Riwayat pembelian, receipt, assignment, dan progress onboarding
               Anda akan tampil di sini.
@@ -17349,48 +18439,107 @@ function MyOrdersPage({
         </div>
       </div>
     );
+  // QA TC-176: ringkasan di atas supaya customer langsung tahu posisi seluruh
+  // ordernya tanpa harus membaca kartu satu per satu.
+  const paidOrders = orders.filter((order) => order.payment_status === "Paid");
+  const doneOrders = paidOrders.filter(
+    (order) => order.fulfillment_status === "Complete",
+  );
+  const totalValue = paidOrders.reduce(
+    (total, order) => total + (Number(order.amount) || 0),
+    0,
+  );
+  const taskProgress = (order: any) => {
+    const tasks = order.tasks || [];
+    if (!tasks.length) return 0;
+    const done = tasks.filter((task: any) =>
+      ["Done", "Approved"].includes(task.status),
+    ).length;
+    return Math.round((done / tasks.length) * 100);
+  };
   return (
     <div className="page my-orders-page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">MY PROJECT</div>
-          <h1>Orders & project journey</h1>
+          <div className="eyebrow">MY ORDER</div>
+          <h1>Order &amp; progress undangan Anda</h1>
           <p>
-            Pantau pembayaran, tim yang ditugaskan, task onboarding, dan receipt
-            dalam satu halaman.
+            Pantau pembayaran, tim yang mengerjakan, progress pengerjaan, dan
+            receipt dalam satu halaman.
           </p>
         </div>
       </div>
+      <section className="invitee-summary my-order-summary">
+        <article>
+          <PackageCheck size={20} />
+          <strong>{orders.length}</strong>
+          <span>Total order</span>
+        </article>
+        <article>
+          <Clock3 size={20} />
+          <strong>{paidOrders.length - doneOrders.length}</strong>
+          <span>Sedang dikerjakan</span>
+        </article>
+        <article>
+          <CheckCircle size={20} />
+          <strong>{doneOrders.length}</strong>
+          <span>Selesai</span>
+        </article>
+        <article>
+          <ReceiptText size={20} />
+          <strong>{formatRupiah(totalValue)}</strong>
+          <span>Total dibayar</span>
+        </article>
+      </section>
       <div className="project-order-grid">
-        {orders.map((order) => (
+        {orders.map((order) => {
+          const progress = taskProgress(order);
+          const paid = order.payment_status === "Paid";
+          return (
           <article key={order.id} className="project-order-card">
             <header>
               <div>
                 <span>{order.order_no}</span>
                 <h2>{order.template_name}</h2>
+                <small className="project-order-date">
+                  Dipesan {formatShortDate(order.created_at)}
+                </small>
               </div>
               <span
                 className={`status ${String(order.payment_status).toLowerCase()}`}
               >
-                {order.payment_status}
+                {paid ? "Lunas" : "Menunggu pembayaran"}
               </span>
             </header>
+            {/* QA TC-176: progress pengerjaan ditampilkan sebagai bar, bukan
+                hanya daftar task yang harus dibaca satu per satu. */}
+            {paid && (order.tasks || []).length > 0 && (
+              <div className="project-progress">
+                <div className="project-progress-head">
+                  <span>Progress pengerjaan</span>
+                  <strong>{progress}%</strong>
+                </div>
+                <div className="project-progress-bar">
+                  <i style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            )}
             <div className="project-order-summary">
               <div>
                 <small>Total</small>
                 <strong>{formatRupiah(order.amount)}</strong>
               </div>
               <div>
-                <small>Project status</small>
+                <small>Status project</small>
                 <strong>{order.order_status}</strong>
               </div>
               <div>
                 <small>Customer Service</small>
-                <strong>{order.cs_name || "Assignment in progress"}</strong>
+                <strong>{order.cs_name || "Menunggu assignment"}</strong>
               </div>
               <div>
                 <small>Web Designer</small>
-                <strong>{order.editor_name || "Assignment in progress"}</strong>
+                <strong>{order.editor_name || "Menunggu assignment"}</strong>
               </div>
             </div>
             <div className="project-timeline">
@@ -17431,12 +18580,13 @@ function MyOrdersPage({
               {order.conversation && (
                 <button onClick={() => setView("help")}>
                   <MessageCircle size={15} />
-                  Contact support
+                  Hubungi support
                 </button>
               )}
             </footer>
           </article>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -18105,7 +19255,7 @@ function createAudioPreset(feature: Feature, loop = false) {
 
 function createSoundPlayback(feature: Feature, loop = true) {
   if (feature.mediaUrl) {
-    const audio = new Audio(feature.mediaUrl);
+    const audio = new Audio(assetUrl(feature.mediaUrl));
     audio.loop = loop;
     audio.volume = 0.72;
     void audio.play().catch(() => undefined);
@@ -18133,28 +19283,15 @@ function SoundFeature({ feature }: { feature: Feature }) {
     setPlaying(true);
   };
   useEffect(() => () => playerRef.current?.stop(), []);
+  // QA TC-165: kartu Sound yang besar dihapus. Judul lagu sekarang hanya tampil
+  // pada Credit / Watermark, jadi feature sound pada template lama tinggal
+  // menyisakan kontrol pemutar ringkas agar tidak ada tampilan ganda.
   return (
-    <div className="sound-feature">
-      <div className="sound-feature-top">
-        <Disc3 size={30} className={playing ? "spinning" : ""} />
-        <div>
-          <strong>{feature.title}</strong>
-          <span>
-            {feature.mediaName || feature.body || "Wedding backsound"}
-          </span>
-        </div>
-      </div>
-      <div className="sound-badges">
-        <span>
-          {feature.mediaUrl
-            ? "Uploaded file"
-            : feature.soundPreset || "romantic-piano"}
-        </span>
-        {feature.autoplay && <span>Autoplay enabled</span>}
-      </div>
+    <div className="sound-feature compact">
       <button type="button" onClick={toggle}>
-        {playing ? <VolumeX size={16} /> : <Volume2 size={16} />}{" "}
-        {playing ? "Stop preview" : "Play sound preview"}
+        {playing ? <VolumeX size={16} /> : <Volume2 size={16} />}
+        <Disc3 size={16} className={playing ? "spinning" : ""} />
+        <span>{playing ? "Hentikan backsound" : "Putar backsound"}</span>
       </button>
     </div>
   );
@@ -18494,6 +19631,45 @@ function startFreeResize(
 }
 
 // TC-078/079/082..089/095 — blok teks bebas yang bisa ditambahkan pada feature apa pun.
+/**
+ * QA TC-171 — teks tambahan dapat ditempatkan bebas di dalam section.
+ *
+ * Item dengan `free: true` dilepas dari aliran normal dan diposisikan terhadap
+ * section; di editor ia dapat digeser langsung dengan pointer. Item tanpa
+ * `free` tetap berperilaku seperti sebelumnya (menumpuk di bawah feature),
+ * sehingga template yang sudah ada tidak berubah tampilannya.
+ */
+function startExtraTextMove(
+  event: React.PointerEvent,
+  item: ExtraText,
+  onMove: (patch: { posX: number; posY: number }) => void,
+) {
+  event.preventDefault();
+  event.stopPropagation();
+  const node = event.currentTarget as HTMLElement;
+  const section = node.closest(".canvas-section") as HTMLElement | null;
+  if (!section) return;
+  const rect = section.getBoundingClientRect();
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const baseX = item.posX ?? 50;
+  const baseY = item.posY ?? 0;
+  const move = (e: PointerEvent) => {
+    const dx = ((e.clientX - startX) / Math.max(1, rect.width)) * 100;
+    const dy = e.clientY - startY;
+    onMove({
+      posX: Math.round(Math.max(0, Math.min(100, baseX + dx)) * 10) / 10,
+      posY: Math.round(Math.max(-2000, baseY + dy)),
+    });
+  };
+  const up = () => {
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", up);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", up);
+}
+
 function ExtraTextBlocks({
   feature,
   editable,
@@ -18505,47 +19681,79 @@ function ExtraTextBlocks({
 }) {
   const items = feature.extraTexts || [];
   if (!items.length) return null;
-  const patchItem = (id: string, text: string) =>
+  const patchItem = (id: string, patch: Partial<ExtraText>) =>
     onUpdate({
       extraTexts: items.map((item) =>
-        item.id === id ? { ...item, text } : item,
+        item.id === id ? { ...item, ...patch } : item,
       ),
     });
-  return (
-    <div className="extra-text-stack">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className="extra-text-line"
-          contentEditable={editable && !feature.locked}
-          suppressContentEditableWarning
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              document.execCommand("insertLineBreak");
+  const canEdit = editable && !feature.locked;
+  const renderLine = (item: ExtraText) => (
+    <div
+      key={item.id}
+      className={`extra-text-line ${item.free ? "is-free" : ""}`}
+      contentEditable={canEdit}
+      suppressContentEditableWarning
+      onKeyDown={(event) => {
+        if (event.key === "Enter") {
+          event.preventDefault();
+          document.execCommand("insertLineBreak");
+        }
+      }}
+      onBlur={(event) =>
+        patchItem(item.id, {
+          text: (event.currentTarget as HTMLElement).innerText.replace(
+            /\n$/,
+            "",
+          ),
+        })
+      }
+      style={{
+        fontSize: item.fontSize,
+        textAlign: item.align,
+        color: item.color,
+        fontWeight: item.bold ? 700 : 400,
+        fontStyle: item.italic ? "italic" : "normal",
+        fontFamily: item.fontFamily || "inherit",
+        marginTop: item.free ? undefined : (item.spacing ?? 8),
+        whiteSpace: "pre-wrap",
+        ...(item.free
+          ? {
+              position: "absolute" as const,
+              left: `${item.posX ?? 50}%`,
+              top: `${item.posY ?? 0}px`,
+              transform: "translateX(-50%)",
+              zIndex: 4,
             }
-          }}
-          onBlur={(event) =>
-            patchItem(
-              item.id,
-              (event.currentTarget as HTMLElement).innerText.replace(/\n$/, ""),
+          : {}),
+      }}
+    >
+      {canEdit && item.free && (
+        <span
+          className="extra-text-drag"
+          title="Geser untuk memindahkan teks"
+          onPointerDown={(event) =>
+            startExtraTextMove(event, item, (patch) =>
+              patchItem(item.id, patch),
             )
           }
-          style={{
-            fontSize: item.fontSize,
-            textAlign: item.align,
-            color: item.color,
-            fontWeight: item.bold ? 700 : 400,
-            fontStyle: item.italic ? "italic" : "normal",
-            fontFamily: item.fontFamily || "inherit",
-            marginTop: item.spacing ?? 8,
-            whiteSpace: "pre-wrap",
-          }}
+          contentEditable={false}
         >
-          {item.text}
-        </div>
-      ))}
+          <Move size={11} />
+        </span>
+      )}
+      {item.text}
     </div>
+  );
+  const flowItems = items.filter((item) => !item.free);
+  const freeItems = items.filter((item) => item.free);
+  return (
+    <>
+      {flowItems.length > 0 && (
+        <div className="extra-text-stack">{flowItems.map(renderLine)}</div>
+      )}
+      {freeItems.map(renderLine)}
+    </>
   );
 }
 
@@ -18611,6 +19819,60 @@ function ExtraTextEditor({
             onChange={(event) => patch(item.id, { text: event.target.value })}
             placeholder="Tulis teks. Tekan Enter untuk baris baru."
           />
+          {/* QA TC-171: teks tambahan tidak harus menempel di bawah section. */}
+          <div className="setting-row compact">
+            <div>
+              <Move size={16} />
+              <span>
+                <strong>Posisi bebas</strong>
+                <small>
+                  Lepaskan teks dari urutan bawah, lalu geser langsung di canvas.
+                </small>
+              </span>
+            </div>
+            <button
+              className={`toggle ${item.free ? "on" : ""}`}
+              onClick={() =>
+                patch(item.id, {
+                  free: !item.free,
+                  posX: item.posX ?? 50,
+                  posY: item.posY ?? 0,
+                })
+              }
+            >
+              <i />
+            </button>
+          </div>
+          {item.free && (
+            <>
+              <label>
+                Posisi horizontal <span>{item.posX ?? 50}%</span>
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  step="0.5"
+                  value={item.posX ?? 50}
+                  onChange={(event) =>
+                    patch(item.id, { posX: Number(event.target.value) })
+                  }
+                />
+              </label>
+              <label>
+                Posisi vertikal <span>{item.posY ?? 0}px</span>
+                <input
+                  type="range"
+                  min="-200"
+                  max="900"
+                  step="2"
+                  value={item.posY ?? 0}
+                  onChange={(event) =>
+                    patch(item.id, { posY: Number(event.target.value) })
+                  }
+                />
+              </label>
+            </>
+          )}
           <div className="two-inputs">
             <label>
               Font size <span>{item.fontSize}px</span>
@@ -18684,16 +19946,58 @@ function ExtraTextEditor({
 }
 
 // TC-083 — video autoplay, loop, dan mute.
+// Video tidak lagi diputar sejak undangan dibuka. Playback baru dimulai ketika
+// section video benar-benar masuk viewport, dan dijeda lagi saat keluar, supaya
+// suara/video tidak berjalan di balik section lain dan tidak menghabiskan
+// bandwidth tamu sebelum bagiannya dilihat.
+const VIDEO_VISIBILITY_RATIO = 0.45;
 function VideoFeature({ feature }: { feature: Feature }) {
   const thumbnail = useContext(ThumbnailContext);
   const ref = useRef<HTMLVideoElement | null>(null);
+  // Sekali tamu menekan pause sendiri, observer berhenti ikut campur.
+  const userPaused = useRef(false);
+  const autoplay = feature.videoAutoplay !== false;
   useEffect(() => {
     const node = ref.current;
     if (!node || thumbnail) return;
     node.muted = feature.videoMuted !== false;
-    if (feature.videoAutoplay !== false)
+    if (!autoplay) return;
+    userPaused.current = false;
+    // Browser tanpa IntersectionObserver (atau saat dirender di luar dokumen)
+    // tetap memakai perilaku lama supaya video tidak pernah "mati".
+    if (typeof IntersectionObserver === "undefined") {
       void node.play().catch(() => undefined);
-  }, [feature.videoAutoplay, feature.videoMuted, feature.mediaUrl, thumbnail]);
+      return;
+    }
+    const onPause = () => {
+      if (!node.ended && !node.seeking) userPaused.current = true;
+    };
+    const onPlay = () => {
+      userPaused.current = false;
+    };
+    node.addEventListener("pause", onPause);
+    node.addEventListener("play", onPlay);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (!entry) return;
+        if (entry.isIntersecting) {
+          if (!userPaused.current) void node.play().catch(() => undefined);
+        } else if (!node.paused) {
+          node.pause();
+          // Jeda otomatis bukan jeda dari tamu.
+          userPaused.current = false;
+        }
+      },
+      { threshold: VIDEO_VISIBILITY_RATIO },
+    );
+    observer.observe(node);
+    return () => {
+      observer.disconnect();
+      node.removeEventListener("pause", onPause);
+      node.removeEventListener("play", onPlay);
+    };
+  }, [autoplay, feature.videoMuted, feature.mediaUrl, thumbnail]);
   if (!feature.mediaUrl)
     return (
       <div className="video-feature">
@@ -18711,10 +20015,11 @@ function VideoFeature({ feature }: { feature: Feature }) {
         controls
         playsInline
         preload={thumbnail ? "none" : "metadata"}
-        autoPlay={!thumbnail && feature.videoAutoplay !== false}
+        /* autoPlay sengaja tidak dipasang: pemutaran dikendalikan
+           IntersectionObserver di atas supaya mulai saat section terlihat. */
         loop={feature.videoLoop !== false}
         muted={feature.videoMuted !== false}
-        src={feature.mediaUrl}
+        src={assetUrl(feature.mediaUrl)}
         style={{ borderRadius: feature.borderRadius }}
       />
     </div>
@@ -18984,15 +20289,17 @@ function ControlledSoundPlayer({
   feature,
   playing,
   onToggle,
+  contained = false,
 }: {
   feature: Feature;
   playing: boolean;
   onToggle: () => void;
+  contained?: boolean;
 }) {
   return (
     <button
       type="button"
-      className={`fixed-sound-disc sound-pos-${feature.objectAlign || "left"} ${playing ? "playing" : ""}`}
+      className={`fixed-sound-disc sound-pos-${feature.objectAlign || "left"} ${playing ? "playing" : ""} ${contained ? "is-contained" : ""}`}
       onClick={onToggle}
       title={
         playing ? "Matikan backsound" : `Putar ${feature.title || feature.body}`
@@ -19945,6 +21252,249 @@ function FeatureBackgroundImageEditor({
 }
 
 // QA TC-129 — pilihan template layout untuk feature Image.
+/* ------------------------------------------------------------------
+   Pemilih layout berbasis ikon.
+
+   Sebelumnya layout Image dan Gallery dipilih lewat <select> berisi nama
+   ("Dua gambar saling tumpang", "Hero kiri + grid kanan"), sehingga Web
+   Designer harus membayangkan hasilnya. Sekarang tiap opsi ditampilkan sebagai
+   kartu dengan sketsa susunannya. Sketsa digambar inline sebagai SVG supaya
+   ikut warna tema dan tidak menambah file aset.
+   ------------------------------------------------------------------ */
+type LayoutOption<T extends string> = {
+  value: T;
+  label: string;
+  hint?: string;
+};
+
+function LayoutOptionPicker<T extends string>({
+  legend,
+  options,
+  value,
+  onSelect,
+  glyph,
+}: {
+  legend: string;
+  options: LayoutOption<T>[];
+  value: T;
+  onSelect: (value: T) => void;
+  glyph: (value: T) => React.ReactNode;
+}) {
+  return (
+    <div className="layout-option-picker" role="radiogroup" aria-label={legend}>
+      <span className="layout-option-legend">{legend}</span>
+      <div className="layout-option-grid">
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            aria-checked={value === option.value}
+            title={option.hint || option.label}
+            className={`layout-option ${value === option.value ? "active" : ""}`}
+            onClick={() => onSelect(option.value)}
+          >
+            <span className="layout-option-glyph">{glyph(option.value)}</span>
+            <span className="layout-option-label">{option.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Sketsa 48x36 untuk tiap susunan. `block` = area foto, `line` = baris teks.
+function GlyphFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <svg viewBox="0 0 48 36" width="48" height="36" aria-hidden="true">
+      {children}
+    </svg>
+  );
+}
+function GlyphBlock(props: React.SVGProps<SVGRectElement>) {
+  return <rect rx="2" className="glyph-block" {...props} />;
+}
+function GlyphLines({
+  x,
+  y,
+  width,
+  rows = 4,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  rows?: number;
+}) {
+  return (
+    <>
+      {Array.from({ length: rows }).map((_, index) => (
+        <rect
+          key={index}
+          className="glyph-line"
+          x={x}
+          y={y + index * 5}
+          width={index === rows - 1 ? width * 0.6 : width}
+          height="2"
+          rx="1"
+        />
+      ))}
+    </>
+  );
+}
+
+function ImageLayoutGlyph({ layout }: { layout: ImageLayoutTemplate }) {
+  switch (layout) {
+    case "side-left":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="6" width="20" height="24" />
+          <GlyphLines x={27} y={9} width={18} />
+        </GlyphFrame>
+      );
+    case "side-right":
+      return (
+        <GlyphFrame>
+          <GlyphLines x={3} y={9} width={18} />
+          <GlyphBlock x="25" y="6" width="20" height="24" />
+        </GlyphFrame>
+      );
+    case "stacked":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="12" y="3" width="24" height="13" />
+          <GlyphBlock x="12" y="20" width="24" height="13" />
+        </GlyphFrame>
+      );
+    case "overlap":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="6" y="4" width="24" height="18" />
+          <GlyphBlock
+            x="18"
+            y="14"
+            width="24"
+            height="18"
+            className="glyph-block glyph-block-overlap"
+          />
+        </GlyphFrame>
+      );
+    case "banner":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="6" width="42" height="24" />
+          <rect className="glyph-line on-block" x="13" y="15" width="22" height="3" rx="1.5" />
+          <rect className="glyph-line on-block" x="18" y="21" width="12" height="2" rx="1" />
+        </GlyphFrame>
+      );
+    case "framed-caption":
+      return (
+        <GlyphFrame>
+          <rect
+            className="glyph-frame"
+            x="4"
+            y="3"
+            width="40"
+            height="22"
+            rx="2"
+            fill="none"
+          />
+          <GlyphBlock x="8" y="7" width="32" height="14" />
+          <GlyphLines x={12} y={29} width={24} rows={1} />
+        </GlyphFrame>
+      );
+    case "single":
+    default:
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="3" width="42" height="30" />
+        </GlyphFrame>
+      );
+  }
+}
+
+function GalleryStyleGlyph({ style }: { style: GalleryStyle }) {
+  switch (style) {
+    case "carousel":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="2" y="9" width="7" height="18" className="glyph-block glyph-block-overlap" />
+          <GlyphBlock x="13" y="5" width="22" height="26" />
+          <GlyphBlock x="39" y="9" width="7" height="18" className="glyph-block glyph-block-overlap" />
+        </GlyphFrame>
+      );
+    case "filmstrip":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="2" y="9" width="16" height="18" />
+          <GlyphBlock x="21" y="9" width="16" height="18" />
+          <GlyphBlock x="40" y="9" width="12" height="18" className="glyph-block glyph-block-overlap" />
+        </GlyphFrame>
+      );
+    case "grid":
+    default:
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="4" width="19" height="12" />
+          <GlyphBlock x="26" y="4" width="19" height="12" />
+          <GlyphBlock x="3" y="20" width="19" height="12" />
+          <GlyphBlock x="26" y="20" width="19" height="12" />
+        </GlyphFrame>
+      );
+  }
+}
+
+function GalleryLayoutGlyph({ layout }: { layout: GalleryLayoutTemplate }) {
+  switch (layout) {
+    case "masonry":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="4" width="12" height="18" />
+          <GlyphBlock x="3" y="25" width="12" height="7" />
+          <GlyphBlock x="18" y="4" width="12" height="10" />
+          <GlyphBlock x="18" y="17" width="12" height="15" />
+          <GlyphBlock x="33" y="4" width="12" height="15" />
+          <GlyphBlock x="33" y="22" width="12" height="10" />
+        </GlyphFrame>
+      );
+    case "hero-left":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="4" width="24" height="28" />
+          <GlyphBlock x="30" y="4" width="15" height="13" />
+          <GlyphBlock x="30" y="19" width="15" height="13" />
+        </GlyphFrame>
+      );
+    case "hero-top":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="3" width="42" height="16" />
+          <GlyphBlock x="3" y="22" width="12" height="11" />
+          <GlyphBlock x="18" y="22" width="12" height="11" />
+          <GlyphBlock x="33" y="22" width="12" height="11" />
+        </GlyphFrame>
+      );
+    case "mosaic":
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="4" width="18" height="28" />
+          <GlyphBlock x="24" y="4" width="21" height="12" />
+          <GlyphBlock x="24" y="19" width="10" height="13" />
+          <GlyphBlock x="36" y="19" width="9" height="13" />
+        </GlyphFrame>
+      );
+    case "even":
+    default:
+      return (
+        <GlyphFrame>
+          <GlyphBlock x="3" y="4" width="19" height="12" />
+          <GlyphBlock x="26" y="4" width="19" height="12" />
+          <GlyphBlock x="3" y="20" width="19" height="12" />
+          <GlyphBlock x="26" y="20" width="19" height="12" />
+        </GlyphFrame>
+      );
+  }
+}
+
 function ImageLayoutEditor({
   feature,
   update,
@@ -19952,37 +21502,27 @@ function ImageLayoutEditor({
   feature: Feature;
   update: (patch: Partial<Feature>) => void;
 }) {
-  const layouts: [ImageLayoutTemplate, string][] = [
-    ["single", "Single — gambar penuh"],
-    ["side-left", "Gambar kiri + teks kanan"],
-    ["side-right", "Teks kiri + gambar kanan"],
-    ["stacked", "Dua gambar bertumpuk"],
-    ["overlap", "Dua gambar saling tumpang"],
-    ["banner", "Banner dengan teks di atas gambar"],
-    ["framed-caption", "Gambar berbingkai + caption"],
+  const layouts: LayoutOption<ImageLayoutTemplate>[] = [
+    { value: "single", label: "Single", hint: "Gambar penuh" },
+    { value: "side-left", label: "Gambar kiri", hint: "Gambar kiri + teks kanan" },
+    { value: "side-right", label: "Teks kiri", hint: "Teks kiri + gambar kanan" },
+    { value: "stacked", label: "Bertumpuk", hint: "Dua gambar bertumpuk" },
+    { value: "overlap", label: "Tumpang tindih", hint: "Dua gambar saling tumpang" },
+    { value: "banner", label: "Banner", hint: "Teks di atas gambar" },
+    { value: "framed-caption", label: "Berbingkai", hint: "Gambar berbingkai + caption" },
   ];
   return (
     <div className="image-layout-editor">
       <div className="group-heading">
         <strong>Template Layout Image</strong>
       </div>
-      <label>
-        Layout
-        <select
-          value={feature.imageLayoutTemplate || "single"}
-          onChange={(event) =>
-            update({
-              imageLayoutTemplate: event.target.value as ImageLayoutTemplate,
-            })
-          }
-        >
-          {layouts.map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <LayoutOptionPicker
+        legend="Layout"
+        options={layouts}
+        value={feature.imageLayoutTemplate || "single"}
+        onSelect={(imageLayoutTemplate) => update({ imageLayoutTemplate })}
+        glyph={(value) => <ImageLayoutGlyph layout={value} />}
+      />
       <label>
         Caption
         <input
@@ -20753,11 +22293,21 @@ function linkToken(name = "token") {
 // Salinan lokal isi editor, dipakai sebagai jaring pengaman ketika penyimpanan
 // ke server gagal (sesi berakhir, jaringan putus) supaya pekerjaan tidak hilang.
 const EDITOR_BACKUP_KEY = "ikrarku-editor-backup";
-function backupEditorDraft(title: string, sections: CanvasSection[]) {
+function backupEditorDraft(
+  title: string,
+  sections: CanvasSection[],
+  extra: { slug?: string; templateId?: string } = {},
+) {
   try {
     window.localStorage.setItem(
       EDITOR_BACKUP_KEY,
-      JSON.stringify({ title, sections, savedAt: new Date().toISOString() }),
+      JSON.stringify({
+        title,
+        sections,
+        slug: extra.slug || "",
+        templateId: extra.templateId || "",
+        savedAt: new Date().toISOString(),
+      }),
     );
   } catch {
     /* penyimpanan lokal penuh atau diblokir */
@@ -20767,6 +22317,8 @@ function readEditorBackup(): {
   title: string;
   sections: CanvasSection[];
   savedAt: string;
+  slug?: string;
+  templateId?: string;
 } | null {
   try {
     const raw = window.localStorage.getItem(EDITOR_BACKUP_KEY);
@@ -20980,8 +22532,10 @@ function TemplateApprovalManager({
   onTakedown,
   onRepublish,
   onUploadSample,
+  onUploadThumbnail,
   onCaptureSample,
   onEditTemplate,
+  onToggleRecommended,
 }: {
   templates: Template[];
   currentAccountId?: string;
@@ -20989,13 +22543,17 @@ function TemplateApprovalManager({
   onTakedown?: (templateId: string, reason: string) => Promise<void>;
   onRepublish?: (templateId: string) => Promise<void>;
   onUploadSample?: (templateId: string, file: File) => Promise<void>;
+  onUploadThumbnail?: (templateId: string, file: File) => Promise<void>;
   onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
+  onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
 }) {
   const [takedownTarget, setTakedownTarget] = useState<Template | null>(null);
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState<Template | null>(null);
   const [uploadTarget, setUploadTarget] = useState<string>("");
+  // Satu input file dipakai bergantian; "kind" menentukan field mana yang ditulis.
+  const [uploadKind, setUploadKind] = useState<"sample" | "thumbnail">("sample");
   const fileRef = useRef<HTMLInputElement>(null);
   const visible = canApprove
     ? templates
@@ -21027,7 +22585,11 @@ function TemplateApprovalManager({
         accept="image/*"
         onChange={(event) => {
           const file = event.target.files?.[0];
-          if (file && uploadTarget) void onUploadSample?.(uploadTarget, file);
+          if (file && uploadTarget) {
+            if (uploadKind === "thumbnail")
+              void onUploadThumbnail?.(uploadTarget, file);
+            else void onUploadSample?.(uploadTarget, file);
+          }
           event.target.value = "";
         }}
       />
@@ -21047,17 +22609,17 @@ function TemplateApprovalManager({
             <div
               className="template-status-thumb"
               style={
-                template.sampleImage || template.preview
+                template.preview || template.sampleImage
                   ? {
-                      backgroundImage: `url(${template.sampleImage || template.preview})`,
+                      backgroundImage: `url(${template.preview || template.sampleImage})`,
                     }
                   : { background: template.bg }
               }
             >
-              {!(template.sampleImage || template.preview) && (
+              {!(template.preview || template.sampleImage) && (
                 <span className="thumb-empty">
                   <ImageIcon size={18} />
-                  Belum ada gambar sample
+                  Belum ada thumbnail
                 </span>
               )}
             </div>
@@ -21084,11 +22646,49 @@ function TemplateApprovalManager({
               <button
                 onClick={() => {
                   setUploadTarget(template.id);
+                  setUploadKind("sample");
                   fileRef.current?.click();
                 }}
+                title="Visual besar pada heading halaman detail template"
               >
                 <Upload size={14} /> Gambar sample
               </button>
+              {/* Thumbnail kartu di halaman /template, terpisah dari gambar
+                  sample supaya cover katalog bisa diatur sendiri. */}
+              <button
+                onClick={() => {
+                  setUploadTarget(template.id);
+                  setUploadKind("thumbnail");
+                  fileRef.current?.click();
+                }}
+                title="Cover kartu template pada halaman /template"
+              >
+                <ImageIcon size={14} /> Thumbnail
+              </button>
+              {/* QA TC-151: kurasi badge Recommended pada katalog publik.
+                  Hanya untuk template yang sudah publish. */}
+              {onToggleRecommended && canApprove && (
+                <button
+                  className={template.recommended ? "recommended-on" : ""}
+                  title={
+                    template.recommended
+                      ? "Hapus dari daftar rekomendasi"
+                      : "Tandai sebagai desain rekomendasi"
+                  }
+                  disabled={
+                    !["Published", "Approved"].includes(template.status || "")
+                  }
+                  onClick={() =>
+                    void onToggleRecommended(
+                      template.id,
+                      !template.recommended,
+                    )
+                  }
+                >
+                  <Star size={14} />
+                  {template.recommended ? "Recommended" : "Jadikan rekomendasi"}
+                </button>
+              )}
               {/* QA TC-144: sample diambil langsung dari canvas Buka Undangan,
                   dirender pada rasio kartu landing agar tidak terpotong. */}
               {onCaptureSample && (
