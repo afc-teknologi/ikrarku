@@ -3192,6 +3192,12 @@ function App() {
     // Halaman bertoken tidak boleh dibersihkan sebelum komponennya sempat
     // membaca query string.
     const tokenPaths = new Set(["/reset-password", "/verify-email"]);
+    // Pathname artikel punya dua ruas (`/jurnal/<slug>`), sedangkan appPaths
+    // hanya memuat ruas pertama. Tanpa pengenal ini URL artikel tidak pernah
+    // dianggap "milik aplikasi" dan karena itu tidak pernah dibersihkan.
+    const isArticlePathname = /^\/jurnal\/[^/]+\/?$/.test(
+      window.location.pathname,
+    );
     if (view === "landing") {
       // Artikel bisa dibuka langsung dari carousel landing. Tanpa cabang ini
       // URL-nya langsung dibersihkan kembali ke "/".
@@ -3199,14 +3205,16 @@ function App() {
         const articleUrl = `/jurnal/${encodeURIComponent(articleSlug)}`;
         if (window.location.pathname !== articleUrl)
           try {
-            window.history.replaceState(window.history.state, "", articleUrl);
+            // pushState, bukan replaceState: tombol Back browser harus
+            // menutup artikel dan kembali ke landing, bukan keluar dari situs.
+            window.history.pushState(window.history.state, "", articleUrl);
           } catch {
             /* ignore */
           }
         return;
       }
       if (
-        appPaths.has(window.location.pathname) &&
+        (appPaths.has(window.location.pathname) || isArticlePathname) &&
         !(
           tokenPaths.has(window.location.pathname) &&
           initialSearchParams.get("token")
@@ -3464,8 +3472,23 @@ function App() {
     flash("Template design berhasil diduplikasi sebagai satu group baru.");
   };
 
-  const editCanvasFromTemplates = (sectionId: string) => {
-    setEditorMode("site");
+  const editCanvasFromTemplates = (
+    sectionId: string,
+    designTemplate?: Template,
+  ) => {
+    // Simpan dalam mode template menulis ke `selectedTemplate`. Card yang
+    // diklik sudah tahu template miliknya, jadi ikat dulu supaya tidak
+    // menimpa template lain yang kebetulan sedang terpilih.
+    if (designTemplate && designTemplate.id !== selectedTemplate.id)
+      setSelectedTemplate(designTemplate);
+    // Card "Template pada website" juga tampil ketika Web Designer sedang
+    // mengerjakan template-nya sendiri — `websiteDesigns` dibentuk dari
+    // `sections` yang sedang dimuat, apa pun sumbernya. Dulu mode dipaksa
+    // "site", sehingga membuka template lewat card ini memunculkan kolom
+    // slug dan meminta URL publik untuk sesuatu yang tidak punya URL.
+    // Penanda yang benar adalah ada/tidaknya pemilik website, sama seperti
+    // yang dipakai manageUserCanvas().
+    setEditorMode(siteOwnerUserId ? "site" : "template");
     sessionStorage.setItem("ikrarku-edit-canvas", sectionId);
     setView("editor");
   };
@@ -8777,6 +8800,32 @@ function WebsiteTemplatePreview({
     observer.observe(holder.current);
     return () => observer.disconnect();
   }, []);
+  // Revisi QA: kotak preview dulu selalu setinggi `width * 1.25`, yaitu 1000px
+  // ruang canvas, apa pun isinya. Cover memang dipaksa 1000px oleh
+  // `.actual-render-content .invitation-cover-screen`, tapi canvas biasa hanya
+  // ~560-700px — sisanya tampil sebagai area kosong dan card jadi terlalu
+  // tinggi. Tinggi sekarang mengikuti tinggi asli yang dirender, dengan
+  // `width * 1.25` sebagai batas atas supaya canvas yang sangat panjang tidak
+  // membuat card memanjang tak terkendali.
+  const content = useRef<HTMLDivElement>(null);
+  const [contentHeight, setContentHeight] = useState(0);
+  useEffect(() => {
+    if (!content.current) return;
+    // contentRect adalah kotak layout sebelum transform, jadi nilainya berada
+    // di ruang 800px dan perlu dikalikan skalanya.
+    const observer = new ResizeObserver((entries) =>
+      setContentHeight(entries[0].contentRect.height),
+    );
+    observer.observe(content.current);
+    return () => observer.disconnect();
+  }, []);
+  const maxViewportHeight = width * 1.25;
+  const viewportHeight = contentHeight
+    ? Math.max(
+        120,
+        Math.min(Math.round((contentHeight * width) / 800), maxViewportHeight),
+      )
+    : maxViewportHeight;
   const section = sections[0];
   const selected: Template = template || {
     id: "preview",
@@ -8795,9 +8844,10 @@ function WebsiteTemplatePreview({
         <span />
         <em>Canvas 01 · actual saved preview</em>
       </div>
-      <div className="actual-render-viewport" style={{ height: width * 1.25 }}>
+      <div className="actual-render-viewport" style={{ height: viewportHeight }}>
         <div
           className="actual-render-content"
+          ref={content}
           inert
           style={{
             width: 800,
@@ -9047,7 +9097,7 @@ function Templates({
   applyTemplate: (template: Template) => void;
   deleteCanvas: (sectionIds: string[]) => void;
   duplicateCanvas: (sectionIds: string[]) => void;
-  editCanvas: (sectionId: string) => void;
+  editCanvas: (sectionId: string, template?: Template) => void;
   openTemplateCreator: () => void;
   canCreate: boolean;
   managedTemplates?: Template[];
@@ -9230,7 +9280,9 @@ function Templates({
                     </button>
                     <button
                       className="primary"
-                      onClick={() => editCanvas(design.sections[0].id)}
+                      onClick={() =>
+                        editCanvas(design.sections[0].id, design.template)
+                      }
                     >
                       <WandSparkles size={15} /> Edit
                     </button>
@@ -14329,6 +14381,17 @@ function BackgroundLayerEditor({
   locked?: boolean;
 }) {
   const layers = section.backgroundLayers || [];
+  const activeLoop =
+    section.backgroundLoopEffect && section.backgroundLoopEffect !== "none"
+      ? section.backgroundLoopEffect
+      : null;
+  const activeLoopLabel = activeLoop
+    ? loopEffectCatalog.find(([value]) => value === activeLoop)?.[1] ||
+      activeLoop
+    : "";
+  const loopMovesLayer = activeLoop
+    ? ["float", "sway", "pulse", "drift"].includes(activeLoop)
+    : false;
   const commit = (
     produce: (current: BackgroundLayer[]) => BackgroundLayer[],
   ) =>
@@ -14379,6 +14442,34 @@ function BackgroundLayerEditor({
         Layer di bawah ini digambar menumpuk di atasnya secara berurutan — Layer
         2, lalu Layer 3, dan seterusnya. Atur opacity dan blend mode agar layer
         menyatu dengan layer di bawahnya.
+      </div>
+      {/* Revisi QA: "Animasi Layer Background" di tab Advanced berlaku untuk
+          Layer 1 dan SEMUA layer di bawah ini sekaligus. Tanpa keterangan ini
+          tidak ada cara mengetahui layer mana yang dianimasikan. */}
+      <div className={`layout-help ${activeLoop ? "" : "is-muted"}`}>
+        {activeLoop ? (
+          <>
+            <strong>
+              Animasi aktif: {activeLoopLabel} · {section.backgroundLoopSpeed || 6}
+              s
+            </strong>{" "}
+            Berlaku untuk Layer 1 dan seluruh layer di bawah ini sekaligus.
+            {loopMovesLayer && (
+              <>
+                {" "}
+                Selama efek ini berjalan, <em>Layer diam saat scroll</em>{" "}
+                diabaikan — sebuah layer tidak bisa bergerak dan terpaku di
+                tempat pada waktu yang sama.
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <strong>Belum ada animasi layer.</strong> Atur di tab{" "}
+            <em>Advanced → Animasi Layer Background</em>; efeknya berlaku untuk
+            Layer 1 dan seluruh layer di bawah ini sekaligus.
+          </>
+        )}
       </div>
       {layers.map((layer, index) => (
         <div className="extra-text-row" key={layer.id}>
@@ -14543,6 +14634,12 @@ function BackgroundLayerEditor({
               <i />
             </button>
           </div>
+          {layer.fixed && loopMovesLayer && (
+            <div className="layout-help is-muted">
+              Sedang diabaikan karena animasi <strong>{activeLoopLabel}</strong>{" "}
+              aktif untuk layer.
+            </div>
+          )}
         </div>
       ))}
       {!layers.length && (
@@ -15218,6 +15315,17 @@ function WeddingCanvas({
           globalBackgroundSource,
         );
         const filter = getBackgroundFilter(section.backgroundEffect);
+        // "Animasi Layer Background" berlaku untuk background utama DAN semua
+        // layer tumpang tindih, sesuai keterangan kontrolnya.
+        const backgroundLoop =
+          section.backgroundLoopEffect && section.backgroundLoopEffect !== "none"
+            ? section.backgroundLoopEffect
+            : null;
+        // Hanya efek yang menganimasikan transform yang mematahkan
+        // background-attachment:fixed. Fade & shimmer aman.
+        const backgroundLoopMovesLayer = backgroundLoop
+          ? ["float", "sway", "pulse", "drift"].includes(backgroundLoop)
+          : false;
         // Canvas yang isinya memang hanya visual — background image/video,
         // layer, atau ornamen — tetap harus tampil. Sebelumnya section tanpa
         // feature langsung dibuang, sehingga Web Designer yang mengunggah
@@ -15297,22 +15405,39 @@ function WeddingCanvas({
             {/* QA TC-107 & TC-127: background utama dapat dikunci (fixed) sehingga
                 hanya konten/layer di atasnya yang bergerak saat di-scroll. */}
             <div
-              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed && allowFixedBackground ? "is-fixed" : ""} loop-${section.backgroundLoopEffect || "none"}`}
-              style={{
-                backgroundImage: section.backgroundUrl
-                  ? `url(${assetUrl(section.backgroundUrl)})`
-                  : undefined,
-                backgroundPosition: section.backgroundPosition,
-                backgroundRepeat: section.backgroundRepeat,
-                backgroundSize:
-                  section.backgroundSize ||
-                  (section.backgroundRepeat === "no-repeat" ? "cover" : "auto"),
-                backgroundAttachment:
-                  section.backgroundFixed && allowFixedBackground
-                    ? "fixed"
-                    : "scroll",
-                filter,
-              }}
+              className={`background-layer ${getBackgroundMotionClass(section.backgroundMotion)} ${section.backgroundFixed && allowFixedBackground && !backgroundLoopMovesLayer ? "is-fixed" : ""} loop-${backgroundLoop || "none"}`}
+              style={
+                {
+                  backgroundImage: section.backgroundUrl
+                    ? `url(${assetUrl(section.backgroundUrl)})`
+                    : undefined,
+                  backgroundPosition: section.backgroundPosition,
+                  backgroundRepeat: section.backgroundRepeat,
+                  backgroundSize:
+                    section.backgroundSize ||
+                    (section.backgroundRepeat === "no-repeat"
+                      ? "cover"
+                      : "auto"),
+                  // Lapisan yang bergerak tidak boleh `fixed`: transform yang
+                  // dianimasikan menjadikan elemen containing block, sehingga
+                  // background-attachment:fixed luruh dan gambarnya melompat.
+                  backgroundAttachment:
+                    section.backgroundFixed &&
+                    allowFixedBackground &&
+                    !backgroundLoopMovesLayer
+                      ? "fixed"
+                      : "scroll",
+                  filter,
+                  // Slider "Durasi siklus" pada Animasi Layer Background dulu
+                  // tidak pernah dipasang ke mana pun, jadi semua efek tetap
+                  // memakai durasi bawaan CSS dan slider itu tak berefek.
+                  ...(backgroundLoop
+                    ? {
+                        "--loop-speed": `${section.backgroundLoopSpeed || 6}s`,
+                      }
+                    : {}),
+                } as React.CSSProperties
+              }
             />
             {/* Ornamen pojok dengan gerak berulang. */}
             {(section.decorations || []).map((decoration) => (
@@ -15352,33 +15477,58 @@ function WeddingCanvas({
             {(section.backgroundLayers || []).map((layer, layerIndex) => (
               <div
                 key={layer.id}
-                className={`background-extra-layer ${layer.fixed ? "is-fixed" : ""}`}
-                style={{
-                  backgroundImage: layer.url
-                    ? `url(${assetUrl(layer.url)})`
-                    : undefined,
-                  backgroundSize: layer.size,
-                  backgroundPosition: `${layer.offsetX ?? 50}% ${layer.offsetY ?? 50}%`,
-                  backgroundRepeat: layer.repeat,
-                  backgroundAttachment:
-                    layer.fixed && allowFixedBackground ? "fixed" : "scroll",
-                  opacity: (layer.opacity ?? 100) / 100,
-                  mixBlendMode:
-                    (layer.blend as React.CSSProperties["mixBlendMode"]) ||
-                    "normal",
-                  // scale(1) pun membuat elemen jadi containing block,
-                  // sehingga background-attachment:fixed luruh jadi relatif
-                  // elemen. Hanya pasang transform bila memang di-scale.
-                  transform:
-                    layer.scale && layer.scale !== 100
-                      ? `scale(${layer.scale / 100})`
+                // Revisi QA: kontrol "Animasi Layer Background" menjanjikan
+                // "lapisan background DAN layer tumpang tindih yang bergerak",
+                // tetapi kelas loop-* dulu hanya dipasang pada background
+                // utama. Canvas yang backgroundnya kosong dan hanya memakai
+                // layer karena itu tidak bergerak sama sekali, dan tidak ada
+                // petunjuk layer mana yang dimaksud.
+                className={`background-extra-layer ${layer.fixed && !backgroundLoopMovesLayer ? "is-fixed" : ""} loop-${backgroundLoop || "none"}`}
+                style={
+                  {
+                    backgroundImage: layer.url
+                      ? `url(${assetUrl(layer.url)})`
                       : undefined,
-                  // Dulu `1 + layerIndex`: Layer 2 menyamai z-index ornamen (2)
-                  // lalu menutupinya, dan Layer 6 melewati z-index konten (5)
-                  // sehingga menimpa seluruh teks. Urutan antar layer tetap
-                  // terjaga oleh urutan DOM.
-                  zIndex: Math.min(1 + layerIndex, 3),
-                }}
+                    backgroundSize: layer.size,
+                    backgroundPosition: `${layer.offsetX ?? 50}% ${layer.offsetY ?? 50}%`,
+                    backgroundRepeat: layer.repeat,
+                    backgroundAttachment:
+                      layer.fixed &&
+                      allowFixedBackground &&
+                      !backgroundLoopMovesLayer
+                        ? "fixed"
+                        : "scroll",
+                    opacity: (layer.opacity ?? 100) / 100,
+                    mixBlendMode:
+                      (layer.blend as React.CSSProperties["mixBlendMode"]) ||
+                      "normal",
+                    // scale(1) pun membuat elemen jadi containing block,
+                    // sehingga background-attachment:fixed luruh jadi relatif
+                    // elemen. Hanya pasang transform bila memang di-scale.
+                    transform:
+                      layer.scale && layer.scale !== 100
+                        ? `scale(${layer.scale / 100})`
+                        : undefined,
+                    // Keyframes loop-* juga menganimasikan transform dan
+                    // opacity, dan animasi mengalahkan inline style pada
+                    // elemen yang sama. Skala & opacity dikirim sebagai
+                    // custom property agar ikut dirangkai di dalam keyframes
+                    // khusus layer, sehingga Skala 140% tetap 140% walau
+                    // layernya sedang mengambang.
+                    "--layer-scale": (layer.scale ?? 100) / 100,
+                    "--layer-opacity": (layer.opacity ?? 100) / 100,
+                    ...(backgroundLoop
+                      ? {
+                          "--loop-speed": `${section.backgroundLoopSpeed || 6}s`,
+                        }
+                      : {}),
+                    // Dulu `1 + layerIndex`: Layer 2 menyamai z-index ornamen (2)
+                    // lalu menutupinya, dan Layer 6 melewati z-index konten (5)
+                    // sehingga menimpa seluruh teks. Urutan antar layer tetap
+                    // terjaga oleh urutan DOM.
+                    zIndex: Math.min(1 + layerIndex, 3),
+                  } as React.CSSProperties
+                }
               />
             ))}
             {section.backgroundVideoUrl && (
@@ -15755,6 +15905,54 @@ function InvitationCover({
                       {active.body ||
                         "Dengan penuh kebahagiaan kami mengundang Anda"}
                     </span>
+                    {/* TC-118 lanjutan — di editor cover dirender lewat
+                        FeatureBlock, yang memasang blok Heading 2 /
+                        Supporting Text 2. Di live & preview cover dirender
+                        oleh komponen ini, dan dulu kedua teks itu tidak ada
+                        sama sekali: terlihat saat mengedit, hilang saat
+                        dipreview. */}
+                    {(active.showTitle2 || active.showBody2) && (
+                      <div className="secondary-text-stack cover-secondary">
+                        {active.showTitle2 && (
+                          <div
+                            className="editable-title editable-title-2"
+                            data-custom-color={
+                              active.title2Color ? "true" : undefined
+                            }
+                            style={{
+                              whiteSpace: "pre-wrap",
+                              ...(active.title2FontSize
+                                ? { fontSize: active.title2FontSize }
+                                : {}),
+                              ...(active.title2Color
+                                ? { color: active.title2Color }
+                                : {}),
+                            }}
+                          >
+                            {active.title2}
+                          </div>
+                        )}
+                        {active.showBody2 && (
+                          <div
+                            className="editable-body editable-body-2"
+                            data-custom-color={
+                              active.body2Color ? "true" : undefined
+                            }
+                            style={{
+                              whiteSpace: "pre-wrap",
+                              ...(active.body2FontSize
+                                ? { fontSize: active.body2FontSize }
+                                : {}),
+                              ...(active.body2Color
+                                ? { color: active.body2Color }
+                                : {}),
+                            }}
+                          >
+                            {active.body2}
+                          </div>
+                        )}
+                      </div>
+                    )}
                     <button
                       className={`cover-open-button icon-${active.coverIconPosition || "left"}`}
                       onClick={onOpen}

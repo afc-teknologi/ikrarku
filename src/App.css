@@ -270,6 +270,14 @@ html,body,#root{min-width:0!important}
 .cover-content>em[data-custom-color]{opacity:1}
 .cover-content h1{max-width:100%}
 .cover-open-button span{color:inherit}
+/* Heading 2 / Supporting Text 2 pada cover. Di editor keduanya dirender oleh
+   FeatureBlock; di live & preview oleh InvitationCover. Aturan di bawah ini
+   menjaga agar hasilnya sama: posisi di antara body dan tombol, lebar
+   terbatas, dan warna mengikuti pilihan per-elemen bila ada. */
+.cover-content>.cover-secondary{max-width:580px;margin:0 0 24px;align-items:inherit;color:inherit}
+.cover-content>.cover-secondary .editable-title-2{margin:0;color:inherit}
+.cover-content>.cover-secondary .editable-body-2{color:inherit}
+.cover-content>.cover-secondary [data-custom-color]{opacity:1}
 
 /* Feature width is a content-block property for Buka Undangan; its background always remains full Canvas. */
 .feature-invitation-cover{width:100%!important;align-self:stretch!important}
@@ -895,6 +903,25 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 .loop-shimmer{animation:loopShimmer var(--loop-speed,6s) ease-in-out infinite}
 .loop-drift{animation:loopDrift var(--loop-speed,9s) ease-in-out infinite}
 .loop-none{animation:none}
+/* Layer background punya skala & opacity sendiri yang dipasang inline, dan
+   animasi mengalahkan inline style pada properti yang sama. Keyframes di bawah
+   ini merangkai nilai layer (--layer-scale / --layer-opacity) ke dalam
+   animasinya, sehingga Skala dan Opacity tetap berlaku saat layer bergerak. */
+@keyframes layerLoopFade{0%,100%{opacity:var(--layer-opacity,1)}50%{opacity:calc(var(--layer-opacity,1)*.55)}}
+@keyframes layerLoopFloat{0%,100%{transform:scale(var(--layer-scale,1)) translateY(0)}50%{transform:scale(var(--layer-scale,1)) translateY(-10px)}}
+@keyframes layerLoopSway{0%,100%{transform:scale(var(--layer-scale,1)) rotate(-3deg)}50%{transform:scale(var(--layer-scale,1)) rotate(3deg)}}
+@keyframes layerLoopPulse{0%,100%{transform:scale(var(--layer-scale,1))}50%{transform:scale(calc(var(--layer-scale,1)*1.035))}}
+@keyframes layerLoopDrift{0%,100%{transform:scale(var(--layer-scale,1)) translate3d(0,0,0)}25%{transform:scale(var(--layer-scale,1)) translate3d(6px,-6px,0)}50%{transform:scale(var(--layer-scale,1)) translate3d(0,-11px,0)}75%{transform:scale(var(--layer-scale,1)) translate3d(-6px,-6px,0)}}
+.background-extra-layer.loop-fade{animation:layerLoopFade var(--loop-speed,6s) ease-in-out infinite}
+.background-extra-layer.loop-float{animation:layerLoopFloat var(--loop-speed,6s) ease-in-out infinite}
+.background-extra-layer.loop-sway{animation:layerLoopSway var(--loop-speed,7s) ease-in-out infinite;transform-origin:50% 50%}
+.background-extra-layer.loop-pulse{animation:layerLoopPulse var(--loop-speed,6s) ease-in-out infinite}
+.background-extra-layer.loop-drift{animation:layerLoopDrift var(--loop-speed,9s) ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){
+  .background-extra-layer.loop-fade,.background-extra-layer.loop-float,
+  .background-extra-layer.loop-sway,.background-extra-layer.loop-pulse,
+  .background-extra-layer.loop-drift{animation:none!important}
+}
 /* Entrance effect tetap menang saat elemen baru muncul; loop mengambil alih setelahnya. */
 .feature-block.await-reveal.loop-fade,
 .feature-block.await-reveal.loop-float,
@@ -1115,6 +1142,10 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 .layout-help strong{color:#174f40}
 .layout-help.is-locked{background:#fdf1d9;color:#6b531a;border:1px solid rgba(138,98,32,.3)}
 .layout-help.is-locked strong{color:#8a6220}
+/* Keterangan "belum aktif" / "sedang diabaikan": tetap terbaca tapi tidak
+   menarik perhatian sekuat keterangan yang menjelaskan sesuatu yang aktif. */
+.layout-help.is-muted{background:#f8faf9;color:#8b9893;border:1px dashed #dfe6e2}
+.layout-help.is-muted strong{color:#5c6d66}
 
 /* Jarak kiri-kanan panel Page Structure */
 .canvas-help-note{margin-left:14px;margin-right:14px}

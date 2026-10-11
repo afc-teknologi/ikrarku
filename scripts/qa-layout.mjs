@@ -386,3 +386,141 @@ test("SEO: tanggal artikel tidak lagi ISO mentah", () => {
   assert.match(appTsx, /function formatArticleDate\(value: string\)/);
   assert.match(appTsx, /<time dateTime=\{article\.date\}>/);
 });
+
+// =====================================================================
+// Retest lanjutan — empat temuan QA setelah TC-186..TC-203 dinyatakan Pass.
+// =====================================================================
+
+test("Retest-1: menutup artikel dari landing membersihkan URL /jurnal/<slug>", () => {
+  // appPaths hanya memuat ruas pertama ("/jurnal"), sehingga pathname artikel
+  // yang punya dua ruas tidak pernah dikenali sebagai milik aplikasi dan URL
+  // tetap menunjuk artikel padahal daftar/landing yang tampil.
+  assert.match(
+    appTsx,
+    /const isArticlePathname = \/\^\\\/jurnal\\\/\[\^\/\]\+\\\/\?\$\/\.test\(/,
+  );
+  assert.match(
+    appTsx,
+    /\(appPaths\.has\(window\.location\.pathname\) \|\| isArticlePathname\)/,
+  );
+  // Membuka artikel dari landing harus menambah entri history, supaya Back
+  // browser menutup artikel dan tidak melempar pengguna keluar situs.
+  const landingBranch = appTsx.slice(
+    appTsx.indexOf('if (view === "landing") {'),
+  );
+  const articleUrlBlock = landingBranch.slice(
+    0,
+    landingBranch.indexOf("return;"),
+  );
+  assert.match(articleUrlBlock, /window\.history\.pushState\(/);
+  assert.equal(
+    /window\.history\.replaceState\(window\.history\.state, "", articleUrl\)/.test(
+      articleUrlBlock,
+    ),
+    false,
+    "URL artikel dari landing kembali memakai replaceState; Back akan keluar dari situs",
+  );
+});
+
+test("Retest-2a: Edit dari card Website Design tidak memaksa mode site", () => {
+  // Card "Template pada website" dibentuk dari `sections` yang sedang dimuat,
+  // termasuk saat yang dibuka adalah template milik Web Designer sendiri.
+  // Memaksa mode "site" memunculkan kolom slug untuk sesuatu tanpa URL publik.
+  assert.match(
+    appTsx,
+    /setEditorMode\(siteOwnerUserId \? "site" : "template"\);\n\s*sessionStorage\.setItem\("ikrarku-edit-canvas"/,
+  );
+  // Simpan dalam mode template menulis ke selectedTemplate, jadi card wajib
+  // mengirim template miliknya sendiri.
+  assert.match(appTsx, /editCanvas\(design\.sections\[0\]\.id, design\.template\)/);
+  assert.match(
+    appTsx,
+    /editCanvas: \(sectionId: string, template\?: Template\) => void;/,
+  );
+});
+
+test("Retest-2b: tinggi kotak preview mengikuti tinggi canvas, bukan rasio tetap", () => {
+  assert.match(appTsx, /const \[contentHeight, setContentHeight\] = useState\(0\)/);
+  assert.match(
+    appTsx,
+    /Math\.min\(Math\.round\(\(contentHeight \* width\) \/ 800\), maxViewportHeight\)/,
+  );
+  assert.match(
+    appTsx,
+    /className="actual-render-viewport" style=\{\{ height: viewportHeight \}\}/,
+  );
+  assert.equal(
+    /className="actual-render-viewport" style=\{\{ height: width \* 1\.25 \}\}/.test(
+      appTsx,
+    ),
+    false,
+    "kotak preview kembali memakai rasio tetap 4:5 dan menyisakan area kosong",
+  );
+});
+
+test("Retest-3: Heading 2 & Supporting Text 2 ikut dirender cover live", () => {
+  // Di editor cover lewat FeatureBlock (punya secondaryTexts); di live &
+  // preview lewat InvitationCover, yang dulu tidak merender keduanya.
+  const cover = appTsx.slice(
+    appTsx.indexOf("function InvitationCover({"),
+    appTsx.indexOf("function FeatureBlock({"),
+  );
+  assert.ok(cover.length > 0, "InvitationCover tidak ditemukan");
+  assert.match(cover, /active\.showTitle2 \|\| active\.showBody2/);
+  assert.match(cover, /\{active\.title2\}/);
+  assert.match(cover, /\{active\.body2\}/);
+  // Ukuran & warna per-elemen harus sama dengan jalur editor.
+  for (const field of [
+    "title2FontSize",
+    "body2FontSize",
+    "title2Color",
+    "body2Color",
+  ])
+    assert.ok(cover.includes(field), `cover live tidak memakai ${field}`);
+  // Kelasnya sama dengan editor supaya tampilannya tidak berbeda.
+  assert.match(cover, /editable-title editable-title-2/);
+  assert.match(cover, /editable-body editable-body-2/);
+});
+
+test("Retest-4: Animasi Layer Background benar-benar menggerakkan layer", () => {
+  // Kelas loop-* dulu hanya pada background utama, padahal keterangan
+  // kontrolnya menjanjikan layer tumpang tindih juga bergerak.
+  assert.match(
+    appTsx,
+    /className=\{`background-extra-layer [^`]*loop-\$\{backgroundLoop \|\| "none"\}`\}/,
+  );
+  // Slider "Durasi siklus" dulu tidak dipasang ke mana pun.
+  assert.match(appTsx, /"--loop-speed": `\$\{section\.backgroundLoopSpeed \|\| 6\}s`/);
+  // Skala & opacity layer dipasang inline; animasi mengalahkan inline style,
+  // jadi nilainya harus ikut lewat custom property.
+  assert.match(appTsx, /"--layer-scale": \(layer\.scale \?\? 100\) \/ 100/);
+  assert.match(appTsx, /"--layer-opacity": \(layer\.opacity \?\? 100\) \/ 100/);
+  for (const name of [
+    "layerLoopFade",
+    "layerLoopFloat",
+    "layerLoopSway",
+    "layerLoopPulse",
+    "layerLoopDrift",
+  ])
+    assert.ok(
+      appCss.includes(`@keyframes ${name}`),
+      `keyframes ${name} hilang; skala/opacity layer akan direset saat animasi`,
+    );
+  assert.match(appCss, /@keyframes layerLoopFloat\{[^}]*scale\(var\(--layer-scale,1\)\)/);
+  assert.match(appCss, /@keyframes layerLoopFade\{0%,100%\{opacity:var\(--layer-opacity,1\)\}/);
+  // Transform yang dianimasikan mematahkan background-attachment:fixed.
+  assert.match(
+    appTsx,
+    /const backgroundLoopMovesLayer = backgroundLoop\n?\s*\? \["float", "sway", "pulse", "drift"\]\.includes\(backgroundLoop\)/,
+  );
+  assert.match(
+    appTsx,
+    /layer\.fixed &&\n\s*allowFixedBackground &&\n\s*!backgroundLoopMovesLayer/,
+  );
+  // Editor harus menyatakan layer mana yang terkena efek.
+  assert.match(
+    appTsx,
+    /Berlaku untuk Layer 1 dan seluruh layer di bawah ini sekaligus\./,
+  );
+  assert.match(appCss, /\.layout-help\.is-muted\{/);
+});
