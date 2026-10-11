@@ -22,6 +22,11 @@ COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY server ./server
+# scripts/ ikut dikirim supaya perkakas operasional (mis. mayar-check.mjs)
+# bisa dijalankan di VPS lewat `docker compose exec`. Host produksi tidak
+# memasang Node/npm, jadi tanpa ini perkakas tersebut tidak bisa dipakai
+# sama sekali di tempat yang justru paling membutuhkannya.
+COPY scripts ./scripts
 RUN mkdir -p /app/data /app/uploads /app/receipts && chown -R node:node /app
 USER node
 EXPOSE 5180

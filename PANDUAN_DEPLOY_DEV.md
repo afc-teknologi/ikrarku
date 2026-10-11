@@ -156,22 +156,28 @@ PAYMENT_MODE=simulation
 
 ### B5. Build dan jalankan
 
-Cara yang disarankan — satu perintah, lengkap dengan pemeriksaan:
-
-```bash
-./deploy/scripts/deploy-staging.sh
-```
-
-Script ini menjalankan: preflight → suite QA → validasi compose → build →
-update container → tunggu sampai sehat → smoke test.
-
-Kalau ingin manual:
+**Jalur manual — ini yang dipakai bila VPS tidak memasang Node:**
 
 ```bash
 docker compose -f docker-compose.staging.yml build
 docker compose -f docker-compose.staging.yml up -d --remove-orphans
 docker compose -f docker-compose.staging.yml ps
 ```
+
+Perhatikan `-f docker-compose.staging.yml`. Tanpa itu Docker menjawab
+`no configuration file provided: not found`, karena berkasnya memang tidak
+bernama `docker-compose.yml`.
+
+**Jalur otomatis — hanya bila VPS punya Node:**
+
+```bash
+./deploy/scripts/deploy-staging.sh
+```
+
+Script ini menjalankan: preflight → suite QA → validasi compose → build →
+update container → tunggu sampai sehat → smoke test. Langkah preflight dan
+QA memerlukan Node di host; kalau `node` tidak terpasang, pakai jalur manual
+di atas. Suite QA-nya toh sudah Anda jalankan di laptop pada Bagian A2.
 
 Build memakan beberapa menit. Wajar.
 
@@ -249,6 +255,68 @@ muncul `og:title`, `og:description`, `og:image`, serta `canonical`.
 
 ## Kalau ada yang salah
 
+### `no configuration file provided: not found`
+
+```
+root@srv1890813:/opt/ikrarku# docker compose up -d --build
+no configuration file provided: not found
+```
+
+Berkas compose di repo ini bernama **`docker-compose.staging.yml`**, bukan
+`docker-compose.yml`, jadi Docker tidak menemukannya otomatis. Sebutkan
+namanya dengan `-f`:
+
+```bash
+docker compose -f docker-compose.staging.yml up -d --build
+```
+
+Kalau tetap gagal, pastikan Anda memang berada di folder repo:
+
+```bash
+pwd                      # harus /opt/ikrarku
+ls docker-compose.staging.yml package.json
+git remote -v
+```
+
+Agar tidak perlu mengetik `-f` setiap kali, buat alias satu kali:
+
+```bash
+echo "alias dc='docker compose -f /opt/ikrarku/docker-compose.staging.yml'" >> ~/.bashrc
+source ~/.bashrc
+# sesudah itu cukup: dc up -d --build   ·   dc logs -f   ·   dc ps
+```
+
+### `npm: command not found` di VPS
+
+```
+root@srv1890813:/opt/ikrarku# npm run mayar:check
+Command 'npm' not found
+```
+
+**Ini wajar — dan jangan dipasang.** VPS sengaja hanya menjalankan Docker;
+Node hidup di dalam container. Memasang Node di host justru menambah versi
+kedua yang bisa berbeda dengan yang dipakai aplikasi.
+
+Jalankan perkakasnya di dalam container:
+
+```bash
+docker compose -f docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs
+```
+
+Kalau muncul `No such file or directory`, image Anda dibangun sebelum
+folder `scripts/` ikut disalin. Build ulang:
+
+```bash
+git pull
+docker compose -f docker-compose.staging.yml up -d --build
+```
+
+> Konsekuensi lain: **seluruh `npm run ...` memang hanya untuk laptop.**
+> `npm run check`, `qa:integration`, dan kawan-kawan dijalankan sebelum push,
+> bukan di VPS. Satu-satunya pengecualian adalah
+> `./deploy/scripts/deploy-staging.sh`, yang butuh Node di host — kalau Node
+> tidak ada, pakai jalur manual pada B5.
+
 ### Container tidak mau `healthy`
 
 ```bash
@@ -283,7 +351,7 @@ sudo systemctl reload nginx
 ```bash
 git log --oneline -5           # cari commit yang masih baik
 git checkout <hash-commit>
-./deploy/scripts/deploy-staging.sh
+docker compose -f docker-compose.staging.yml up -d --build --remove-orphans
 ```
 
 Kalau data yang bermasalah, bukan kode:
@@ -308,7 +376,8 @@ ssh root@srv1890813
 cd /opt/ikrarku
 ./deploy/scripts/backup-staging.sh
 git pull
-./deploy/scripts/deploy-staging.sh
+docker compose -f docker-compose.staging.yml up -d --build --remove-orphans
+docker compose -f docker-compose.staging.yml ps
 
 # — di browser —
 # buka https://dev.ikrarku.id lalu Ctrl+Shift+R
@@ -316,7 +385,7 @@ git pull
 
 ---
 
-## Lima kesalahan paling sering
+## Tujuh kesalahan paling sering
 
 1. **Lupa hard refresh** — perubahan sudah naik, browser menampilkan cache lama
 2. **Push tanpa `npm run check`** — build baru gagal di VPS, buang waktu
@@ -324,6 +393,10 @@ git pull
 4. **`CLIENT_ORIGIN` tidak sama persis** dengan alamat di browser — CORS gagal
 5. **Panik melihat `qa:static` merah** — memang sudah merah sejak lama, bukan
    karena perubahan Anda
+6. **Lupa `-f docker-compose.staging.yml`** — Docker menjawab
+   `no configuration file provided`
+7. **Mencoba `npm run ...` di VPS** — Node hanya ada di dalam container;
+   seluruh `npm run` dijalankan di laptop
 
 ---
 

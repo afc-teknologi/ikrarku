@@ -175,7 +175,7 @@ MAYAR_WEBHOOK_TOKEN=7f3a9c2e4b8d1f60a5c7e9b2d4f6a8c0e2b4d6f8a0c2e4b6
 Simpan file, lalu jalankan ulang aplikasi:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.staging.yml up -d --build
 ```
 
 - [ ] Langkah 4 selesai
@@ -188,8 +188,19 @@ Ini bagian yang menghemat banyak waktu. Jalankan **di server**:
 
 ```bash
 cd /opt/ikrarku
-npm run mayar:check
+docker compose -f docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs
 ```
+
+> **Kenapa lewat `docker compose exec`, bukan `npm run`?**
+> VPS produksi tidak memasang Node/npm — semuanya berjalan di dalam
+> container. Perintah di atas menjalankan perkakas itu di dalam container,
+> yang sudah punya Node sekaligus seluruh variabel dari `.env.staging`.
+>
+> Kalau muncul `executable file not found` atau `scripts/mayar-check.mjs:
+> No such file`, image Anda dibangun sebelum perkakas ini ada. Build ulang:
+> ```bash
+> docker compose -f docker-compose.staging.yml up -d --build
+> ```
 
 Perintah ini **tidak membuat transaksi apa pun**. API key Anda tidak dicetak
 ke layar.
@@ -313,13 +324,13 @@ PAYMENT_MODE=mayar
 Simpan, lalu:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.staging.yml up -d --build
 ```
 
 Jalankan pengecekan sekali lagi:
 
 ```bash
-npm run mayar:check
+docker compose -f docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs
 ```
 
 - [ ] Langkah 7 selesai
@@ -371,9 +382,9 @@ Cocokkan dengan tabel berikut:
 Hanya setelah Langkah 8 berhasil di sandbox.
 
 - [ ] Ganti `MAYAR_API_KEY` dengan key **produksi**
-- [ ] Sesuaikan `MAYAR_API_BASE` (jalankan `npm run mayar:check` untuk memastikan)
+- [ ] Sesuaikan `MAYAR_API_BASE` (jalankan `mayar:check` untuk memastikan)
 - [ ] Daftarkan ulang webhook di dashboard **produksi**
-- [ ] `npm run mayar:check` sekali lagi
+- [ ] `mayar:check` sekali lagi
 - [ ] Satu transaksi nyata nominal kecil, lalu refund
 
 ---
@@ -385,7 +396,7 @@ Sistem ini memakai Mayar API **versi 1**. Ada dua tanda versi itu sudah usang:
 1. Dokumentasi Mayar menyebut **V1 dihentikan 1 Oktober 2026** — sudah lewat
 2. Aplikasi resmi Mayar sendiri sudah memakai **V2**
 
-`npm run mayar:check` bagian 4 akan memberi tahu apakah V1 masih hidup untuk
+`mayar:check` bagian 4 akan memberi tahu apakah V1 masih hidup untuk
 akun Anda. Kalau hasilnya `404` atau `410`, **berhenti dulu** — perlu
 penyesuaian kode ke V2, dan dokumentasi V2-nya harus diminta ke Mayar.
 
@@ -418,7 +429,7 @@ penyesuaian kode ke V2, dan dokumentasi V2-nya harus diminta ke Mayar.
 
 Siapkan tiga hal ini saat bertanya:
 
-1. Output lengkap `npm run mayar:check` (aman dibagikan — key tidak dicetak)
+1. Output lengkap `mayar:check` (aman dibagikan — key tidak dicetak)
 2. Potongan log: `docker compose logs --tail=50 api | grep -i mayar`
 3. Langkah ke berapa Anda berhenti
 

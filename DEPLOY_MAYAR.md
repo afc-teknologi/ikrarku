@@ -10,7 +10,7 @@ Dibuat 11 Oktober 2026.
 Kerjakan berurutan: **A → B → C → D**. Bagian **E** berisi risiko yang belum
 terjawab dan harus dipastikan ke pihak Mayar sebelum produksi.
 
-Alat bantu: `npm run mayar:check` (lihat Bagian C1) memeriksa sebagian besar
+Alat bantu: `mayar:check` (lihat Bagian C1) memeriksa sebagian besar
 poin di bawah secara otomatis, tanpa membuat transaksi apa pun.
 
 ---
@@ -24,7 +24,7 @@ Altair `.agq`), sementara akun Mayar dipegang pihak lain.
 
 | Bisa | Caranya |
 |---|---|
-| Memastikan key valid atau tidak | `npm run mayar:check` |
+| Memastikan key valid atau tidak | `mayar:check` |
 | Tahu key ini **produksi atau sandbox** | `mayar:check` bagian 3b mencoba key yang sama ke ketiga domain Mayar |
 | Tahu key **Read Only atau Read & Write** | `mayar:check` bagian 4 |
 | Tahu key terikat **akun/domain mana** | `mayar:check` bagian 2, dibaca dari isi JWT |
@@ -183,7 +183,7 @@ PUBLIC_BASE_URL=https://dev.ikrarku.id
 
 ```bash
 cd /opt/ikrarku
-docker compose up -d --build
+docker compose -f docker-compose.staging.yml up -d --build
 ```
 
 Perubahan `.env.staging` sisi server tidak memerlukan rebuild frontend.
@@ -196,7 +196,7 @@ Perubahan `.env.staging` sisi server tidak memerlukan rebuild frontend.
 
 ```bash
 cd /opt/ikrarku
-npm run mayar:check
+docker compose -f docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs
 ```
 
 Tidak membuat transaksi apa pun. API key tidak pernah dicetak.
@@ -257,7 +257,7 @@ Baru dikerjakan setelah C3 benar-benar hijau.
 - [ ] Ganti key sandbox dengan key **produksi** (A2, akun `mayar.id`)
 - [ ] `MAYAR_API_BASE` → `https://api.mayar.id/hl/v1`
 - [ ] Daftarkan ulang webhook di dashboard **produksi** (A5)
-- [ ] `npm run mayar:check` sekali lagi
+- [ ] `mayar:check` sekali lagi
 - [ ] Satu transaksi nyata bernominal kecil, lalu refund
 
 ---
@@ -279,7 +279,7 @@ dipertanggungjawabkan.
 
 **Yang perlu dilakukan:**
 
-- [ ] Jalankan `npm run mayar:check`, lihat hasil pemeriksaan nomor 3
+- [ ] Jalankan `mayar:check`, lihat hasil pemeriksaan nomor 3
 - [ ] Tanyakan ke support Mayar: *"Apakah API V1 masih aktif untuk akun kami?
       Kalau tidak, di mana dokumentasi `invoice/create` versi V2?"*
 - [ ] Bila sudah harus V2, siapkan dokumentasinya untuk penyesuaian payload

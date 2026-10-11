@@ -187,7 +187,7 @@ Arsitektur, Nginx, dan backup/restore: [STAGING_DEPLOYMENT.md](STAGING_DEPLOYMEN
 Untuk menyambungkan payment gateway Mayar:
 [PANDUAN_MAYAR_PEMULA.md](PANDUAN_MAYAR_PEMULA.md) bila baru pertama kali,
 atau [DEPLOY_MAYAR.md](DEPLOY_MAYAR.md) sebagai rujukan ringkas. Keduanya
-memakai `npm run mayar:check`, yang memverifikasi key, izin, environment,
+memakai `mayar:check`, yang memverifikasi key, izin, environment,
 status endpoint, dan webhook tanpa membuat transaksi.
 
 Quick start:
