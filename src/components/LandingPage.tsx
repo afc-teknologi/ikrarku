@@ -40,11 +40,12 @@ export function JournalCard({
   return (
     /* SEO — dulu ini <button>, jadi crawler tidak melihat tautan apa pun ke
        artikel dan pengguna tidak bisa klik-tengah / salin alamat. Sekarang
-       anchor sungguhan ke /jurnal/<slug>; navigasi tetap client-side kecuali
-       pengguna menahan modifier atau klik tengah. */
+       anchor sungguhan ke /articles/<slug>; navigasi tetap client-side
+       kecuali pengguna menahan modifier atau klik tengah. Daftar jurnalnya
+       sendiri tetap di /jurnal — lihat tautan "Lihat semua" di bawah. */
     <a
       className="ikr-journal-card"
-      href={`/jurnal/${encodeURIComponent(article.slug)}`}
+      href={`/articles/${encodeURIComponent(article.slug)}`}
       onClick={(event) => {
         if (
           event.defaultPrevented ||

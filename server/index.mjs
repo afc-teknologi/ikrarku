@@ -2183,7 +2183,7 @@ app.patch("/api/articles/:id", auth, permit("articles.manage"), (req, res) => {
   // handler templates: tabel articles tidak punya kolom canvas_json dan tidak
   // pernah punya draft, jadi lookup-nya sia-sia.
   const next = { ...row, ...req.body };
-  // Slug ikut URL publik /jurnal/<slug>, jadi harus dinormalkan dan unik.
+  // Slug ikut URL publik /articles/<slug>, jadi harus dinormalkan dan unik.
   // Dulu nilai mentah dari body ditulis langsung: spasi/huruf besar lolos,
   // dan slug yang bentrok melanggar UNIQUE lalu melempar 500.
   let nextSlug = String(next.slug || row.slug || "")
@@ -4687,6 +4687,22 @@ const PUBLIC_BASE_URL = (
   "http://localhost:5173"
 ).replace(/\/+$/, "");
 
+/**
+ * Alamat publik satu artikel.
+ *
+ * Daftar jurnal tetap di `/jurnal`; halaman artikelnya berada di
+ * `/articles/<slug>`. Satu fungsi ini dipakai canonical, og:url, dan sitemap
+ * supaya ketiganya tidak pernah berbeda — alamat yang di-canonical-kan ke
+ * satu bentuk sementara sitemap menyebut bentuk lain membuat crawler
+ * menganggapnya dua halaman berbeda dengan isi sama.
+ */
+const ARTICLE_PATH_PREFIX = "/articles";
+/** Alamat lama sebelum pindah; dialihkan permanen, bukan dimatikan. */
+const LEGACY_ARTICLE_PATH_PREFIX = "/jurnal";
+function articlePath(slug) {
+  return `${ARTICLE_PATH_PREFIX}/${encodeURIComponent(slug)}`;
+}
+
 function absoluteAssetUrl(value) {
   if (!value) return "";
   if (/^https?:\/\//i.test(value)) return value;
@@ -4703,7 +4719,7 @@ function metaSummary(article) {
 }
 
 function articleHeadTags(article) {
-  const url = `${PUBLIC_BASE_URL}/jurnal/${encodeURIComponent(article.slug)}`;
+  const url = `${PUBLIC_BASE_URL}${articlePath(article.slug)}`;
   const summary = metaSummary(article);
   const cover = absoluteAssetUrl(article.coverUrl);
   const published = article.date || "";
@@ -4804,7 +4820,7 @@ app.get("/sitemap.xml", (_req, res) => {
     ...articles.map(
       (row) =>
         `  <url><loc>${escapeHtml(
-          `${PUBLIC_BASE_URL}/jurnal/${encodeURIComponent(row.slug)}`,
+          `${PUBLIC_BASE_URL}${articlePath(row.slug)}`,
         )}</loc><lastmod>${escapeHtml(
           String(row.updated || "").slice(0, 10),
         )}</lastmod><priority>0.6</priority></url>`,
@@ -4822,7 +4838,15 @@ app.get("/sitemap.xml", (_req, res) => {
 if (NODE_ENV === "production" && fs.existsSync(DIST_DIR)) {
   // Didaftarkan SEBELUM express.static dan catch-all: Express mencocokkan
   // rute sesuai urutan pendaftaran, jadi rute spesifik ini harus lebih dulu.
-  app.get("/jurnal/:slug", (req, res, next) => {
+  // Alamat artikel pindah dari /jurnal/<slug> ke /articles/<slug>. Tautan
+  // lama yang sudah tersebar atau terindeks TIDAK boleh mati: 301 memindahkan
+  // nilai SEO-nya ke alamat baru, sedangkan membiarkannya 404 membuangnya.
+  // Didaftarkan sebelum rute baru karena Express mencocokkan sesuai urutan.
+  app.get(`${LEGACY_ARTICLE_PATH_PREFIX}/:slug`, (req, res) =>
+    res.redirect(301, articlePath(req.params.slug)),
+  );
+
+  app.get(`${ARTICLE_PATH_PREFIX}/:slug`, (req, res, next) => {
     let article;
     try {
       article = publishedArticleBySlug(req.params.slug);

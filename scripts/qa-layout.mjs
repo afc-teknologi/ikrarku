@@ -313,10 +313,22 @@ const landingTsx = readFileSync(
   "utf8",
 );
 
-test("SEO: artikel punya URL /jurnal/<slug> dan deep link dua segmen", () => {
-  // Parser lama hanya menangani SATU segmen, jadi /jurnal/<slug> jatuh ke
-  // lookup public site lalu 404.
-  assert.match(appTsx, /pathParts\.length === 2 && pathParts\[0\] === "jurnal"/);
+test("SEO: artikel punya URL /articles/<slug> dan deep link dua segmen", () => {
+  // Parser lama hanya menangani SATU segmen, jadi alamat artikel yang punya
+  // dua segmen jatuh ke lookup public site lalu 404.
+  assert.match(
+    appTsx,
+    /pathParts\[0\] === ARTICLE_PATH_SEGMENT \|\| pathParts\[0\] === "jurnal"/,
+  );
+  // Satu sumber kebenaran untuk ruas pertama; dipakai juga oleh og:url sisi
+  // klien, dan harus sama dengan ARTICLE_PATH_PREFIX di server.
+  assert.match(appTsx, /const ARTICLE_PATH_SEGMENT = "articles"/);
+  assert.match(
+    appTsx,
+    /const articleHref = \(slug: string\) =>\n\s*`\/\$\{ARTICLE_PATH_SEGMENT\}\/\$\{encodeURIComponent\(slug\)\}`/,
+  );
+  // Daftar jurnalnya TETAP /jurnal — dua alamat yang sengaja berbeda.
+  assert.match(appTsx, /journal: "\/jurnal",/);
   assert.match(appTsx, /const \[articleSlug, setArticleSlug\] = useState<string \| null>\(null\)/);
   // Reader tidak boleh kembali ke useState lokal: itu membuat URL tidak berubah.
   assert.equal(
@@ -329,14 +341,17 @@ test("SEO: artikel punya URL /jurnal/<slug> dan deep link dua segmen", () => {
 test("SEO: kartu jurnal adalah anchor, bukan button", () => {
   // Crawler mengikuti <a href>. Sebuah <button> tidak terlihat sebagai tautan,
   // dan pengguna tidak bisa klik-tengah atau menyalin alamatnya.
-  assert.match(landingTsx, /href=\{`\/jurnal\/\$\{encodeURIComponent\(article\.slug\)\}`\}/);
+  assert.match(landingTsx, /href=\{`\/articles\/\$\{encodeURIComponent\(article\.slug\)\}`\}/);
   assert.match(landingTsx, /className="ikr-journal-card"\s*\n\s*href=/);
+  // Tautan daftar pada navigasi tetap menunjuk /jurnal.
+  assert.match(landingTsx, /href="\/jurnal"/);
 });
 
 test("SEO: server menyuntikkan meta per artikel ke HTML mentah", () => {
   // Crawler pratinjau tautan (WhatsApp, Facebook, X, LinkedIn) tidak
   // menjalankan JavaScript, jadi meta sisi klien saja tidak cukup.
-  assert.match(serverMjs, /app\.get\("\/jurnal\/:slug"/);
+  assert.match(serverMjs, /app\.get\(`\$\{ARTICLE_PATH_PREFIX\}\/:slug`/);
+  assert.match(serverMjs, /const ARTICLE_PATH_PREFIX = "\/articles"/);
   for (const tag of [
     "og:title",
     "og:description",
@@ -358,10 +373,37 @@ test("SEO: server menyuntikkan meta per artikel ke HTML mentah", () => {
   // Rute spesifik harus terdaftar SEBELUM catch-all, karena Express
   // mencocokkan sesuai urutan pendaftaran.
   assert.ok(
-    serverMjs.indexOf('app.get("/jurnal/:slug"') <
+    serverMjs.indexOf("app.get(`${ARTICLE_PATH_PREFIX}/:slug`") <
       serverMjs.indexOf("app.use(express.static(DIST_DIR))"),
-    "rute /jurnal/:slug terdaftar setelah catch-all dan tidak akan pernah cocok",
+    "rute artikel terdaftar setelah catch-all dan tidak akan pernah cocok",
   );
+});
+
+test("SEO: alamat lama /jurnal/<slug> dialihkan 301, bukan dimatikan", () => {
+  // Tautan yang sudah tersebar atau terindeks harus tetap sampai. 301
+  // memindahkan nilai SEO-nya ke alamat baru; 404 membuangnya.
+  assert.match(
+    serverMjs,
+    /app\.get\(`\$\{LEGACY_ARTICLE_PATH_PREFIX\}\/:slug`, \(req, res\) =>\n\s*res\.redirect\(301, articlePath\(req\.params\.slug\)\)/,
+  );
+  assert.match(serverMjs, /const LEGACY_ARTICLE_PATH_PREFIX = "\/jurnal"/);
+  // Redirect harus lebih dulu daripada rute barunya agar urutan Express benar.
+  assert.ok(
+    serverMjs.indexOf("app.get(`${LEGACY_ARTICLE_PATH_PREFIX}/:slug`") <
+      serverMjs.indexOf("app.get(`${ARTICLE_PATH_PREFIX}/:slug`"),
+  );
+  // Klien tetap menerima alamat lama kalau proxy belum mengalihkan.
+  assert.match(appTsx, /parts\[0\] === ARTICLE_PATH_SEGMENT \|\| parts\[0\] === "jurnal"/);
+});
+
+test("SEO: canonical, og:url, dan sitemap memakai satu bentuk alamat", () => {
+  // Alamat yang berbeda antara ketiganya membuat crawler melihat dua
+  // halaman berbeda dengan isi sama.
+  assert.match(serverMjs, /const url = `\$\{PUBLIC_BASE_URL\}\$\{articlePath\(article\.slug\)\}`/);
+  assert.match(serverMjs, /`\$\{PUBLIC_BASE_URL\}\$\{articlePath\(row\.slug\)\}`/);
+  assert.match(appTsx, /const url = `\$\{origin\}\/articles\/\$\{encodeURIComponent\(article\.slug\)\}`/);
+  // Daftar jurnal tetap ikut sitemap pada alamatnya sendiri.
+  assert.match(serverMjs, /\["\/jurnal", "0\.8"\]/);
 });
 
 test("SEO: robots.txt & sitemap.xml tersedia", () => {
@@ -391,13 +433,14 @@ test("SEO: tanggal artikel tidak lagi ISO mentah", () => {
 // Retest lanjutan — empat temuan QA setelah TC-186..TC-203 dinyatakan Pass.
 // =====================================================================
 
-test("Retest-1: menutup artikel dari landing membersihkan URL /jurnal/<slug>", () => {
-  // appPaths hanya memuat ruas pertama ("/jurnal"), sehingga pathname artikel
-  // yang punya dua ruas tidak pernah dikenali sebagai milik aplikasi dan URL
-  // tetap menunjuk artikel padahal daftar/landing yang tampil.
+test("Retest-1: menutup artikel dari landing membersihkan URL artikel", () => {
+  // appPaths hanya memuat ruas pertama, sehingga pathname artikel yang punya
+  // dua ruas tidak pernah dikenali sebagai milik aplikasi dan URL tetap
+  // menunjuk artikel padahal daftar/landing yang tampil. Kedua prefiks
+  // (baru dan lama) harus dikenali.
   assert.match(
     appTsx,
-    /const isArticlePathname = \/\^\\\/jurnal\\\/\[\^\/\]\+\\\/\?\$\/\.test\(/,
+    /const isArticlePathname = new RegExp\(\n\s*`\^\/\(\$\{ARTICLE_PATH_SEGMENT\}\|jurnal\)\/\[\^\/\]\+\/\?\$`,\n\s*\)\.test\(window\.location\.pathname\)/,
   );
   assert.match(
     appTsx,

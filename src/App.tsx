@@ -682,7 +682,7 @@ function formatArticleDate(value: string): string {
  *
  * Catatan: ini hanya menolong crawler yang menjalankan JavaScript. Crawler
  * yang membaca HTML mentah dilayani oleh injeksi meta di sisi server
- * (server/index.mjs, rute /jurnal/:slug).
+ * (server/index.mjs, rute /articles/:slug).
  */
 const BASE_META = {
   description:
@@ -752,7 +752,10 @@ function applyArticleMeta(article: ArticleItem | null) {
     upsertLink("canonical", null);
     return;
   }
-  const url = `${origin}/jurnal/${encodeURIComponent(article.slug)}`;
+  // Harus sama persis dengan canonical & og:url dari server dan dengan isi
+  // sitemap; alamat yang berbeda-beda membuat crawler melihat dua halaman
+  // berbeda dengan isi yang sama.
+  const url = `${origin}/articles/${encodeURIComponent(article.slug)}`;
   const summary = (article.excerpt || article.title).slice(0, 300);
   upsertMeta('meta[name="description"]', "name", "description", summary);
   upsertMeta('meta[property="og:title"]', "property", "og:title", article.title);
@@ -2375,6 +2378,18 @@ function playNotificationTone() {
   osc.stop(context.currentTime + 0.38);
 }
 
+/**
+ * Ruas pertama alamat halaman artikel: `/articles/<slug>`.
+ *
+ * Daftar jurnalnya tetap `/jurnal` — keduanya sengaja berbeda, jadi jangan
+ * disatukan. Nilai ini harus sama dengan ARTICLE_PATH_PREFIX pada
+ * server/index.mjs, yang dipakai untuk canonical, og:url, sitemap, dan
+ * pengalihan 301 dari alamat lama.
+ */
+const ARTICLE_PATH_SEGMENT = "articles";
+const articleHref = (slug: string) =>
+  `/${ARTICLE_PATH_SEGMENT}/${encodeURIComponent(slug)}`;
+
 function App() {
   const initialSession = useMemo(
     () =>
@@ -2411,7 +2426,7 @@ function App() {
   const [soundCatalog, setSoundCatalog] = useState<SoundCatalogItem[]>([]);
   const [articleEditorId, setArticleEditorId] = useState<string>("new");
   // SEO — artikel yang sedang dibuka disimpan di level atas supaya punya URL
-  // sendiri (/jurnal/<slug>). Sebelumnya reader hidup di useState lokal
+  // sendiri (/articles/<slug>). Sebelumnya reader hidup di useState lokal
   // JournalPage/LandingPage, jadi membuka artikel tidak mengubah URL sama
   // sekali: tidak bisa di-share, tidak bisa di-bookmark, tidak bisa dirayapi.
   const [articleSlug, setArticleSlug] = useState<string | null>(null);
@@ -2471,12 +2486,17 @@ function App() {
       // Capture the path BEFORE any await — the title/URL effect may rewrite the address bar to '/'
       // on first paint, which would otherwise erase the slug before we can detect an unknown route.
       const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, "");
-      // /jurnal/<slug> punya DUA segmen. pathSlug di bawah hanya pernah
-      // menangani satu segmen, sehingga "jurnal/judul-artikel" tidak cocok
+      // Alamat artikel punya DUA segmen. pathSlug di bawah hanya pernah
+      // menangani satu segmen, sehingga "articles/judul-artikel" tidak cocok
       // dengan daftar reserved, jatuh ke lookup public site, lalu 404.
       const pathParts = rawPath.split("/").filter(Boolean);
+      // Alamat artikel adalah /articles/<slug>; daftar jurnalnya tetap
+      // /jurnal. "jurnal" masih diterima di sini supaya tautan lama yang
+      // dibuka langsung tetap menampilkan artikelnya walau server (atau
+      // reverse proxy) belum sempat mengalihkan.
       const deepArticleSlug =
-        pathParts.length === 2 && pathParts[0] === "jurnal"
+        pathParts.length === 2 &&
+        (pathParts[0] === ARTICLE_PATH_SEGMENT || pathParts[0] === "jurnal")
           ? decodeURIComponent(pathParts[1])
           : null;
       const pathSlug = deepArticleSlug ? "jurnal" : rawPath;
@@ -3131,7 +3151,8 @@ function App() {
         .split("/")
         .filter(Boolean);
       setArticleSlug(
-        parts.length === 2 && parts[0] === "jurnal"
+        parts.length === 2 &&
+          (parts[0] === ARTICLE_PATH_SEGMENT || parts[0] === "jurnal")
           ? decodeURIComponent(parts[1])
           : null,
       );
@@ -3192,17 +3213,17 @@ function App() {
     // Halaman bertoken tidak boleh dibersihkan sebelum komponennya sempat
     // membaca query string.
     const tokenPaths = new Set(["/reset-password", "/verify-email"]);
-    // Pathname artikel punya dua ruas (`/jurnal/<slug>`), sedangkan appPaths
+    // Pathname artikel punya dua ruas (`/articles/<slug>`), sedangkan appPaths
     // hanya memuat ruas pertama. Tanpa pengenal ini URL artikel tidak pernah
     // dianggap "milik aplikasi" dan karena itu tidak pernah dibersihkan.
-    const isArticlePathname = /^\/jurnal\/[^/]+\/?$/.test(
-      window.location.pathname,
-    );
+    const isArticlePathname = new RegExp(
+      `^/(${ARTICLE_PATH_SEGMENT}|jurnal)/[^/]+/?$`,
+    ).test(window.location.pathname);
     if (view === "landing") {
       // Artikel bisa dibuka langsung dari carousel landing. Tanpa cabang ini
       // URL-nya langsung dibersihkan kembali ke "/".
       if (articleSlug) {
-        const articleUrl = `/jurnal/${encodeURIComponent(articleSlug)}`;
+        const articleUrl = articleHref(articleSlug);
         if (window.location.pathname !== articleUrl)
           try {
             // pushState, bukan replaceState: tombol Back browser harus
@@ -3259,17 +3280,20 @@ function App() {
       "settings",
       "editor",
     ];
+    // Daftar jurnal tetap di /jurnal; artikel yang terbuka pindah ke
+    // /articles/<slug>, jadi alamatnya berganti ruas pertama, bukan hanya
+    // bertambah slug.
     const target = workspaceViews.includes(view)
       ? "/workspace"
       : articleSlug && view === "journal"
-        ? `/jurnal/${encodeURIComponent(articleSlug)}`
+        ? articleHref(articleSlug)
         : paths[view];
     if (target && window.location.pathname !== target) {
       try {
         // Membuka artikel menambah entri history supaya tombol Back menutup
         // artikel, bukan melempar pengguna keluar dari situs. Perpindahan
         // antar view lain tetap replaceState seperti sebelumnya.
-        const isArticleTarget = target.startsWith("/jurnal/");
+        const isArticleTarget = target.startsWith(`/${ARTICLE_PATH_SEGMENT}/`);
         (isArticleTarget
           ? window.history.pushState
           : window.history.replaceState
@@ -5652,7 +5676,7 @@ function JournalPage({
   setView: (view: View) => void;
   databaseOnline: boolean;
   /** Slug artikel yang sedang dibuka. Dikendalikan dari level atas supaya
-      membuka artikel mengubah URL menjadi /jurnal/<slug>. */
+      membuka artikel mengubah URL menjadi /articles/<slug>. */
   articleSlug: string | null;
   onOpenArticle: (slug: string | null) => void;
 }) {
