@@ -567,3 +567,35 @@ test("Retest-6: layer yang bergerak tidak menyingkap tepi canvas", () => {
   assert.match(appTsx, /20s · paling lambat/);
   assert.match(appCss, /label\.range-field>\.range-scale\{/);
 });
+
+test("Retest-7: background global tidak menimpa animasi layer milik canvas", () => {
+  // applyGlobalBackground() dulu selalu memakai backgroundLoopEffect Canvas 1.
+  // Efek yang dipilih di Canvas 2+ tersimpan dan tampil di panel Advanced,
+  // tetapi renderer membacanya dari Canvas 1 yang biasanya "Tidak ada" —
+  // kontrolnya terlihat sama sekali tidak berfungsi. Pola yang sama dengan
+  // TC-195/196: sisi tulis benar, sisi baca salah.
+  const fn = appTsx.slice(
+    appTsx.indexOf("function applyGlobalBackground("),
+    appTsx.indexOf("// QA TC-141 — preset bentuk button"),
+  );
+  assert.ok(fn.length > 0, "applyGlobalBackground tidak ditemukan");
+  assert.match(
+    fn,
+    /backgroundLoopEffect:\n\s*section\.backgroundLoopEffect && section\.backgroundLoopEffect !== "none"\n\s*\? section\.backgroundLoopEffect\n\s*: source\.backgroundLoopEffect/,
+  );
+  assert.match(
+    fn,
+    /backgroundLoopSpeed:\n\s*section\.backgroundLoopEffect && section\.backgroundLoopEffect !== "none"\n\s*\? section\.backgroundLoopSpeed\n\s*: source\.backgroundLoopSpeed/,
+  );
+  // Nilai global tetap jadi cadangan, bukan dibuang.
+  assert.ok(
+    fn.includes("source.backgroundLoopEffect"),
+    "animasi global hilang sebagai fallback",
+  );
+  // Layer canvas ini memang digabung, bukan dibuang — dasar kenapa canvas
+  // ini berhak punya animasinya sendiri.
+  assert.match(
+    fn,
+    /backgroundLayers: \[\n\s*\.\.\.\(source\.backgroundLayers \|\| \[\]\),\n\s*\.\.\.\(section\.backgroundLayers \|\| \[\]\),\n\s*\]/,
+  );
+});

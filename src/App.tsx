@@ -14214,8 +14214,21 @@ function applyGlobalBackground(
       ...(source.backgroundLayers || []),
       ...(section.backgroundLayers || []),
     ],
-    backgroundLoopEffect: source.backgroundLoopEffect,
-    backgroundLoopSpeed: source.backgroundLoopSpeed,
+    // Layer milik canvas ini digabung dengan layer global (lihat
+    // backgroundLayers di atas), jadi canvas ini memang boleh punya lapisan
+    // sendiri — dan karenanya boleh punya animasinya sendiri. Dulu nilai
+    // global SELALU menang: efek yang dipilih di Canvas 2+ tersimpan dan
+    // tampil di panel Advanced, tetapi renderer membacanya dari Canvas 1
+    // yang biasanya "Tidak ada", sehingga animasinya tidak pernah jalan dan
+    // kontrolnya terlihat rusak. Nilai canvas ini menang bila diisi.
+    backgroundLoopEffect:
+      section.backgroundLoopEffect && section.backgroundLoopEffect !== "none"
+        ? section.backgroundLoopEffect
+        : source.backgroundLoopEffect,
+    backgroundLoopSpeed:
+      section.backgroundLoopEffect && section.backgroundLoopEffect !== "none"
+        ? section.backgroundLoopSpeed
+        : source.backgroundLoopSpeed,
     // Tipe scroll global: parallax mengunci background ke viewport,
     // "section" membuat tiap canvas menggulung bersama isinya.
     backgroundFixed: source.backgroundScrollType === "parallax",
