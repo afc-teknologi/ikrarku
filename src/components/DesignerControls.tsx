@@ -1,11 +1,22 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { DesignerLayout, Dock } from "./designerLayout";
 type Props = {
   feature: DesignerLayout & { id: string; type: string };
   update: (patch: Partial<DesignerLayout>) => void;
+  /** Mode device yang sedang aktif pada toolbar editor. */
+  activeDevice?: "desktop" | "mobile";
 };
-export default function DesignerControls({ feature, update }: Props) {
-  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+export default function DesignerControls({
+  feature,
+  update,
+  activeDevice = "desktop",
+}: Props) {
+  // Dropdown ini dulu punya state sendiri yang selalu mulai dari "desktop",
+  // jadi designer yang sudah menekan Mobile di toolbar tetap menulis ke nilai
+  // desktop. Sekarang ia mengikuti toolbar dan hanya bisa digeser manual
+  // sebagai override sementara.
+  const [device, setDevice] = useState<"desktop" | "mobile">(activeDevice);
+  useEffect(() => setDevice(activeDevice), [activeDevice]);
   const layout = {
     ...feature,
     ...(device === "mobile" ? feature.mobileLayout : {}),

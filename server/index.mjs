@@ -2179,32 +2179,40 @@ app.patch("/api/articles/:id", auth, permit("articles.manage"), (req, res) => {
     .prepare("SELECT * FROM articles WHERE id=?")
     .get(req.params.id);
   if (!row) return res.status(404).json({ error: "Article tidak ditemukan" });
-  const pending = db
-    .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
-    .get(row.id);
-  const draftBase = pending
-    ? { ...row, ...parseJson(pending.changes_json, {}) }
-    : row;
-  const next = {
-    ...draftBase,
-    ...req.body,
-    canvas_json:
-      req.body.canvasJson !== undefined
-        ? JSON.stringify(req.body.canvasJson)
-        : draftBase.canvas_json,
-  };
+  // Blok template_drafts/canvas_json sebelumnya di sini adalah salinan dari
+  // handler templates: tabel articles tidak punya kolom canvas_json dan tidak
+  // pernah punya draft, jadi lookup-nya sia-sia.
+  const next = { ...row, ...req.body };
+  // Slug ikut URL publik /jurnal/<slug>, jadi harus dinormalkan dan unik.
+  // Dulu nilai mentah dari body ditulis langsung: spasi/huruf besar lolos,
+  // dan slug yang bentrok melanggar UNIQUE lalu melempar 500.
+  let nextSlug = String(next.slug || row.slug || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+  if (!nextSlug) nextSlug = row.slug;
+  if (
+    nextSlug !== row.slug &&
+    db
+      .prepare("SELECT 1 FROM articles WHERE slug=? AND id<>?")
+      .get(nextSlug, row.id)
+  )
+    nextSlug = `${nextSlug}-${Date.now().toString().slice(-5)}`;
   db.prepare(
     `UPDATE articles SET title=?,slug=?,category=?,excerpt=?,content=?,status=?,tags_json=?,cover_url=?,published_at=?,updated_at=? WHERE id=?`,
   ).run(
     next.title,
-    next.slug,
+    nextSlug,
     next.category,
     next.excerpt,
     next.content,
     next.status,
     JSON.stringify(next.tags || parseJson(row.tags_json, [])),
     next.coverUrl ?? row.cover_url,
-    next.status === "Published" ? row.published_at || now() : null,
+    // published_at dipertahankan walau artikel dikembalikan ke Draft. Dulu
+    // di-null-kan, sehingga tanggal terbit asli hilang permanen dan
+    // article:published_time pada meta SEO ikut kosong setelah republish.
+    next.status === "Published" ? row.published_at || now() : row.published_at,
     now(),
     row.id,
   );
@@ -3763,16 +3771,34 @@ async function createMayarInvoice(order, template) {
     throw Object.assign(new Error("MAYAR_API_KEY belum diset"), {
       status: 500,
     });
+  // Payload mengikuti kontrak /hl/v1/invoice/create pada dokumentasi Mayar:
+  // name, email, mobile, redirectUrl, description, expiredAt, items[].
+  //
+  // Versi sebelumnya mengirim `amount` dan `webhookUrl` di level atas serta
+  // `reference` — ketiganya BUKAN field invoice Mayar. Nominalnya ada di
+  // items[].rate, masa berlaku wajib lewat expiredAt, dan URL webhook diatur
+  // di dashboard Mayar, bukan per invoice.
+  const expiryHours = Number(process.env.MAYAR_INVOICE_EXPIRY_HOURS || 24);
+  const description = `Template ${template?.name || order.template_id} · ${order.order_no}`;
   const payload = {
     name: order.customer_name,
     email: order.email,
     mobile: order.phone || "",
-    amount: Number(order.amount),
-    description: `Template ${template?.name || order.template_id} · ${order.order_no}`,
+    description,
     redirectUrl: `${CLIENT_ORIGIN.replace(/\/$/, "")}/pembayaran-berhasil?order=${encodeURIComponent(order.order_no)}`,
-    webhookUrl: `${CLIENT_ORIGIN.replace(/\/$/, "")}/api/webhooks/mayar`,
-    // reference is echoed back by Mayar webhooks so we can match the order.
-    reference: order.id,
+    expiredAt: new Date(
+      Date.now() + Math.max(1, expiryHours) * 3600_000,
+    ).toISOString(),
+    items: [
+      {
+        quantity: 1,
+        rate: Number(order.amount),
+        description,
+      },
+    ],
+    // Dikirim kalau-kalau Mayar mengembalikannya; pencocokan utama tetap
+    // memakai transactionId dari respons di bawah.
+    extraData: { noCustomer: false, idProd: order.id },
   };
   const response = await fetch(`${base}/invoice/create`, {
     method: "POST",
@@ -3880,34 +3906,81 @@ app.post(
   },
 );
 
-// Mayar payment webhook: confirms payment and fulfils the order. Verifies a shared token.
+// Webhook pembayaran Mayar: mengonfirmasi pembayaran lalu memenuhi order.
+//
+// Mayar TIDAK menandatangani body webhook dan tidak mengirim header rahasia.
+// Pengamanannya: daftarkan URL webhook di dashboard Mayar lengkap dengan
+// query token, mis. https://dev.ikrarku.id/api/webhooks/mayar?token=RAHASIA
+// lalu samakan nilainya dengan MAYAR_WEBHOOK_TOKEN.
+//
+// Versi sebelumnya punya TIGA penghalang yang membuat webhook tidak akan
+// pernah berhasil, sehingga order menggantung di Pending selamanya:
+//   1. hanya menerima header `x-mayar-token`, yang tidak pernah dikirim Mayar;
+//   2. mewajibkan field `reference`, yang tidak ada di payload Mayar
+//      (pencocokan yang benar memakai data.transactionId / data.id);
+//   3. membandingkan `currency`, yang juga tidak ada di payload — sehingga
+//      String(undefined) selalu gagal cocok.
 app.post("/api/webhooks/mayar", async (req, res) => {
-  // Gateway adapter stays disabled until provider payload verification is configured.
   const configuredToken = process.env.MAYAR_WEBHOOK_TOKEN;
   if (process.env.PAYMENT_MODE !== "mayar" || !configuredToken)
     return res.status(503).json({ error: "Webhook belum dikonfigurasi" });
-  const provided = String(req.headers["x-mayar-token"] || "");
+  // Token diterima dari query (cara Mayar) maupun header (kompatibilitas).
+  const provided = String(
+    req.query?.token || req.headers["x-mayar-token"] || "",
+  );
   if (
     Buffer.byteLength(provided) !== Buffer.byteLength(configuredToken) ||
     !crypto.timingSafeEqual(Buffer.from(provided), Buffer.from(configuredToken))
   )
     return res.status(401).json({ error: "Invalid webhook token" });
-  const data = req.body?.data || {},
-    event = String(req.body?.event || req.body?.status || "").toLowerCase();
-  if (!["paid", "settled", "success", "payment.received"].includes(event))
-    return res.json({ ok: true, ignored: event });
-  const reference = data.reference || req.body?.reference || data.merchantRef;
-  if (typeof reference !== "string")
-    return res.status(400).json({ error: "Missing reference" });
-  const order = db
-    .prepare("SELECT * FROM orders WHERE id=? OR gateway_ref=?")
-    .get(reference, reference);
-  if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+
+  const data = req.body?.data || {};
+  const event = String(req.body?.event || req.body?.status || "").toLowerCase();
   if (
-    Number(data.amount ?? req.body.amount) !== Number(order.amount) ||
-    String(data.currency ?? req.body.currency).toUpperCase() !== order.currency
+    !["paid", "settled", "success", "payment.received"].includes(event) ||
+    // payment.reminder memakai event lain, tapi status SUCCESS adalah penanda
+    // pembayaran benar-benar diterima.
+    (data.status && String(data.status).toUpperCase() === "FAILED")
   )
-    return res.status(400).json({ error: "Payment amount/currency mismatch" });
+    return res.json({ ok: true, ignored: event });
+
+  // Mayar mengembalikan transactionId pada respons create DAN pada webhook;
+  // itulah yang kita simpan di orders.gateway_ref.
+  const candidates = [
+    data.transactionId,
+    data.id,
+    data.reference,
+    data.merchantRef,
+    data.extraData?.idProd,
+    req.body?.reference,
+  ].filter((value) => typeof value === "string" && value);
+  if (!candidates.length)
+    return res.status(400).json({ error: "Missing transaction reference" });
+  let order = null;
+  for (const candidate of candidates) {
+    order = db
+      .prepare("SELECT * FROM orders WHERE id=? OR gateway_ref=?")
+      .get(candidate, candidate);
+    if (order) break;
+  }
+  if (!order) {
+    // 404 membuat Mayar mencoba ulang; dicatat agar bisa direkonsiliasi manual.
+    console.warn("Mayar webhook: order tidak cocok", candidates);
+    return res.status(404).json({ error: "Order tidak ditemukan" });
+  }
+
+  // Nominal tetap diverifikasi. Currency hanya dicek bila memang dikirim —
+  // payload Mayar tidak memuatnya.
+  const paidAmount = Number(data.amount ?? req.body.amount);
+  if (Number.isFinite(paidAmount) && paidAmount !== Number(order.amount))
+    return res.status(400).json({ error: "Payment amount mismatch" });
+  const paidCurrency = data.currency ?? req.body.currency;
+  if (paidCurrency && String(paidCurrency).toUpperCase() !== order.currency)
+    return res.status(400).json({ error: "Payment currency mismatch" });
+
+  // Mayar mengirim ulang webhook sampai menerima 2xx, jadi handler ini harus
+  // idempoten.
+  if (order.payment_status === "Paid") return res.json({ ok: true, already: true });
   try {
     await fulfillPaidOrder(order, order.payment_method || "MAYAR");
     res.json({ ok: true });
@@ -4168,7 +4241,9 @@ app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
       .json({ error: "Hanya Administrator dapat reassign task" });
   if (
     req.body.status &&
-    !["Open", "In Progress", "Pending", "Done", "Cancelled"].includes(
+    // "Waiting Customer" ada pada dropdown Tasks & Tickets tetapi dulu tidak
+    // termasuk status yang sah, sehingga Save Status membalas 400.
+    !["Open", "In Progress", "Waiting Customer", "Pending", "Done", "Cancelled"].includes(
       req.body.status,
     )
   )
@@ -4592,7 +4667,187 @@ app.get("/api/mailer-status", auth, (_req, res) =>
   }),
 );
 
+// ---------------------------------------------------------------------------
+// SEO untuk Jurnal ikrarku
+// ---------------------------------------------------------------------------
+// Aplikasi ini SPA tanpa SSR: index.html yang dikirim ke semua URL hanya
+// memuat meta statis milik aplikasi. Googlebot memang menjalankan JavaScript,
+// tapi crawler pratinjau tautan (WhatsApp, Facebook, X, LinkedIn, Slack)
+// TIDAK. Tanpa injeksi di sisi server, setiap artikel yang dibagikan tampil
+// dengan judul dan deskripsi yang sama persis.
+//
+// Rute di bawah mengambil index.html hasil build, menukar blok <title>/<meta>
+// dengan milik artikel, lalu mengirimkannya. Bundle JS yang sama tetap
+// berjalan sesudahnya, jadi tidak ada duplikasi rendering.
+
+/** Basis URL publik; dipakai untuk canonical, og:url, dan sitemap. */
+const PUBLIC_BASE_URL = (
+  process.env.PUBLIC_BASE_URL ||
+  CLIENT_ORIGIN ||
+  "http://localhost:5173"
+).replace(/\/+$/, "");
+
+function absoluteAssetUrl(value) {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${PUBLIC_BASE_URL}/${String(value).replace(/^\/+/, "")}`;
+}
+
+/** Ringkasan untuk meta description: tag HTML dibuang, dipotong rapi. */
+function metaSummary(article) {
+  const source = (article.excerpt || article.content || article.title || "")
+    .replace(/<[^>]*>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return source.length > 200 ? `${source.slice(0, 197).trimEnd()}...` : source;
+}
+
+function articleHeadTags(article) {
+  const url = `${PUBLIC_BASE_URL}/jurnal/${encodeURIComponent(article.slug)}`;
+  const summary = metaSummary(article);
+  const cover = absoluteAssetUrl(article.coverUrl);
+  const published = article.date || "";
+  // JSON-LD membuat artikel memenuhi syarat rich result di hasil pencarian.
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: article.title,
+    description: summary,
+    datePublished: published,
+    dateModified: published,
+    mainEntityOfPage: { "@type": "WebPage", "@id": url },
+    author: { "@type": "Person", name: article.author || "ikrarku" },
+    publisher: {
+      "@type": "Organization",
+      name: "ikrarku Sites",
+      logo: {
+        "@type": "ImageObject",
+        url: `${PUBLIC_BASE_URL}/brand/ikrarku-logo.png`,
+      },
+    },
+    ...(cover ? { image: [cover] } : {}),
+    ...(article.category ? { articleSection: article.category } : {}),
+  };
+  return [
+    `<title>${escapeHtml(article.title)} - Jurnal ikrarku</title>`,
+    `<meta name="description" content="${escapeHtml(summary)}" />`,
+    `<link rel="canonical" href="${escapeHtml(url)}" />`,
+    `<meta property="og:type" content="article" />`,
+    `<meta property="og:title" content="${escapeHtml(article.title)}" />`,
+    `<meta property="og:description" content="${escapeHtml(summary)}" />`,
+    `<meta property="og:url" content="${escapeHtml(url)}" />`,
+    cover ? `<meta property="og:image" content="${escapeHtml(cover)}" />` : "",
+    published
+      ? `<meta property="article:published_time" content="${escapeHtml(published)}" />`
+      : "",
+    article.category
+      ? `<meta property="article:section" content="${escapeHtml(article.category)}" />`
+      : "",
+    `<meta name="twitter:card" content="${cover ? "summary_large_image" : "summary"}" />`,
+    `<meta name="twitter:title" content="${escapeHtml(article.title)}" />`,
+    `<meta name="twitter:description" content="${escapeHtml(summary)}" />`,
+    cover ? `<meta name="twitter:image" content="${escapeHtml(cover)}" />` : "",
+    // </script> di dalam konten akan menutup blok ini lebih awal.
+    `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>`,
+  ]
+    .filter(Boolean)
+    .join("\n    ");
+}
+
+const publishedArticleBySlug = (slug) => {
+  const row = db
+    .prepare(
+      `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a
+         LEFT JOIN users u ON u.id=a.author_id
+        WHERE a.slug=? AND a.status='Published'`,
+    )
+    .get(slug);
+  return row ? mapArticle(row) : null;
+};
+
+// robots.txt & sitemap.xml dilayani di segala environment supaya bisa diuji
+// tanpa build produksi.
+app.get("/robots.txt", (_req, res) => {
+  res
+    .type("text/plain")
+    .send(
+      [
+        "User-agent: *",
+        "Allow: /",
+        "Disallow: /workspace",
+        "Disallow: /api/",
+        "",
+        `Sitemap: ${PUBLIC_BASE_URL}/sitemap.xml`,
+        "",
+      ].join("\n"),
+    );
+});
+
+app.get("/sitemap.xml", (_req, res) => {
+  const articles = db
+    .prepare(
+      `SELECT slug, COALESCE(published_at, created_at) updated FROM articles
+        WHERE status='Published' ORDER BY COALESCE(published_at,created_at) DESC`,
+    )
+    .all();
+  const statics = [
+    ["/", "1.0"],
+    ["/jurnal", "0.8"],
+    ["/desain", "0.8"],
+    ["/templates", "0.7"],
+  ];
+  const entries = [
+    ...statics.map(
+      ([loc, priority]) =>
+        `  <url><loc>${escapeHtml(PUBLIC_BASE_URL + loc)}</loc><priority>${priority}</priority></url>`,
+    ),
+    ...articles.map(
+      (row) =>
+        `  <url><loc>${escapeHtml(
+          `${PUBLIC_BASE_URL}/jurnal/${encodeURIComponent(row.slug)}`,
+        )}</loc><lastmod>${escapeHtml(
+          String(row.updated || "").slice(0, 10),
+        )}</lastmod><priority>0.6</priority></url>`,
+    ),
+  ];
+  res
+    .type("application/xml")
+    .send(
+      `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join(
+        "\n",
+      )}\n</urlset>\n`,
+    );
+});
+
 if (NODE_ENV === "production" && fs.existsSync(DIST_DIR)) {
+  // Didaftarkan SEBELUM express.static dan catch-all: Express mencocokkan
+  // rute sesuai urutan pendaftaran, jadi rute spesifik ini harus lebih dulu.
+  app.get("/jurnal/:slug", (req, res, next) => {
+    let article;
+    try {
+      article = publishedArticleBySlug(req.params.slug);
+    } catch (error) {
+      console.error("SEO meta lookup failed", error);
+      return next();
+    }
+    // Slug tidak dikenal: biarkan SPA yang menampilkan halaman not-found.
+    if (!article) return next();
+    let html;
+    try {
+      html = fs.readFileSync(path.join(DIST_DIR, "index.html"), "utf8");
+    } catch {
+      return next();
+    }
+    // Buang judul & meta bawaan agar tidak ada duplikat og:title / description.
+    const stripped = html
+      .replace(/<title>[\s\S]*?<\/title>/i, "")
+      .replace(/<meta\s+name="description"[^>]*>/i, "")
+      .replace(/<meta\s+property="og:[^"]*"[^>]*>/gi, "");
+    res
+      .type("html")
+      .send(stripped.replace("</head>", `  ${articleHeadTags(article)}\n</head>`));
+  });
+
   app.use(express.static(DIST_DIR));
   app.get(/^(?!\/api|\/uploads|\/receipts).*/, (_req, res) =>
     res.sendFile(path.join(DIST_DIR, "index.html")),

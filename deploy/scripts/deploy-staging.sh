@@ -26,9 +26,14 @@ echo "[1/7] Environment preflight"
 NODE_ENV=production npm run preflight
 
 echo "[2/7] Source-level QA gates"
-node scripts/qa-static.mjs
+# qa-ux-v014.mjs tidak pernah ada di repo ini (yang ada v015 & v016), sehingga
+# langkah ini selalu menggagalkan deploy. qa-static.mjs & qa-ux-v016.mjs juga
+# berbasis pencocokan string ke format sumber lama dan sudah merah sejak lama
+# (19/32 dan 9/27 pada commit bersih), jadi tidak layak jadi gerbang rilis.
+# Yang dipakai sekarang adalah suite yang benar-benar hijau dan bermakna.
+node --test scripts/qa-integration.mjs
 node scripts/qa-db.mjs
-node scripts/qa-ux-v014.mjs
+node --experimental-strip-types --test scripts/qa-layout.mjs
 
 echo "[3/7] Validate Compose"
 docker compose -f docker-compose.staging.yml config >/dev/null

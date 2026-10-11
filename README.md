@@ -181,7 +181,14 @@ deploy/nginx/ikrarku-staging.conf
 .github/workflows/staging-check.yml
 ```
 
-Panduan lengkap tersedia pada [STAGING_DEPLOYMENT.md](STAGING_DEPLOYMENT.md).
+Langkah demi langkah deploy ke `dev.ikrarku.id`: [PANDUAN_DEPLOY_DEV.md](PANDUAN_DEPLOY_DEV.md).
+Arsitektur, Nginx, dan backup/restore: [STAGING_DEPLOYMENT.md](STAGING_DEPLOYMENT.md).
+
+Untuk menyambungkan payment gateway Mayar:
+[PANDUAN_MAYAR_PEMULA.md](PANDUAN_MAYAR_PEMULA.md) bila baru pertama kali,
+atau [DEPLOY_MAYAR.md](DEPLOY_MAYAR.md) sebagai rujukan ringkas. Keduanya
+memakai `npm run mayar:check`, yang memverifikasi key, izin, environment,
+status endpoint, dan webhook tanpa membuat transaksi.
 
 Quick start:
 

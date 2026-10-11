@@ -345,6 +345,7 @@ type SectionDecoration = {
   color: string;
   opacity: number;
   flip?: boolean;
+  rotation?: number; // TC-186 — sudut putar ornamen (derajat)
   motion: LoopEffect;
   speed?: number;
 };
@@ -453,6 +454,15 @@ type Feature = DesignerLayout & {
   showTitle?: boolean; // TC-080 header dapat dihapus
   showBody?: boolean; // TC-080 supporting text dapat dihapus
   bodyFontSize?: number; // TC-090 font size untuk teks non-header
+  // TC-193 — eyebrow, label tamu, dan nama tamu pada Buka Undangan dulu
+  // ukurannya terkunci di CSS; fontSize/bodyFontSize tidak menjangkaunya.
+  eyebrowFontSize?: number;
+  guestLabelFontSize?: number;
+  guestNameFontSize?: number;
+  // TC-198 — penempatan disc backsound di dalam area canvas.
+  soundVerticalAlign?: "top" | "center" | "bottom";
+  soundOffsetX?: number; // px dari sisi horizontal aktif
+  soundOffsetY?: number; // px dari sisi vertikal aktif
   saveTheDateStyle?: SaveTheDateStyle; // TC-078
   locationNoteText?: string; // TC-079
   formSpecs?: FormFieldSpec[]; // TC-081
@@ -574,6 +584,9 @@ type CanvasSection = {
   backgroundKey?: string;
   backgroundVideoUrl?: string; // TC-098 background bergerak (MP4/WebM)
   backgroundVideoKey?: string;
+  // TC-194 — nama berkas ditampilkan sebagai konfirmasi upload berhasil.
+  backgroundName?: string;
+  backgroundVideoName?: string;
   // Rasio asli background (lebar/tinggi), direkam saat upload. Dipakai agar
   // canvas berisi desain utuh tidak terpotong `background-size:cover` ketika
   // lebarnya berbeda antara editor dan preview.
@@ -644,6 +657,129 @@ export type ArticleItem = {
   tags: string[];
   coverUrl?: string;
 };
+/**
+ * SEO — tanggal artikel.
+ *
+ * `article.date` adalah string ISO mentah dari server (published_at atau
+ * created_at), dan dulu dirender apa adanya: "2026-09-26T07:46:39.108Z".
+ */
+function formatArticleDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(parsed);
+}
+
+/**
+ * SEO — meta tag per artikel.
+ *
+ * index.html hanya memuat meta statis untuk seluruh aplikasi, jadi setiap
+ * artikel dibagikan dengan judul dan deskripsi yang sama. Helper ini menulis
+ * ulang head saat artikel dibuka dan mengembalikannya saat ditutup.
+ *
+ * Catatan: ini hanya menolong crawler yang menjalankan JavaScript. Crawler
+ * yang membaca HTML mentah dilayani oleh injeksi meta di sisi server
+ * (server/index.mjs, rute /jurnal/:slug).
+ */
+const BASE_META = {
+  description:
+    "ikrarku Sites - buat wedding website dan undangan digital yang indah: pilih template, personalisasi tanpa coding, kelola RSVP, ucapan, dan pembayaran dalam satu platform.",
+  ogTitle: "ikrarku Sites - Wedding Website & Undangan Digital",
+  ogDescription:
+    "Pilih template, personalisasi, dan bagikan wedding website Anda bersama ikrarku Sites.",
+};
+
+function upsertMeta(
+  selector: string,
+  attribute: "name" | "property",
+  key: string,
+  content: string | null,
+) {
+  let tag = document.head.querySelector<HTMLMetaElement>(selector);
+  if (content === null) {
+    if (tag?.dataset.articleMeta) tag.remove();
+    return;
+  }
+  if (!tag) {
+    tag = document.createElement("meta");
+    tag.setAttribute(attribute, key);
+    tag.dataset.articleMeta = "true";
+    document.head.appendChild(tag);
+  }
+  tag.setAttribute("content", content);
+}
+
+function upsertLink(rel: string, href: string | null) {
+  let tag = document.head.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`);
+  if (href === null) {
+    if (tag?.dataset.articleMeta) tag.remove();
+    return;
+  }
+  if (!tag) {
+    tag = document.createElement("link");
+    tag.rel = rel;
+    tag.dataset.articleMeta = "true";
+    document.head.appendChild(tag);
+  }
+  tag.href = href;
+}
+
+function applyArticleMeta(article: ArticleItem | null) {
+  if (typeof document === "undefined") return;
+  const origin = window.location.origin;
+  if (!article) {
+    upsertMeta('meta[name="description"]', "name", "description", BASE_META.description);
+    upsertMeta('meta[property="og:title"]', "property", "og:title", BASE_META.ogTitle);
+    upsertMeta(
+      'meta[property="og:description"]',
+      "property",
+      "og:description",
+      BASE_META.ogDescription,
+    );
+    upsertMeta('meta[property="og:type"]', "property", "og:type", "website");
+    upsertMeta('meta[property="og:url"]', "property", "og:url", null);
+    upsertMeta('meta[property="og:image"]', "property", "og:image", null);
+    upsertMeta(
+      'meta[property="article:published_time"]',
+      "property",
+      "article:published_time",
+      null,
+    );
+    upsertMeta('meta[name="twitter:card"]', "name", "twitter:card", null);
+    upsertLink("canonical", null);
+    return;
+  }
+  const url = `${origin}/jurnal/${encodeURIComponent(article.slug)}`;
+  const summary = (article.excerpt || article.title).slice(0, 300);
+  upsertMeta('meta[name="description"]', "name", "description", summary);
+  upsertMeta('meta[property="og:title"]', "property", "og:title", article.title);
+  upsertMeta('meta[property="og:description"]', "property", "og:description", summary);
+  upsertMeta('meta[property="og:type"]', "property", "og:type", "article");
+  upsertMeta('meta[property="og:url"]', "property", "og:url", url);
+  upsertMeta(
+    'meta[property="og:image"]',
+    "property",
+    "og:image",
+    article.coverUrl ? new URL(article.coverUrl, origin).href : null,
+  );
+  upsertMeta(
+    'meta[property="article:published_time"]',
+    "property",
+    "article:published_time",
+    article.date,
+  );
+  upsertMeta(
+    'meta[name="twitter:card"]',
+    "name",
+    "twitter:card",
+    article.coverUrl ? "summary_large_image" : "summary",
+  );
+  upsertLink("canonical", url);
+}
+
 type SoundCatalogItem = {
   id: string;
   name: string;
@@ -1732,6 +1868,12 @@ function hydrateSections(raw: CanvasSection[]): CanvasSection[] {
         soundCatalogId:
           feature.soundCatalogId ||
           (feature.type === "sound" ? "sound-romantic-piano" : undefined),
+        // TC-199 — desain lama bisa tersimpan tanpa lineHeight/fontSize.
+        // Tanpa backfill, `feature.lineHeight.toFixed(2)` di panel Style
+        // melempar TypeError dan seluruh inspector berhenti dirender, yang
+        // terbaca sebagai "slider tidak bisa digerakkan".
+        lineHeight: feature.lineHeight ?? defaultFeatureStyle.lineHeight,
+        fontSize: feature.fontSize ?? defaultFeatureStyle.fontSize,
         backgroundGradientEnabled: feature.backgroundGradientEnabled ?? false,
         backgroundGradientFrom: feature.backgroundGradientFrom || "#154f40",
         backgroundGradientTo: feature.backgroundGradientTo || "#d7b66f",
@@ -2268,6 +2410,11 @@ function App() {
   const [articleItems, setArticleItems] = useState<ArticleItem[]>([]);
   const [soundCatalog, setSoundCatalog] = useState<SoundCatalogItem[]>([]);
   const [articleEditorId, setArticleEditorId] = useState<string>("new");
+  // SEO — artikel yang sedang dibuka disimpan di level atas supaya punya URL
+  // sendiri (/jurnal/<slug>). Sebelumnya reader hidup di useState lokal
+  // JournalPage/LandingPage, jadi membuka artikel tidak mengubah URL sama
+  // sekali: tidak bisa di-share, tidak bisa di-bookmark, tidak bisa dirayapi.
+  const [articleSlug, setArticleSlug] = useState<string | null>(null);
   const [activeManagedUserId, setActiveManagedUserId] = useState("");
   const [siteOwnerUserId, setSiteOwnerUserId] = useState("");
   const [selectedDashboardCanvasId, setSelectedDashboardCanvasId] = useState(
@@ -2323,7 +2470,16 @@ function App() {
     const bootstrap = async () => {
       // Capture the path BEFORE any await — the title/URL effect may rewrite the address bar to '/'
       // on first paint, which would otherwise erase the slug before we can detect an unknown route.
-      const pathSlug = window.location.pathname.replace(/^\/+|\/+$/g, "");
+      const rawPath = window.location.pathname.replace(/^\/+|\/+$/g, "");
+      // /jurnal/<slug> punya DUA segmen. pathSlug di bawah hanya pernah
+      // menangani satu segmen, sehingga "jurnal/judul-artikel" tidak cocok
+      // dengan daftar reserved, jatuh ke lookup public site, lalu 404.
+      const pathParts = rawPath.split("/").filter(Boolean);
+      const deepArticleSlug =
+        pathParts.length === 2 && pathParts[0] === "jurnal"
+          ? decodeURIComponent(pathParts[1])
+          : null;
+      const pathSlug = deepArticleSlug ? "jurnal" : rawPath;
       const reserved = new Set([
         "jurnal",
         "desain",
@@ -2386,7 +2542,10 @@ function App() {
         let slugNotFound = false;
         if (pathSlug === "verify-email") setView("verify-email");
         if (pathSlug === "reset-password") setView("reset-password");
-        if (pathSlug === "jurnal") setView("journal");
+        if (pathSlug === "jurnal") {
+          setView("journal");
+          if (deepArticleSlug) setArticleSlug(deepArticleSlug);
+        }
         if (pathSlug === "desain") setView("designs");
         if (pathSlug === "workspace") setView("dashboard");
         // Root selalu landing page, walau sesi login masih aktif. Workspace
@@ -2964,6 +3123,23 @@ function App() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
+  // SEO — Back/Forward harus membuka & menutup artikel sesuai URL.
+  useEffect(() => {
+    const syncArticleFromUrl = () => {
+      const parts = window.location.pathname
+        .replace(/^\/+|\/+$/g, "")
+        .split("/")
+        .filter(Boolean);
+      setArticleSlug(
+        parts.length === 2 && parts[0] === "jurnal"
+          ? decodeURIComponent(parts[1])
+          : null,
+      );
+    };
+    window.addEventListener("popstate", syncArticleFromUrl);
+    return () => window.removeEventListener("popstate", syncArticleFromUrl);
+  }, []);
+
   // Per-view browser tab title and address-bar path (TC-018 SEO / URL relevance)
   useEffect(() => {
     const titles: Partial<Record<View, string>> = {
@@ -2987,7 +3163,17 @@ function App() {
       "cs-dashboard": "Customer Service - ikrarku Sites",
       "customer-service": "Support Inbox - ikrarku Sites",
     };
-    document.title = titles[view] || "ikrarku Sites";
+    // SEO — artikel yang sedang terbuka mengambil alih judul & meta tag.
+    const openArticle = articleSlug
+      ? articleItems.find((item) => item.slug === articleSlug)
+      : undefined;
+    if (openArticle) {
+      document.title = `${openArticle.title} - Jurnal ikrarku`;
+      applyArticleMeta(openArticle);
+    } else {
+      document.title = titles[view] || "ikrarku Sites";
+      applyArticleMeta(null);
+    }
     if (notFound || publicSiteData) return;
     const appPaths = new Set([
       "/login",
@@ -3007,6 +3193,18 @@ function App() {
     // membaca query string.
     const tokenPaths = new Set(["/reset-password", "/verify-email"]);
     if (view === "landing") {
+      // Artikel bisa dibuka langsung dari carousel landing. Tanpa cabang ini
+      // URL-nya langsung dibersihkan kembali ke "/".
+      if (articleSlug) {
+        const articleUrl = `/jurnal/${encodeURIComponent(articleSlug)}`;
+        if (window.location.pathname !== articleUrl)
+          try {
+            window.history.replaceState(window.history.state, "", articleUrl);
+          } catch {
+            /* ignore */
+          }
+        return;
+      }
       if (
         appPaths.has(window.location.pathname) &&
         !(
@@ -3055,10 +3253,20 @@ function App() {
     ];
     const target = workspaceViews.includes(view)
       ? "/workspace"
-      : paths[view];
+      : articleSlug && view === "journal"
+        ? `/jurnal/${encodeURIComponent(articleSlug)}`
+        : paths[view];
     if (target && window.location.pathname !== target) {
       try {
-        window.history.replaceState(
+        // Membuka artikel menambah entri history supaya tombol Back menutup
+        // artikel, bukan melempar pengguna keluar dari situs. Perpindahan
+        // antar view lain tetap replaceState seperti sebelumnya.
+        const isArticleTarget = target.startsWith("/jurnal/");
+        (isArticleTarget
+          ? window.history.pushState
+          : window.history.replaceState
+        ).call(
+          window.history,
           window.history.state,
           "",
           target + window.location.search,
@@ -3067,7 +3275,7 @@ function App() {
         /* ignore */
       }
     }
-  }, [view, notFound, publicSiteData]);
+  }, [view, notFound, publicSiteData, articleSlug, articleItems]);
 
   const editorSnapshotRef = useRef({
     view,
@@ -3637,32 +3845,9 @@ function App() {
     }
   };
 
-  // Perubahan status task dikabarkan ke customer lewat Live Chat, supaya dia
-  // tidak perlu bertanya progres lewat kanal lain.
-  const notifyCustomerTaskStatus = async (task: TaskItem, status: string) => {
-    const label: Record<string, string> = {
-      Open: "Pesanan Anda masuk antrean pengerjaan.",
-      "In Progress": "Web Designer mulai mengerjakan website Anda.",
-      "Waiting Customer":
-        "Kami menunggu data atau konfirmasi dari Anda untuk melanjutkan.",
-      Done: "Website Anda selesai dikerjakan. Silakan cek hasilnya.",
-      Cancelled: "Pengerjaan dibatalkan. Hubungi kami bila ini keliru.",
-    };
-    const message = `Update pengerjaan: ${task.title}. ${label[status] || `Status menjadi ${status}.`}`;
-    try {
-      await api.outboundMessage({
-        email: task.email || "",
-        body: message,
-      });
-      flash("Status tersimpan dan customer diberi tahu lewat Live Chat.");
-    } catch (error) {
-      flash(
-        error instanceof Error
-          ? `Status tersimpan, tetapi notifikasi gagal: ${error.message}`
-          : "Status tersimpan, tetapi notifikasi gagal dikirim.",
-      );
-    }
-  };
+  // notifyCustomerTaskStatus() dihapus. Notifikasi perubahan status dikirim
+  // server pada PATCH /api/tasks/:id, sehingga berlaku untuk semua jalur
+  // pengubahan status dan tidak mengirim dua pesan untuk satu perubahan.
 
   // Menu Canvas Editor selalu membuka ruang kerja Web Designer sendiri.
   // Konteks website customer hanya aktif lewat Manage Canvas.
@@ -4452,6 +4637,8 @@ function App() {
       <>
         <LandingPage
           setView={setView}
+          articleSlug={articleSlug}
+          onOpenArticle={setArticleSlug}
           articles={articleItems.filter(
             (article) => article.status === "Published",
           )}
@@ -4544,6 +4731,8 @@ function App() {
         articles={articleItems.filter(
           (article) => article.status === "Published",
         )}
+        articleSlug={articleSlug}
+        onOpenArticle={setArticleSlug}
         setView={setView}
         databaseOnline={databaseOnline}
       />
@@ -4626,15 +4815,9 @@ function App() {
                 : api.siteRevisions()
           }
         />
-        <ChatWidget
-          messages={chatMessages.filter(
-            (message) =>
-              (message.conversationId || currentAccountId) === currentAccountId,
-          )}
-          sendChat={(text) => sendChat("user", text)}
-          open={chatWidgetOpen}
-          onOpenChange={setChatWidgetOpen}
-        />
+        {/* Canvas Editor sengaja tidak memuat ChatWidget: tombol Live Chat
+            melayang di pojok kanan bawah dan menutupi panel Style/Advanced.
+            Web Designer tetap bisa membuka chat dari Topbar di luar editor. */}
         {previewOpen && (
           <PreviewModal
             sections={sections}
@@ -4923,7 +5106,6 @@ function App() {
             canApprove={hasPermission("templates.approve")}
             templates={templateCatalog}
             onManageCanvas={manageUserCanvas}
-            onNotifyCustomer={notifyCustomerTaskStatus}
           />
         )}
         {view === "roles" && (
@@ -5439,12 +5621,20 @@ function JournalPage({
   articles,
   setView,
   databaseOnline,
+  articleSlug,
+  onOpenArticle,
 }: {
   articles: ArticleItem[];
   setView: (view: View) => void;
   databaseOnline: boolean;
+  /** Slug artikel yang sedang dibuka. Dikendalikan dari level atas supaya
+      membuka artikel mengubah URL menjadi /jurnal/<slug>. */
+  articleSlug: string | null;
+  onOpenArticle: (slug: string | null) => void;
 }) {
-  const [article, setArticle] = useState<ArticleItem | null>(null);
+  const article = articleSlug
+    ? articles.find((item) => item.slug === articleSlug) || null
+    : null;
   const [category, setCategory] = useState("Semua");
   const [query, setQuery] = useState("");
   const categories = useMemo(
@@ -5466,7 +5656,7 @@ function JournalPage({
     return (
       <ArticleReaderPage
         article={article}
-        onBack={() => setArticle(null)}
+        onBack={() => onOpenArticle(null)}
         publicMode
       />
     );
@@ -5528,7 +5718,11 @@ function JournalPage({
         </section>
         <section className="journal-grid">
           {visible.map((item) => (
-            <JournalCard key={item.id} article={item} onOpen={setArticle} />
+            <JournalCard
+              key={item.id}
+              article={item}
+              onOpen={(value) => onOpenArticle(value.slug)}
+            />
           ))}
           {!visible.length && (
             <div className="journal-empty">
@@ -5555,20 +5749,25 @@ function LandingPage(props: {
   onOpenWorkspace?: () => void;
   scrollTarget?: string | null;
   onScrolled?: () => void;
+  articleSlug?: string | null;
+  onOpenArticle?: (slug: string | null) => void;
 }) {
-  const [article, setArticle] = useState<ArticleItem | null>(null);
+  const { articleSlug = null, onOpenArticle } = props;
+  const article = articleSlug
+    ? props.articles.find((item) => item.slug === articleSlug) || null
+    : null;
   if (article)
     return (
       <ArticleReaderPage
         article={article}
-        onBack={() => setArticle(null)}
+        onBack={() => onOpenArticle?.(null)}
         publicMode
       />
     );
   return (
     <LandingPageView
       {...props}
-      onArticle={setArticle}
+      onArticle={(item) => onOpenArticle?.(item.slug)}
       renderPreview={(template) => (
         <WebsiteTemplatePreview
           template={template}
@@ -6726,7 +6925,6 @@ function TasksPage({
   canApprove,
   templates = [],
   onManageCanvas,
-  onNotifyCustomer,
 }: {
   tasks: TaskItem[];
   onRefresh: () => void;
@@ -6739,7 +6937,6 @@ function TasksPage({
   canApprove: boolean;
   templates?: Template[];
   onManageCanvas?: (userId: string) => void;
-  onNotifyCustomer?: (task: TaskItem, status: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState("All");
   const [feedback, setFeedback] = useState<Record<string, string>>({});
@@ -6994,8 +7191,11 @@ function TasksPage({
                     onClick={async () => {
                       const next = draftStatus[task.id] ?? task.status;
                       setSavingStatus(task.id);
+                      // Notifikasi ke customer dikirim server pada
+                      // PATCH /api/tasks/:id. Memanggilnya lagi dari sini
+                      // membuat customer menerima dua pesan untuk satu
+                      // perubahan status.
                       await onUpdate(task.id, next);
-                      await onNotifyCustomer?.(task, next);
                       setSavingStatus("");
                       setDraftStatus((previous) => {
                         const copy = { ...previous };
@@ -9472,6 +9672,7 @@ function Editor({
   const [revisions, setRevisions] = useState<any[]>([]);
   const [revisionsLoading, setRevisionsLoading] = useState(false);
   const historyRef = useRef<CanvasSection[][]>([]);
+  const lastHistoryAtRef = useRef(0);
   const futureRef = useRef<CanvasSection[][]>([]);
   const savedBaselineRef = useRef<{
     sections: CanvasSection[];
@@ -9499,14 +9700,25 @@ function Editor({
   // ditahan di memori dan setiap edit membuat satu structuredClone baru; pada
   // canvas besar itu memblokir main thread sampai editor terasa freeze.
   const HISTORY_LIMIT = 15;
+  // Perubahan beruntun dalam jendela ini dianggap satu gestur (satu entri undo).
+  const HISTORY_COALESCE_MS = 450;
   const commitSections = (
     updater: React.SetStateAction<CanvasSection[]>,
     record = true,
   ) => {
     if (record) {
-      historyRef.current.push(structuredClone(sections));
-      while (historyRef.current.length > HISTORY_LIMIT)
-        historyRef.current.shift();
+      // Slider ornamen/layer, drag feature, dan resize column memicu puluhan
+      // event per detik. Tanpa coalescing setiap event melakukan
+      // structuredClone seluruh desain -> main thread tersendat dan editor
+      // terasa "tiba-tiba berhenti berfungsi". Efek sampingnya dulu: satu
+      // geseran slider menghabiskan ke-15 slot undo.
+      const now = Date.now();
+      if (now - lastHistoryAtRef.current > HISTORY_COALESCE_MS) {
+        historyRef.current.push(structuredClone(sections));
+        while (historyRef.current.length > HISTORY_LIMIT)
+          historyRef.current.shift();
+      }
+      lastHistoryAtRef.current = now;
       futureRef.current = [];
     }
     setDirty(true);
@@ -9517,6 +9729,9 @@ function Editor({
     if (!previous) return;
     futureRef.current.push(structuredClone(sections));
     setSectionsRaw(structuredClone(previous));
+    // Edit berikutnya harus membuka entri undo baru, bukan menyatu dengan
+    // gestur sebelum undo.
+    lastHistoryAtRef.current = 0;
     setDirty(true);
   };
   const redo = () => {
@@ -9524,6 +9739,7 @@ function Editor({
     if (!next) return;
     historyRef.current.push(structuredClone(sections));
     setSectionsRaw(structuredClone(next));
+    lastHistoryAtRef.current = 0;
     setDirty(true);
   };
   useEffect(() => {
@@ -9671,26 +9887,40 @@ function Editor({
   const coverBackgroundInput = useRef<HTMLInputElement>(null);
   const soundInput = useRef<HTMLInputElement>(null);
 
-  const selectedSection = useMemo(
+  // TC-112 — panel inspector HARUS membaca nilai device yang sedang aktif.
+  // Tulisan sudah device-aware lewat applyDevicePatch(), tapi selama panel
+  // membaca objek mentah (= Desktop) setiap slider/toggle kembali ke angka
+  // Desktop pada render berikutnya, dan read-modify-write (gallery, form
+  // fields, decorations, background layers) menimpa override Mobile dengan
+  // isi Desktop. Itulah yang terbaca sebagai "setting Mobile & Desktop
+  // masih nyambung".
+  const rawSelectedSection = useMemo(
     () => sections.find((section) => section.id === selectedSectionId),
     [sections, selectedSectionId],
+  );
+  const selectedSection = useMemo(
+    () =>
+      rawSelectedSection
+        ? resolveSection(rawSelectedSection, previewMode)
+        : undefined,
+    [rawSelectedSection, previewMode],
   );
   const selectedColumn = useMemo(
     () =>
       selectedSection?.columns.find((column) => column.id === selectedColumnId),
     [selectedSection, selectedColumnId],
   );
-  const selectedFeature = useMemo(
-    () =>
+  const selectedFeature = useMemo(() => {
+    const raw =
       selectedColumn?.features.find(
         (feature) => feature.id === selectedFeatureId,
       ) ??
       sections
         .flatMap((section) => section.columns)
         .flatMap((column) => column.features)
-        .find((feature) => feature.id === selectedFeatureId),
-    [sections, selectedColumn, selectedFeatureId],
-  );
+        .find((feature) => feature.id === selectedFeatureId);
+    return raw ? resolveFeature(raw, previewMode) : undefined;
+  }, [sections, selectedColumn, selectedFeatureId, previewMode]);
 
   const selectSection = (section: CanvasSection) => {
     setSelectedSectionId(section.id);
@@ -9725,6 +9955,28 @@ function Editor({
       previous.map((section) =>
         section.id === sectionId
           ? applyDevicePatch(section, patch, previewMode)
+          : section,
+      ),
+    );
+  };
+  // Ornamen pojok & layer background adalah KONTEN struktural, bukan setting
+  // per device. Dua alasan jalur ini harus terpisah dari updateSection():
+  //  1. Editor menulis seluruh array sekaligus. Lewat applyDevicePatch satu
+  //     edit di mode Mobile menyalin array ke section.mobile dan sejak itu
+  //     Desktop & Mobile bercabang permanen.
+  //  2. Payload dihitung dari array yang tertangkap saat render. Kalau sebuah
+  //     upload gambar selesai beberapa detik kemudian, array lama menimpa
+  //     semua perubahan di sela-selanya (layer baru hilang, layer terhapus
+  //     muncul lagi). Producer di bawah membaca state terbaru.
+  const updateSectionLive = (
+    sectionId: string,
+    producePatch: (current: CanvasSection) => Partial<CanvasSection>,
+  ) => {
+    setDirty(true);
+    commitSections((previous) =>
+      previous.map((section) =>
+        section.id === sectionId
+          ? { ...section, ...producePatch(section) }
           : section,
       ),
     );
@@ -10344,6 +10596,7 @@ function Editor({
         updateSection(selectedSection.id, {
           backgroundVideoKey: saved.key,
           backgroundVideoUrl: saved.url,
+          backgroundVideoName: file.name,
           backgroundAspect: aspect,
           backgroundFollowAspect: followAspect,
         });
@@ -10351,6 +10604,7 @@ function Editor({
         updateSection(selectedSection.id, {
           backgroundKey: saved.key,
           backgroundUrl: saved.url,
+          backgroundName: file.name,
           backgroundAspect: aspect,
           backgroundFollowAspect: followAspect,
         });
@@ -10792,8 +11046,13 @@ function Editor({
                   className={`toggle ${sections[0].backgroundGlobal ? "on" : ""}`}
                   onClick={() => {
                     const next = !sections[0].backgroundGlobal;
+                    // backgroundGlobal struktural (berlaku ke semua canvas),
+                    // tapi backgroundScrollType murni gaya tampilan -> harus
+                    // lewat jalur device-aware agar Mobile tidak ikut Desktop.
                     updateSectionShared(sections[0].id, {
                       backgroundGlobal: next,
+                    });
+                    updateSection(sections[0].id, {
                       backgroundScrollType: next ? "parallax" : "section",
                     });
                   }}
@@ -10938,6 +11197,7 @@ function Editor({
                 <FeatureInspector
                   feature={selectedFeature}
                   tab={inspectorTab}
+                  activeDevice={previewMode}
                   update={(patch) => updateFeature(selectedFeature.id, patch)}
                   addFormField={addFormField}
                   imageInput={imageInput}
@@ -10959,6 +11219,9 @@ function Editor({
                   update={(patch) => updateSection(selectedSection.id, patch)}
                   updateShared={(patch) =>
                     updateSectionShared(selectedSection.id, patch)
+                  }
+                  updateLive={(produce) =>
+                    updateSectionLive(selectedSection.id, produce)
                   }
                   uploadLayerImage={uploadLayerImage}
                   setColumnCount={(count) =>
@@ -11138,6 +11401,7 @@ function Editor({
 function FeatureInspector({
   feature,
   tab,
+  activeDevice = "desktop",
   update,
   addFormField,
   imageInput,
@@ -11154,6 +11418,7 @@ function FeatureInspector({
 }: {
   feature: Feature;
   tab: InspectorTab;
+  activeDevice?: DeviceMode;
   update: (patch: Partial<Feature>) => void;
   addFormField: () => void;
   imageInput: React.RefObject<HTMLInputElement | null>;
@@ -11206,7 +11471,7 @@ function FeatureInspector({
     feature.type === "invitation-cover"
       ? "Background Buka Undangan tetap full Canvas. Position dan width hanya mengatur blok konten (judul, tamu, body, tombol) agar Editor dan Preview konsisten."
       : feature.type === "sound"
-        ? "Sound menggunakan fixed player. Alignment mengatur posisi player; width tidak digunakan agar tidak menjadi dead control."
+        ? "Player backsound menempel di dalam area canvas. Atur sisi horizontal di sini, lalu sisi vertikal dan jaraknya pada Posisi Player di bawah."
         : feature.type === "gallery" && feature.galleryFullWidth
           ? "Full Width Gallery mengunci lebar ke viewport. Nonaktifkan Full Width untuk memakai Feature width dan alignment."
           : "Content alignment mengatur isi/text. Feature alignment mengatur posisi seluruh card/object di dalam Column.";
@@ -11249,6 +11514,64 @@ function FeatureInspector({
           ))}
         </div>
       </label>
+      {/* TC-198 — disc backsound dulu hanya bisa digeser kiri/tengah/kanan dan
+          selalu menempel 22px dari dasar layar. Sekarang sisi vertikal dan
+          jaraknya bisa diatur, sehingga player bisa ditempatkan di dalam area
+          canvas dan tidak menutupi desain. */}
+      {feature.type === "sound" && (
+        <div className="sound-position-editor">
+          <div className="group-heading">
+            <strong>Posisi Player</strong>
+            <span>Di dalam canvas</span>
+          </div>
+          <label>
+            Sisi vertikal
+            <select
+              value={feature.soundVerticalAlign || "bottom"}
+              onChange={(event) =>
+                update({
+                  soundVerticalAlign: event.target
+                    .value as Feature["soundVerticalAlign"],
+                })
+              }
+            >
+              <option value="top">Atas</option>
+              <option value="center">Tengah</option>
+              <option value="bottom">Bawah</option>
+            </select>
+          </label>
+          <div className="two-inputs">
+            <label className="range-field">
+              <span className="range-head">
+                Jarak horizontal<b>{feature.soundOffsetX ?? 22}px</b>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="200"
+                value={feature.soundOffsetX ?? 22}
+                onChange={(event) =>
+                  update({ soundOffsetX: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="range-field">
+              <span className="range-head">
+                Jarak vertikal<b>{feature.soundOffsetY ?? 22}px</b>
+              </span>
+              <input
+                type="range"
+                min="0"
+                max="400"
+                value={feature.soundOffsetY ?? 22}
+                onChange={(event) =>
+                  update({ soundOffsetY: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+        </div>
+      )}
       {!widthUnavailable && (
         <label>
           {widthLabel} <span>{featureWidth}%</span>
@@ -11481,6 +11804,37 @@ function FeatureInspector({
                 }
               />
             </label>
+            {/* TC-193 — ukuran ketiga teks ini sebelumnya hanya bisa diubah
+                lewat CSS. Heading & body memakai slider umum di tab Style. */}
+            <div className="cover-size-editor">
+              <div className="group-heading">
+                <strong>Ukuran Teks</strong>
+                <span>Eyebrow · Label · Nama</span>
+              </div>
+              {(
+                [
+                  ["eyebrowFontSize", "Eyebrow", 13, 6, 48],
+                  ["guestLabelFontSize", "Recipient label", 18, 8, 56],
+                  ["guestNameFontSize", "Guest name", 31, 10, 80],
+                ] as const
+              ).map(([field, label, fallback, min, max]) => (
+                <label className="range-field" key={field}>
+                  <span className="range-head">
+                    {label}
+                    <b>{feature[field] ?? fallback}px</b>
+                  </span>
+                  <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    value={feature[field] ?? fallback}
+                    onChange={(event) =>
+                      update({ [field]: Number(event.target.value) })
+                    }
+                  />
+                </label>
+              ))}
+            </div>
             <div className="cover-icon-editor">
               <div className="group-heading">
                 <strong>Opening Icon</strong>
@@ -11965,13 +12319,14 @@ function FeatureInspector({
               />
             </label>
             <label>
-              Line spacing <span>{feature.lineHeight.toFixed(2)}</span>
+              Line spacing
+              <span>{(feature.lineHeight ?? 1.45).toFixed(2)}</span>
               <input
                 type="range"
                 min="1"
                 max="2.5"
                 step="0.05"
-                value={feature.lineHeight}
+                value={feature.lineHeight ?? 1.45}
                 onChange={(event) =>
                   update({ lineHeight: Number(event.target.value) })
                 }
@@ -12342,7 +12697,7 @@ function FeatureInspector({
               Tinggi bingkai <span>{feature.imageHeight ?? 320}px</span>
               <input
                 type="range"
-                min="120"
+                min="60"
                 max="720"
                 step="10"
                 value={feature.imageHeight ?? 320}
@@ -12377,7 +12732,11 @@ function FeatureInspector({
           uploadFeatureBackground={uploadFeatureBackground}
         />
         <FormStyleEditor feature={feature} update={update} />
-        <FreePositionControls feature={feature} update={update} />
+        <FreePositionControls
+          feature={feature}
+          update={update}
+          activeDevice={activeDevice}
+        />
         <BoxStyle feature={feature} update={update} />
       </div>
     );
@@ -13497,27 +13856,35 @@ function LoopEffectControls({
 // Editor ornamen pojok pada section.
 function SectionDecorationEditor({
   section,
-  update,
+  updateLive,
   uploadLayerImage,
 }: {
   section: CanvasSection;
-  update: (patch: Partial<CanvasSection>) => void;
+  updateLive: (
+    produce: (current: CanvasSection) => Partial<CanvasSection>,
+  ) => void;
   uploadLayerImage: (
     file: File | undefined,
   ) => Promise<{ url: string; key: string } | null>;
 }) {
   const items = section.decorations || [];
-  const commit = (next: SectionDecoration[]) => update({ decorations: next });
+  // `produce` menerima section terbaru, jadi callback yang selesai belakangan
+  // (upload gambar) tidak lagi menimpa perubahan di sela-selanya.
+  const commit = (
+    produce: (current: SectionDecoration[]) => SectionDecoration[],
+  ) => updateLive((current) => ({ decorations: produce(current.decorations || []) }));
   const patch = (id: string, next: Partial<SectionDecoration>) =>
-    commit(items.map((item) => (item.id === id ? { ...item, ...next } : item)));
+    commit((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...next } : item)),
+    );
   return (
     <div className="decoration-editor">
       <div className="group-heading">
         <strong>Ornamen Pojok</strong>
         <button
           onClick={() =>
-            commit([
-              ...items,
+            commit((current) => [
+              ...current,
               {
                 id: uid("decor"),
                 glyph: "floral",
@@ -13543,7 +13910,11 @@ function SectionDecorationEditor({
           <div className="form-spec-head">
             <span>Ornamen {index + 1}</span>
             <button
-              onClick={() => commit(items.filter((value) => value.id !== item.id))}
+              onClick={() =>
+                commit((current) =>
+                  current.filter((value) => value.id !== item.id),
+                )
+              }
             >
               <Trash2 size={12} />
             </button>
@@ -13557,7 +13928,9 @@ function SectionDecorationEditor({
           </div>
           {/* Ornamen bisa memakai gambar sendiri, bukan hanya bentuk bawaan. */}
           <LayerImageUpload
-            layer={{ id: item.id, url: "" } as BackgroundLayer}
+            // url dulu dikosongkan paksa, sehingga thumbnail di kontrol upload
+            // tidak pernah muncul walau gambarnya sudah terunggah.
+            layer={{ id: item.id, url: item.imageUrl || "" } as BackgroundLayer}
             uploadLayerImage={uploadLayerImage}
             onUploaded={(saved) =>
               patch(item.id, { imageUrl: saved.url, imageKey: saved.key })
@@ -13664,6 +14037,24 @@ function SectionDecorationEditor({
               </select>
             </label>
           </div>
+          {/* TC-186 — ornamen dekoratif perlu bisa diputar mengikuti sudut
+              layout, bukan hanya dicerminkan. */}
+          <label className="range-field">
+            <span className="range-head">
+              Rotasi<b>{item.rotation ?? 0}&deg;</b>
+            </span>
+            <input
+              type="range"
+              min="-180"
+              max="180"
+              step="1"
+              value={item.rotation ?? 0}
+              onChange={(event) =>
+                patch(item.id, { rotation: Number(event.target.value) })
+              }
+              onDoubleClick={() => patch(item.id, { rotation: 0 })}
+            />
+          </label>
           <label className="range-field">
             <span className="range-head">
               Durasi siklus<b>{item.speed || 7}s</b>
@@ -13718,7 +14109,14 @@ function applyGlobalBackground(
     backgroundGradientTo: source.backgroundGradientTo,
     backgroundGradientAngle: source.backgroundGradientAngle,
     backgroundMotion: source.backgroundMotion,
-    backgroundLayers: source.backgroundLayers,
+    // TC-197 — "Background Utama" per canvas berdiri DI ATAS background
+    // global. Layer Canvas 1 digambar lebih dulu, lalu layer milik canvas ini
+    // menumpuk di atasnya. Dulu layer canvas ini dibuang total, sehingga
+    // layer yang ditambahkan di Canvas 2+ tersimpan tapi tidak pernah tampil.
+    backgroundLayers: [
+      ...(source.backgroundLayers || []),
+      ...(section.backgroundLayers || []),
+    ],
     backgroundLoopEffect: source.backgroundLoopEffect,
     backgroundLoopSpeed: source.backgroundLoopSpeed,
     // Tipe scroll global: parallax mengunci background ke viewport,
@@ -13830,29 +14228,125 @@ function LayerImageUpload({
   );
 }
 
+/**
+ * Pad geser 2D untuk layer background.
+ *
+ * Menampilkan thumbnail layer dan sebuah titik yang bisa ditarik; posisi titik
+ * dipetakan langsung ke background-position (offsetX / offsetY dalam persen),
+ * jadi apa yang terlihat di pad sama dengan hasil di canvas.
+ */
+function LayerOffsetPad({
+  previewUrl,
+  size,
+  repeat,
+  offsetX,
+  offsetY,
+  onChange,
+}: {
+  previewUrl?: string;
+  size?: string;
+  repeat?: string;
+  offsetX: number;
+  offsetY: number;
+  onChange: (offsetX: number, offsetY: number) => void;
+}) {
+  const padRef = useRef<HTMLDivElement>(null);
+  const applyFromPointer = (clientX: number, clientY: number) => {
+    const rect = padRef.current?.getBoundingClientRect();
+    if (!rect || rect.width === 0 || rect.height === 0) return;
+    const clamp = (value: number) => Math.round(Math.min(100, Math.max(0, value)));
+    onChange(
+      clamp(((clientX - rect.left) / rect.width) * 100),
+      clamp(((clientY - rect.top) / rect.height) * 100),
+    );
+  };
+  const start = (event: React.PointerEvent) => {
+    event.preventDefault();
+    applyFromPointer(event.clientX, event.clientY);
+    const move = (e: PointerEvent) => applyFromPointer(e.clientX, e.clientY);
+    const end = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+  };
+  return (
+    <div className="layer-offset-pad-wrap">
+      <span className="range-head">
+        Geser bebas
+        <b>
+          {offsetX}% · {offsetY}%
+        </b>
+      </span>
+      <div
+        ref={padRef}
+        className="layer-offset-pad"
+        onPointerDown={start}
+        onDoubleClick={() => onChange(50, 50)}
+        role="application"
+        aria-label="Geser posisi layer"
+        style={
+          previewUrl
+            ? {
+                backgroundImage: `url(${assetUrl(previewUrl)})`,
+                backgroundSize: size || "cover",
+                backgroundRepeat: repeat || "no-repeat",
+                backgroundPosition: `${offsetX}% ${offsetY}%`,
+              }
+            : undefined
+        }
+      >
+        <span
+          className="layer-offset-dot"
+          style={{ left: `${offsetX}%`, top: `${offsetY}%` }}
+        />
+      </div>
+      <p className="layout-help">
+        Tarik titik untuk menggeser layer. Klik dua kali untuk kembali ke
+        tengah.
+      </p>
+    </div>
+  );
+}
+
 function BackgroundLayerEditor({
   section,
-  update,
+  updateLive,
   uploadLayerImage,
+  locked = false,
 }: {
   section: CanvasSection;
-  update: (patch: Partial<CanvasSection>) => void;
+  updateLive: (
+    produce: (current: CanvasSection) => Partial<CanvasSection>,
+  ) => void;
   uploadLayerImage: (
     file: File | undefined,
   ) => Promise<{ url: string; key: string } | null>;
+  /** Background global aktif dan ini bukan Canvas 1. */
+  locked?: boolean;
 }) {
   const layers = section.backgroundLayers || [];
-  const commit = (next: BackgroundLayer[]) => update({ backgroundLayers: next });
+  const commit = (
+    produce: (current: BackgroundLayer[]) => BackgroundLayer[],
+  ) =>
+    updateLive((current) => ({
+      backgroundLayers: produce(current.backgroundLayers || []),
+    }));
   const patch = (id: string, next: Partial<BackgroundLayer>) =>
-    commit(layers.map((item) => (item.id === id ? { ...item, ...next } : item)));
+    commit((current) =>
+      current.map((item) => (item.id === id ? { ...item, ...next } : item)),
+    );
   return (
     <div className="background-layer-editor">
       <div className="group-heading">
         <strong>Layer 2 dan seterusnya</strong>
         <button
           onClick={() =>
-            commit([
-              ...layers,
+            commit((current) => [
+              ...current,
               {
                 id: uid("bglayer"),
                 url: "",
@@ -13871,6 +14365,15 @@ function BackgroundLayerEditor({
           <Plus size={14} /> Tambah layer
         </button>
       </div>
+      {/* TC-197 — layer di bawah ini adalah "Background Utama" milik canvas
+          ini dan digambar DI ATAS background global Canvas 1. */}
+      {locked && (
+        <div className="layout-help is-locked">
+          <strong>Background Utama canvas ini.</strong> Background global
+          Canvas 1 tetap menjadi dasarnya; layer yang Anda tambahkan di sini
+          digambar di atasnya dan hanya berlaku untuk canvas ini.
+        </div>
+      )}
       <div className="layout-help">
         <strong>Layer 1 (default)</strong> adalah background utama di atas.
         Layer di bawah ini digambar menumpuk di atasnya secara berurutan — Layer
@@ -13881,7 +14384,13 @@ function BackgroundLayerEditor({
         <div className="extra-text-row" key={layer.id}>
           <div className="form-spec-head">
             <span>Layer {index + 1}</span>
-            <button onClick={() => commit(layers.filter((item) => item.id !== layer.id))}>
+            <button
+              onClick={() =>
+                commit((current) =>
+                  current.filter((item) => item.id !== layer.id),
+                )
+              }
+            >
               <Trash2 size={12} />
             </button>
           </div>
@@ -13934,6 +14443,19 @@ function BackgroundLayerEditor({
               </select>
             </label>
           </div>
+          {/* Revisi QA: dua slider terpisah terasa kaku. Pad ini menggeser
+              X dan Y sekaligus dengan satu tarikan, slider tetap ada untuk
+              penyetelan presisi. */}
+          <LayerOffsetPad
+            previewUrl={layer.url}
+            size={layer.size}
+            repeat={layer.repeat}
+            offsetX={layer.offsetX ?? 50}
+            offsetY={layer.offsetY ?? 50}
+            onChange={(offsetX, offsetY) =>
+              patch(layer.id, { offsetX, offsetY })
+            }
+          />
           <div className="two-inputs">
             <label className="range-field">
               <span className="range-head">
@@ -14035,6 +14557,7 @@ function SectionInspector({
   tab,
   update,
   updateShared,
+  updateLive,
   uploadLayerImage,
   setColumnCount,
   backgroundInput,
@@ -14048,6 +14571,10 @@ function SectionInspector({
   // QA TC-112: nama canvas dan layout mode bersifat struktural, selalu ditulis
   // ke nilai dasar agar tidak berbeda antara Desktop dan Mobile.
   updateShared: (patch: Partial<CanvasSection>) => void;
+  // Ornamen & layer: baca state terbaru, tulis ke nilai dasar.
+  updateLive: (
+    produce: (current: CanvasSection) => Partial<CanvasSection>,
+  ) => void;
   uploadLayerImage: (
     file: File | undefined,
   ) => Promise<{ url: string; key: string } | null>;
@@ -14081,7 +14608,9 @@ function SectionInspector({
             value={section.layoutMode}
             onChange={(event) => {
               const value = event.target.value as CanvasLayoutMode;
-              updateShared({ layoutMode: value });
+              // Layout mode adalah setting tampilan, bukan struktur: harus
+              // tersimpan per device agar Mobile tidak menyeret Desktop.
+              update({ layoutMode: value });
               if (value === "split-fixed-left" || value === "split-fixed-right")
                 setColumnCount(2);
             }}
@@ -14167,9 +14696,14 @@ function SectionInspector({
               /* QA revisi: background mendukung video, jadi picker tidak boleh
                  dibatasi image saja. */
               accept="image/*,video/mp4,video/webm"
-              onChange={(event) =>
-                void uploadBackground(event.target.files?.[0])
-              }
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                // TC-194 — tanpa reset, memilih berkas yang SAMA setelah
+                // dihapus tidak memicu onChange sama sekali, sehingga upload
+                // terlihat seperti tidak berfungsi.
+                event.target.value = "";
+                void uploadBackground(file);
+              }}
             />
             <button
               className="upload-control"
@@ -14183,28 +14717,78 @@ function SectionInspector({
                 </small>
               </span>
             </button>
+            {/* TC-194 — dulu tidak ada konfirmasi apa pun setelah upload, jadi
+                Web Designer tidak tahu berhasil atau tidak. Thumbnail + nama
+                berkas + tombol hapus kini berdampingan. Hapus juga membuang
+                backgroundAspect: kalau tidak, canvas tetap terkunci pada rasio
+                gambar yang sudah tidak ada. */}
             {section.backgroundUrl && (
-              <button
-                className="clear-media"
-                onClick={() =>
-                  update({ backgroundUrl: undefined, backgroundKey: undefined })
-                }
-              >
-                <Trash2 size={14} /> Remove background image
-              </button>
+              <div className="background-media-card">
+                <span
+                  className="background-media-thumb"
+                  style={{
+                    backgroundImage: `url(${assetUrl(section.backgroundUrl)})`,
+                  }}
+                />
+                <div>
+                  <strong>Background image terpasang</strong>
+                  <small>{section.backgroundName || "Gambar tersimpan"}</small>
+                </div>
+                <button
+                  className="clear-media"
+                  title="Hapus background image"
+                  onClick={() =>
+                    update({
+                      backgroundUrl: undefined,
+                      backgroundKey: undefined,
+                      backgroundName: undefined,
+                      ...(section.backgroundVideoUrl
+                        ? {}
+                        : {
+                            backgroundAspect: undefined,
+                            backgroundFollowAspect: false,
+                          }),
+                    })
+                  }
+                >
+                  <Trash2 size={14} /> Hapus
+                </button>
+              </div>
             )}
             {section.backgroundVideoUrl && (
-              <button
-                className="clear-media"
-                onClick={() =>
-                  update({
-                    backgroundVideoUrl: undefined,
-                    backgroundVideoKey: undefined,
-                  })
-                }
-              >
-                <Trash2 size={14} /> Remove background video
-              </button>
+              <div className="background-media-card">
+                <video
+                  className="background-media-thumb"
+                  src={assetUrl(section.backgroundVideoUrl)}
+                  muted
+                  playsInline
+                />
+                <div>
+                  <strong>Background video terpasang</strong>
+                  <small>
+                    {section.backgroundVideoName || "Video tersimpan"}
+                  </small>
+                </div>
+                <button
+                  className="clear-media"
+                  title="Hapus background video"
+                  onClick={() =>
+                    update({
+                      backgroundVideoUrl: undefined,
+                      backgroundVideoKey: undefined,
+                      backgroundVideoName: undefined,
+                      ...(section.backgroundUrl
+                        ? {}
+                        : {
+                            backgroundAspect: undefined,
+                            backgroundFollowAspect: false,
+                          }),
+                    })
+                  }
+                >
+                  <Trash2 size={14} /> Hapus
+                </button>
+              </div>
             )}
             {/* Desain utuh yang diunggah sebagai background sebelumnya terpotong
                 atas-bawah, karena tinggi canvas tetap sementara lebarnya berbeda
@@ -14274,14 +14858,15 @@ function SectionInspector({
         </label>
         <SectionDecorationEditor
           section={section}
-          update={update}
+          updateLive={updateLive}
           uploadLayerImage={uploadLayerImage}
         />
         {/* QA TC-108: layer background tambahan di dalam background utama. */}
         <BackgroundLayerEditor
           section={section}
-          update={update}
+          updateLive={updateLive}
           uploadLayerImage={uploadLayerImage}
+          locked={backgroundLocked}
         />
       </div>
     );
@@ -14301,10 +14886,19 @@ function SectionInspector({
         hint="Hanya lapisan background dan layer tumpang tindih yang bergerak; teks dan feature tetap diam."
         loopEffect={section.backgroundLoopEffect}
         loopSpeed={section.backgroundLoopSpeed}
+        // TC-200 — patch dari LoopEffectControls hanya berisi SATU kunci.
+        // Dulu keduanya selalu disalin, jadi saat slider digeser
+        // backgroundLoopEffect ikut ditulis `undefined`; spread di
+        // applyDevicePatch menimpa dengan undefined, efek kembali ke
+        // "Tidak Ada", dan slider durasinya ikut hilang.
         onChange={(patch) =>
           update({
-            backgroundLoopEffect: patch.loopEffect,
-            backgroundLoopSpeed: patch.loopSpeed,
+            ...(patch.loopEffect !== undefined
+              ? { backgroundLoopEffect: patch.loopEffect }
+              : {}),
+            ...(patch.loopSpeed !== undefined
+              ? { backgroundLoopSpeed: patch.loopSpeed }
+              : {}),
           })
         }
       />
@@ -14335,19 +14929,31 @@ function SectionInspector({
           onChange={(event) => update({ paddingY: Number(event.target.value) })}
         />
       </label>
-      <label>
-        Minimum height <span>{section.minHeight}px</span>
-        <input
-          type="range"
-          min="180"
-          max="1200"
-          step="10"
-          value={section.minHeight}
-          onChange={(event) =>
-            update({ minHeight: Number(event.target.value) })
-          }
-        />
-      </label>
+      {/* Saat tinggi mengikuti rasio background, tinggi canvas adalah fungsi
+          murni dari lebarnya, jadi minHeight diabaikan oleh render. Slider ini
+          dulu tetap tampil dan bisa digeser tanpa efek apa pun. */}
+      {section.backgroundFollowAspect && section.backgroundAspect ? (
+        <div className="layout-help">
+          <strong>Tinggi mengikuti rasio background.</strong> Tinggi canvas
+          dihitung otomatis dari lebar dan rasio gambar, jadi Minimum height
+          tidak dipakai. Matikan opsi tersebut di atas untuk mengatur tinggi
+          sendiri.
+        </div>
+      ) : (
+        <label>
+          Minimum height <span>{section.minHeight}px</span>
+          <input
+            type="range"
+            min="180"
+            max="1200"
+            step="10"
+            value={section.minHeight}
+            onChange={(event) =>
+              update({ minHeight: Number(event.target.value) })
+            }
+          />
+        </label>
+      )}
       <div className="danger-zone">
         <strong>Canvas structure</strong>
         <p>
@@ -14429,7 +15035,11 @@ function WeddingCanvas({
   // background-attachment: fixed memakai ukuran viewport, bukan ukuran elemen.
   // Di thumbnail yang di-scale, efeknya gambar tampak sangat ter-zoom, jadi
   // penguncian background hanya diterapkan pada tampilan publik berukuran penuh.
-  const allowFixedBackground = !thumbnail && !editable;
+  // previewSurface ikut dikecualikan: di dalam kotak preview (lebar ~1050 px)
+  // background yang dikunci ke viewport akan dipotong oleh
+  // .canvas-section{overflow:hidden}, dan potongannya makin besar seiring
+  // lebar layar -> inilah "preview kepotong di layar > 1050 px".
+  const allowFixedBackground = !thumbnail && !editable && !previewSurface;
   // QA TC-112: device aktif menentukan setting mana yang dipakai.
   const device = useContext(DeviceContext);
 
@@ -14511,7 +15121,9 @@ function WeddingCanvas({
       window.removeEventListener("keydown", handler);
     };
   }, [editable, soundFeature, hasCover, startSound]);
-  const soundNode = soundFeature ? (
+  // Di Canvas Editor disc backsound melayang di pojok kiri bawah dan menutupi
+  // daftar section. Backsound tetap bisa diuji lewat Preview / Buka Undangan.
+  const soundNode = soundFeature && !editable ? (
     <ControlledSoundPlayer
       feature={soundFeature}
       playing={soundPlaying}
@@ -14713,7 +15325,13 @@ function WeddingCanvas({
                     height: decoration.size,
                     color: decoration.color,
                     opacity: (decoration.opacity ?? 70) / 100,
-                    transform: decoration.flip ? "scaleX(-1)" : undefined,
+                    // transform inline kalah dari keyframes .loop-* yang juga
+                    // menganimasikan transform, jadi "Cermin horizontal" dan
+                    // penyusutan di mobile tidak pernah terlihat. Nilainya
+                    // dikirim sebagai custom property dan ikut dirangkai di
+                    // dalam keyframes.
+                    "--deco-flip": decoration.flip ? -1 : 1,
+                    "--deco-rotate": `${decoration.rotation ?? 0}deg`,
                     "--loop-speed": `${decoration.speed || 7}s`,
                   } as React.CSSProperties
                 }
@@ -14748,8 +15366,18 @@ function WeddingCanvas({
                   mixBlendMode:
                     (layer.blend as React.CSSProperties["mixBlendMode"]) ||
                     "normal",
-                  transform: layer.scale ? `scale(${layer.scale / 100})` : undefined,
-                  zIndex: 1 + layerIndex,
+                  // scale(1) pun membuat elemen jadi containing block,
+                  // sehingga background-attachment:fixed luruh jadi relatif
+                  // elemen. Hanya pasang transform bila memang di-scale.
+                  transform:
+                    layer.scale && layer.scale !== 100
+                      ? `scale(${layer.scale / 100})`
+                      : undefined,
+                  // Dulu `1 + layerIndex`: Layer 2 menyamai z-index ornamen (2)
+                  // lalu menutupinya, dan Layer 6 melewati z-index konten (5)
+                  // sehingga menimpa seluruh teks. Urutan antar layer tetap
+                  // terjaga oleh urutan DOM.
+                  zIndex: Math.min(1 + layerIndex, 3),
                 }}
               />
             ))}
@@ -15057,25 +15685,73 @@ function InvitationCover({
                       textDecoration: active.underline ? "underline" : "none",
                     }}
                   >
-                    <small>{active.eyebrowText || "UNDANGAN PERNIKAHAN"}</small>
+                    {/* Warna per Elemen: Heading mewarnai judul + eyebrow,
+                        Supporting mewarnai label tamu, nama tamu, dan body.
+                        Tanpa ini seluruh teks cover terkunci ke textColor. */}
+                    <small
+                      data-custom-color={active.titleColor ? "true" : undefined}
+                      style={{
+                        ...(active.titleColor
+                          ? { color: active.titleColor }
+                          : {}),
+                        ...(active.eyebrowFontSize
+                          ? { fontSize: active.eyebrowFontSize }
+                          : {}),
+                      }}
+                    >
+                      {active.eyebrowText || "UNDANGAN PERNIKAHAN"}
+                    </small>
                     <h1
+                      data-custom-color={active.titleColor ? "true" : undefined}
                       style={{
                         fontSize: Math.min(
                           active.fontSize,
                           section.columns.length > 1 ? 58 : 82,
                         ),
+                        // TC-199 — .cover-content h1 mengunci line-height:1.05,
+                        // sehingga slider Line spacing tidak berefek di cover.
+                        lineHeight: active.lineHeight ?? undefined,
+                        ...(active.titleColor
+                          ? { color: active.titleColor }
+                          : {}),
                       }}
                     >
                       {active.title}
                     </h1>
-                    <p>
+                    <p
+                      data-custom-color={active.bodyColor ? "true" : undefined}
+                      style={{
+                        ...(active.bodyColor ? { color: active.bodyColor } : {}),
+                        ...(active.guestLabelFontSize
+                          ? { fontSize: active.guestLabelFontSize }
+                          : {}),
+                      }}
+                    >
                       {active.guestLabelText ||
                         "Kepada Yth. Bapak/Ibu/Saudara/i"}
                     </p>
-                    <strong>
+                    <strong
+                      data-custom-color={active.bodyColor ? "true" : undefined}
+                      style={{
+                        ...(active.bodyColor ? { color: active.bodyColor } : {}),
+                        ...(active.guestNameFontSize
+                          ? { fontSize: active.guestNameFontSize }
+                          : {}),
+                      }}
+                    >
                       {inviteeName || active.guestNameText || "Tamu Terhormat"}
                     </strong>
-                    <span>
+                    <span
+                      data-custom-color={active.bodyColor ? "true" : undefined}
+                      style={{
+                        ...(active.bodyColor ? { color: active.bodyColor } : {}),
+                        // WYSIWYG: editor memakai bodyFontSize lewat
+                        // editableText(), live sebelumnya tidak sama sekali.
+                        ...(active.bodyFontSize
+                          ? { fontSize: active.bodyFontSize }
+                          : {}),
+                      }}
+                    >
                       {active.body ||
                         "Dengan penuh kebahagiaan kami mengundang Anda"}
                     </span>
@@ -15338,6 +16014,29 @@ function FeatureBlock({
           onSelect();
         }
       }}
+      // Revisi QA: "Posisi bebas" dulu hanya bisa digeser lewat tab kecil
+      // "move" di atas blok atau tombol arah di panel. Sekarang seluruh blok
+      // bisa ditarik langsung di canvas. Teks, tombol, dan input tetap bisa
+      // diklik karena drag hanya dimulai dari area non-interaktif dan baru
+      // aktif setelah pointer bergerak melewati ambang 4 px.
+      onPointerDown={(event) => {
+        if (!editable || !feature.freePosition || feature.locked) return;
+        if (event.button !== 0) return;
+        const target = event.target as HTMLElement;
+        if (
+          target.closest(
+            '[contenteditable="true"],input,textarea,select,button,a,.free-move-handle,.free-resize-handle,.feature-handle',
+          )
+        )
+          return;
+        startFreeMove(event, feature, onUpdate, 4);
+      }}
+      // TC-202 — saat blok diberi tinggi eksplisit lewat posisi bebas, isinya
+      // (mis. .image-feature dengan height:320px inline) menahan blok sehingga
+      // tidak bisa dikecilkan. Penanda ini membuat isi mengikuti blok.
+      data-fixed-height={
+        feature.freePosition && feature.boxHeight ? "true" : undefined
+      }
       className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""}`}
       style={style}
     >
@@ -15447,9 +16146,17 @@ function FeatureBlock({
               textDecoration: feature.underline ? "underline" : "none",
             }}
           >
+            {/* Sama seperti InvitationCover: eyebrow ikut Heading, label &
+                nama tamu ikut Supporting, agar editor sama dengan hasil live. */}
             <small
               contentEditable={editable}
               suppressContentEditableWarning
+              style={{
+                ...(feature.titleColor ? { color: feature.titleColor } : {}),
+                ...(feature.eyebrowFontSize
+                  ? { fontSize: feature.eyebrowFontSize }
+                  : {}),
+              }}
               onBlur={(event) =>
                 onUpdate({ eyebrowText: event.currentTarget.textContent || "" })
               }
@@ -15460,6 +16167,12 @@ function FeatureBlock({
             <p
               contentEditable={editable}
               suppressContentEditableWarning
+              style={{
+                ...(feature.bodyColor ? { color: feature.bodyColor } : {}),
+                ...(feature.guestLabelFontSize
+                  ? { fontSize: feature.guestLabelFontSize }
+                  : {}),
+              }}
               onBlur={(event) =>
                 onUpdate({
                   guestLabelText: event.currentTarget.textContent || "",
@@ -15471,6 +16184,12 @@ function FeatureBlock({
             <strong
               contentEditable={editable}
               suppressContentEditableWarning
+              style={{
+                ...(feature.bodyColor ? { color: feature.bodyColor } : {}),
+                ...(feature.guestNameFontSize
+                  ? { fontSize: feature.guestNameFontSize }
+                  : {}),
+              }}
               onBlur={(event) =>
                 onUpdate({
                   guestNameText: event.currentTarget.textContent || "",
@@ -17124,7 +17843,7 @@ function Articles({
                   </button>
                 </td>
                 <td>{article.category}</td>
-                <td>{article.date}</td>
+                <td>{formatArticleDate(article.date)}</td>
                 <td>
                   <span className={`status ${article.status.toLowerCase()}`}>
                     {article.status}
@@ -19206,7 +19925,10 @@ function ArticleReaderPage({
             <h1>{article.title}</h1>
             <p>{article.excerpt}</p>
             <small>
-              {article.date} · {article.author}
+              <time dateTime={article.date}>
+                {formatArticleDate(article.date)}
+              </time>{" "}
+              · {article.author}
             </small>
           </div>
         </section>
@@ -19737,32 +20459,43 @@ function startFreeMove(
   event: React.PointerEvent,
   feature: Feature,
   onUpdate: (patch: Partial<Feature>) => void,
+  /** Jarak pointer (px) sebelum drag dianggap mulai. 0 = langsung. */
+  threshold = 0,
 ) {
-  event.preventDefault();
-  event.stopPropagation();
   if (feature.locked) return;
+  if (!threshold) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
   const block = (event.currentTarget as HTMLElement).closest(
     ".feature-block",
   ) as HTMLElement | null;
   const parent = block?.parentElement;
   if (!block || !parent) return;
-  const mobile =
-    ((block.closest(".canvas-section") as HTMLElement | null)?.clientWidth ??
-      800) <= 560;
-  const original = feature,
-    emit = onUpdate;
-  if (mobile) {
-    feature = { ...feature, ...feature.mobileLayout };
-    onUpdate = (patch) =>
-      emit({ mobileLayout: { ...original.mobileLayout, ...patch } });
-  }
+  // Dulu device ditebak dari lebar DOM lalu ditulis ke `mobileLayout`. Dua
+  // akibatnya: (a) di mode Mobile patch berakhir di `mobile.mobileLayout`
+  // (bersarang ganda, tidak pernah terbaca), dan (b) pada jendela Desktop yang
+  // sempit drag diam-diam menulis ke nilai mobile. `feature` di sini sudah
+  // di-resolve per device dan `onUpdate` sudah melewati applyDevicePatch,
+  // jadi patch biasa otomatis mendarat di slot device yang benar.
   const rect = parent.getBoundingClientRect(),
     scale = rect.width / Math.max(1, parent.clientWidth);
   const startX = event.clientX,
     startY = event.clientY,
     baseX = feature.posX ?? 5,
     baseY = feature.posY ?? 12;
+  let armed = threshold === 0;
   const move = (e: PointerEvent) => {
+    if (!armed) {
+      if (
+        Math.abs(e.clientX - startX) < threshold &&
+        Math.abs(e.clientY - startY) < threshold
+      )
+        return;
+      armed = true;
+      // Begitu drag benar-benar dimulai, cegah seleksi teks ikut tersapu.
+      document.body.style.userSelect = "none";
+    }
     const dx = ((e.clientX - startX) / Math.max(1, rect.width)) * 100,
       dy = (e.clientY - startY) / Math.max(0.01, scale);
     onUpdate({
@@ -19779,6 +20512,7 @@ function startFreeMove(
     });
   };
   const end = () => {
+    document.body.style.userSelect = "";
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", end);
     window.removeEventListener("pointercancel", end);
@@ -19800,16 +20534,12 @@ function startFreeResize(
   ) as HTMLElement | null;
   const parent = block?.parentElement;
   if (!block || !parent) return;
-  const mobile =
-    ((block.closest(".canvas-section") as HTMLElement | null)?.clientWidth ??
-      800) <= 560;
-  const original = feature,
-    emit = onUpdate;
-  if (mobile) {
-    feature = { ...feature, ...feature.mobileLayout };
-    onUpdate = (patch) =>
-      emit({ mobileLayout: { ...original.mobileLayout, ...patch } });
-  }
+  // Dulu device ditebak dari lebar DOM lalu ditulis ke `mobileLayout`. Dua
+  // akibatnya: (a) di mode Mobile patch berakhir di `mobile.mobileLayout`
+  // (bersarang ganda, tidak pernah terbaca), dan (b) pada jendela Desktop yang
+  // sempit drag diam-diam menulis ke nilai mobile. `feature` di sini sudah
+  // di-resolve per device dan `onUpdate` sudah melewati applyDevicePatch,
+  // jadi patch biasa otomatis mendarat di slot device yang benar.
   const rect = parent.getBoundingClientRect(),
     scale = rect.width / Math.max(1, parent.clientWidth),
     startX = event.clientX,
@@ -20510,7 +21240,13 @@ function ControlledSoundPlayer({
   return (
     <button
       type="button"
-      className={`fixed-sound-disc sound-pos-${feature.objectAlign || "left"} ${playing ? "playing" : ""} ${contained ? "is-contained" : ""}`}
+      className={`fixed-sound-disc sound-pos-${feature.objectAlign || "left"} sound-vpos-${feature.soundVerticalAlign || "bottom"} ${playing ? "playing" : ""} ${contained ? "is-contained" : ""}`}
+      style={
+        {
+          "--sound-offset-x": `${feature.soundOffsetX ?? 22}px`,
+          "--sound-offset-y": `${feature.soundOffsetY ?? 22}px`,
+        } as React.CSSProperties
+      }
       onClick={onToggle}
       title={
         playing ? "Matikan backsound" : `Putar ${feature.title || feature.body}`
@@ -21042,12 +21778,19 @@ function SoundCatalogPreview({
 function FreePositionControls({
   feature,
   update,
+  activeDevice = "desktop",
 }: {
   feature: Feature;
   update: (patch: Partial<Feature>) => void;
+  activeDevice?: DeviceMode;
 }) {
   return (
-    <DesignerControls key={feature.id} feature={feature} update={update} />
+    <DesignerControls
+      key={feature.id}
+      feature={feature}
+      update={update}
+      activeDevice={activeDevice}
+    />
   );
 }
 

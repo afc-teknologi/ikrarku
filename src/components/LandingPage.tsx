@@ -38,7 +38,27 @@ export function JournalCard({
   onOpen: (article: ArticleItem) => void;
 }) {
   return (
-    <button className="ikr-journal-card" onClick={() => onOpen(article)}>
+    /* SEO — dulu ini <button>, jadi crawler tidak melihat tautan apa pun ke
+       artikel dan pengguna tidak bisa klik-tengah / salin alamat. Sekarang
+       anchor sungguhan ke /jurnal/<slug>; navigasi tetap client-side kecuali
+       pengguna menahan modifier atau klik tengah. */
+    <a
+      className="ikr-journal-card"
+      href={`/jurnal/${encodeURIComponent(article.slug)}`}
+      onClick={(event) => {
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey
+        )
+          return;
+        event.preventDefault();
+        onOpen(article);
+      }}
+    >
       <span className="ikr-journal-thumb">
         {article.coverUrl ? (
           <img
@@ -61,7 +81,7 @@ export function JournalCard({
       <span className="ikr-journal-foot">
         Baca cerita <ArrowRight size={16} />
       </span>
-    </button>
+    </a>
   );
 }
 

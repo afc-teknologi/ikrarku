@@ -23,7 +23,8 @@
     "qa:integration": "node --test scripts/qa-integration.mjs",
     "qa:layout": "node --experimental-strip-types --test scripts/qa-layout.mjs",
     "qa:browser": "node --test scripts/qa-browser.mjs",
-    "qa:legacy": "npm run qa:static && npm run qa:ux && npm run qa:edge && npm run qa:wysiwyg"
+    "qa:legacy": "npm run qa:static && npm run qa:ux && npm run qa:edge && npm run qa:wysiwyg",
+    "mayar:check": "node scripts/mayar-check.mjs"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

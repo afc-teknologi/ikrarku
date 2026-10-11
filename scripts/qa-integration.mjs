@@ -635,6 +635,108 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       );
     },
   );
+  // Payload Mayar yang SEBENARNYA: token lewat query (Mayar tidak mengirim
+  // header rahasia dan tidak menandatangani body), order dicocokkan lewat
+  // data.transactionId, dan tidak ada field currency.
+  await t.test(
+    "QA-20 webhook menerima bentuk payload Mayar yang sebenarnya",
+    async () => {
+      const probe = await call("POST", "/orders", {
+        customerName: "Pembayar Mayar",
+        email: "mayar-webhook@example.test",
+        phone: "081234567891",
+        templateId: template.id,
+      });
+      assert.equal(probe.status, 201);
+      const probeId = probe.data.id;
+      const amount = Number(
+        db.prepare("SELECT amount FROM orders WHERE id=?").get(probeId).amount,
+      );
+      // Mayar menyimpan transactionId-nya sendiri; kita simpan di gateway_ref.
+      db.prepare("UPDATE orders SET gateway_ref=? WHERE id=?").run(
+        "mayar-trx-0001",
+        probeId,
+      );
+
+      // Token lewat query string, bukan header.
+      const viaQuery = async (body, token = "local-test-webhook-only") => {
+        const response = await fetch(
+          `${base}/api/webhooks/mayar?token=${encodeURIComponent(token)}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        );
+        return {
+          status: response.status,
+          data: await response.json().catch(() => null),
+        };
+      };
+
+      // Token salah tetap ditolak.
+      assert.equal(
+        (await viaQuery({ event: "payment.received" }, "salah")).status,
+        401,
+      );
+
+      const payload = {
+        event: "payment.received",
+        data: {
+          id: "mayar-inv-0001",
+          transactionId: "mayar-trx-0001",
+          status: "SUCCESS",
+          transactionStatus: "created",
+          customerEmail: "mayar-webhook@example.test",
+          amount,
+          // Sengaja TANPA currency — payload Mayar memang tidak memuatnya.
+        },
+      };
+      assert.equal(
+        (await viaQuery(payload)).status,
+        200,
+        "webhook Mayar yang sah harus diterima",
+      );
+      assert.equal(
+        db
+          .prepare("SELECT payment_status FROM orders WHERE id=?")
+          .get(probeId).payment_status,
+        "Paid",
+      );
+
+      // Mayar mengirim ulang sampai menerima 2xx: handler harus idempoten.
+      const replay = await viaQuery(payload);
+      assert.equal(replay.status, 200);
+      assert.equal(replay.data.already, true);
+
+      // Nominal yang tidak cocok tetap ditolak.
+      const other = await call("POST", "/orders", {
+        customerName: "Nominal Beda",
+        email: "mayar-amount@example.test",
+        phone: "081234567892",
+        templateId: template.id,
+      });
+      db.prepare("UPDATE orders SET gateway_ref=? WHERE id=?").run(
+        "mayar-trx-0002",
+        other.data.id,
+      );
+      assert.equal(
+        (
+          await viaQuery({
+            event: "payment.received",
+            data: { transactionId: "mayar-trx-0002", amount: 1 },
+          })
+        ).status,
+        400,
+      );
+      assert.equal(
+        db
+          .prepare("SELECT payment_status FROM orders WHERE id=?")
+          .get(other.data.id).payment_status,
+        "Pending",
+      );
+    },
+  );
   await t.test(
     "QA-09 receipt failure retains paid order and supports retry",
     async () => {
@@ -816,6 +918,26 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       );
       assert.equal(countMessages("%sudah selesai dikerjakan%") - doneBefore, 1);
       assert.equal(countMail() - mailBefore, 1);
+
+      // "Waiting Customer" tersedia pada dropdown Tasks & Tickets; dulu ditolak
+      // server dengan 400 karena tidak termasuk daftar status yang sah.
+      const waitingBefore = countMessages("%menunggu konfirmasi atau materi%");
+      assert.equal(
+        (
+          await call(
+            "PATCH",
+            `/tasks/${task.id}`,
+            { status: "Waiting Customer" },
+            editor.token,
+          )
+        ).status,
+        200,
+      );
+      assert.equal(
+        countMessages("%menunggu konfirmasi atau materi%") - waitingBefore,
+        1,
+        "status Waiting Customer harus mengirim pesan ke customer",
+      );
     },
   );
   // QA TC-167 — order yang belum dibayar tidak boleh memenuhi Tasks & Tickets.
