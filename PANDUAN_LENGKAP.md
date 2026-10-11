@@ -40,6 +40,50 @@ mendorongnya ke GitHub; VPS yang membangun dan menjalankan.
 > Sebaliknya, **`npm` tidak ada di VPS** dan juga tidak perlu dipasang.
 > Semua `npm run ...` dijalankan di laptop.
 
+## I.0 — Pastikan kode sudah benar-benar sampai di VPS
+
+Kerjakan ini **sebelum** menyalahkan konfigurasi. Sebagian besar "fitur
+tidak jalan" sebenarnya "kode belum sampai".
+
+### Apakah berkasnya ada di disk VPS?
+
+```bash
+cd /opt/ikrarku
+ls scripts/mayar-check.mjs scripts/article-slugs.mjs
+grep -c 'app.get("/robots.txt"' server/index.mjs
+```
+
+| Hasil | Artinya |
+|---|---|
+| `No such file` / `0` | **kode belum sampai.** Salin patch terbaru ke repo lokal, commit, push, lalu `git pull` di VPS |
+| semua ada / `1` | kode sudah di disk — lanjut ke pemeriksaan berikut |
+
+### Apakah yang berjalan memang kode itu?
+
+```bash
+curl -s -o /dev/null -w '%{content_type}\n' https://dev.ikrarku.id/robots.txt
+```
+
+| Hasil | Artinya |
+|---|---|
+| `text/plain` | container sudah memakai kode terbaru |
+| `text/html` | **container masih image lama.** Build ulang (I.2) |
+
+> Pemeriksaan ini tajam karena `/robots.txt` dilayani tanpa syarat
+> `NODE_ENV`. Kalau yang keluar HTML, itu berarti permintaan jatuh ke
+> catch-all SPA — satu-satunya penjelasan: rutenya belum ada di kode yang
+> sedang berjalan.
+
+Gejala-gejala berikut semuanya berakar pada hal yang sama, jadi jangan
+diperbaiki satu per satu:
+
+- `Cannot find module '/app/scripts/...'`
+- `/robots.txt` dan `/sitemap.xml` mengembalikan halaman HTML
+- halaman artikel memakai judul & deskripsi umum situs
+- `npm run mayar:check` tidak dikenali
+
+- [ ] I.0 selesai: berkas ada di disk **dan** `content_type` = `text/plain`
+
 ## I.1 — Di laptop
 
 ```bash
@@ -301,7 +345,9 @@ Setelah deploy dan artikel dibenahi:
 ```bash
 curl -s https://dev.ikrarku.id/robots.txt
 curl -s https://dev.ikrarku.id/sitemap.xml | head -20
-curl -s https://dev.ikrarku.id/jurnal/<slug> | grep -E 'og:|canonical|<title>'
+# ganti lorem-ipsum dengan slug artikel Anda yang sebenarnya.
+# JANGAN mengetik tanda < > — bash membacanya sebagai redirect berkas.
+curl -s https://dev.ikrarku.id/jurnal/lorem-ipsum | grep -E 'og:|canonical|<title>'
 ```
 
 Yang diharapkan pada perintah ketiga:
@@ -593,6 +639,10 @@ docker compose -f docker-compose.staging.yml ps
 
 **Deploy**
 
+0. **Menduga kode sudah sampai padahal belum.** Satu akar ini memunculkan
+   banyak gejala sekaligus: modul tidak ketemu, `/robots.txt` mengembalikan
+   HTML, meta artikel masih umum. Cek dulu dengan I.0 sebelum membetulkan
+   gejalanya satu per satu.
 1. Lupa **hard refresh** — perubahan sudah naik, browser menampilkan cache lama
 2. Lupa `-f docker-compose.staging.yml` — `no configuration file provided`
 3. Mencoba `npm run ...` di VPS — Node hanya ada di dalam container
@@ -613,6 +663,12 @@ docker compose -f docker-compose.staging.yml ps
 12. Webhook **tanpa `?token=`**, atau tidak didaftarkan sama sekali
 13. `CLIENT_ORIGIN` masih `localhost`
 14. Langsung produksi **tanpa uji sandbox**
+
+**Shell**
+
+15. Mengetik placeholder apa adanya — `curl .../jurnal/<slug>` membuat bash
+    menjawab `syntax error near unexpected token`, karena `<` dibaca sebagai
+    redirect berkas. Ganti dulu dengan nilai sebenarnya, tanpa tanda `< >`.
 
 # Keamanan
 

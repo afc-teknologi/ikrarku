@@ -240,7 +240,9 @@ Verifikasi setelah deploy:
 ```bash
 curl -s https://dev.ikrarku.id/robots.txt
 curl -s https://dev.ikrarku.id/sitemap.xml | head -20
-curl -s https://dev.ikrarku.id/jurnal/<slug-artikel> | grep -E 'og:|canonical|<title>'
+# ganti lorem-ipsum dengan slug artikel Anda yang sebenarnya.
+# JANGAN mengetik tanda < > — bash membacanya sebagai redirect berkas.
+curl -s https://dev.ikrarku.id/jurnal/lorem-ipsum | grep -E 'og:|canonical|<title>'
 ```
 
 Yang diharapkan: `<title>` berisi judul artikel, bukan judul umum situs, dan
