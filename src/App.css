@@ -811,6 +811,8 @@ label.range-field{display:flex;flex-direction:column;gap:5px;min-width:0}
 label.range-field>.range-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-left:0;width:100%}
 label.range-field>.range-head>b{font-weight:500;color:#81908a}
 label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:block}
+/* Keterangan arah slider: tanpa ini tidak terlihat ujung mana yang "lebih". */
+label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8px;font-size:7.5px;color:#9aa8a2;margin-top:-1px}
 
 /* Upload gambar untuk layer background. */
 .layer-upload{display:flex;flex-direction:column;gap:8px}
@@ -912,6 +914,13 @@ label.range-field>input[type=range]{width:100%;min-width:0;margin:0;display:bloc
 @keyframes layerLoopSway{0%,100%{transform:scale(var(--layer-scale,1)) rotate(-3deg)}50%{transform:scale(var(--layer-scale,1)) rotate(3deg)}}
 @keyframes layerLoopPulse{0%,100%{transform:scale(var(--layer-scale,1))}50%{transform:scale(calc(var(--layer-scale,1)*1.035))}}
 @keyframes layerLoopDrift{0%,100%{transform:scale(var(--layer-scale,1)) translate3d(0,0,0)}25%{transform:scale(var(--layer-scale,1)) translate3d(6px,-6px,0)}50%{transform:scale(var(--layer-scale,1)) translate3d(0,-11px,0)}75%{transform:scale(var(--layer-scale,1)) translate3d(-6px,-6px,0)}}
+/* Layer memenuhi section persis (inset:0), jadi begitu digeser/diputar ia
+   menyingkap tepi canvas. Background utama sudah punya kelebihan 5px untuk
+   alasan yang sama; layer yang bergerak diberi kelebihan lebih besar karena
+   geserannya sampai 11px. */
+.background-extra-layer.loop-float,
+.background-extra-layer.loop-sway,
+.background-extra-layer.loop-drift{inset:-16px}
 .background-extra-layer.loop-fade{animation:layerLoopFade var(--loop-speed,6s) ease-in-out infinite}
 .background-extra-layer.loop-float{animation:layerLoopFloat var(--loop-speed,6s) ease-in-out infinite}
 .background-extra-layer.loop-sway{animation:layerLoopSway var(--loop-speed,7s) ease-in-out infinite;transform-origin:50% 50%}

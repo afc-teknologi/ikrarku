@@ -4938,6 +4938,7 @@ function App() {
             deleteCanvas={deleteCanvasFromTemplates}
             duplicateCanvas={duplicateCanvasFromTemplates}
             editCanvas={editCanvasFromTemplates}
+            editorMode={editorMode}
             openTemplateCreator={() => setTemplateCreatorOpen(true)}
             canCreate={hasPermission("templates.create")}
             managedTemplates={templateCatalog}
@@ -8644,7 +8645,23 @@ function buildWebsiteDesignGroups(
   sections: CanvasSection[],
   templateCatalog: Template[],
   selectedTemplate: Template,
+  /** Template workspace: semua canvas yang dimuat milik satu template yang
+   *  sama, jadi selalu satu card. Tanpa ini canvas yang ditambahkan lewat
+   *  tombol + tidak membawa penanda grup apa pun dan pecah menjadi card
+   *  "Custom Design" sendiri-sendiri. */
+  singleGroup = false,
 ) {
+  if (singleGroup)
+    return sections.length
+      ? [
+          {
+            id: `template-${selectedTemplate.id}`,
+            template: selectedTemplate,
+            name: selectedTemplate.name,
+            sections,
+          },
+        ]
+      : [];
   const groups = new Map<
     string,
     { id: string; template?: Template; name: string; sections: CanvasSection[] }
@@ -9070,6 +9087,7 @@ function Templates({
   deleteCanvas,
   duplicateCanvas,
   editCanvas,
+  editorMode = "site",
   openTemplateCreator,
   canCreate,
   managedTemplates = [],
@@ -9098,6 +9116,8 @@ function Templates({
   deleteCanvas: (sectionIds: string[]) => void;
   duplicateCanvas: (sectionIds: string[]) => void;
   editCanvas: (sectionId: string, template?: Template) => void;
+  /** Di Template workspace seluruh canvas milik SATU template. */
+  editorMode?: "site" | "template";
   openTemplateCreator: () => void;
   canCreate: boolean;
   managedTemplates?: Template[];
@@ -9129,7 +9149,12 @@ function Templates({
   const websiteDesigns: WebsiteDesignGroup[] =
     role === "User" && customerOrders.length
       ? buildCustomerDesignGroups(customerOrders, sections, templateCatalog)
-      : buildWebsiteDesignGroups(sections, templateCatalog, selectedTemplate);
+      : buildWebsiteDesignGroups(
+          sections,
+          templateCatalog,
+          selectedTemplate,
+          editorMode === "template",
+        );
   return (
     <div className="page">
       <div className="page-heading">
@@ -10197,7 +10222,19 @@ function Editor({
               anchor?.sourceTemplateName ||
               (anchor ? "Custom Design" : undefined),
           }
-        : {}),
+        : {
+            // Dulu kosong di Template workspace, sehingga canvas baru tidak
+            // punya penanda grup dan muncul sebagai card "Custom Design"
+            // terpisah pada "Template pada website" — satu card per canvas,
+            // bukan satu card per template. buildSectionsFromTemplate()
+            // selalu menulis ulang ketiga nilai ini saat template dipakai
+            // customer, jadi penandaan di sini tidak ikut terbawa.
+            templateInstanceId:
+              anchor?.templateInstanceId || `template-${selectedTemplate.id}`,
+            sourceTemplateId: anchor?.sourceTemplateId || selectedTemplate.id,
+            sourceTemplateName:
+              anchor?.sourceTemplateName || selectedTemplate.name,
+          }),
     };
     commitSections((previous) => [...previous, section]);
     selectSection(section);
@@ -13887,6 +13924,10 @@ function LoopEffectControls({
       </label>
       {active !== "none" && (
         <label className="range-field">
+          {/* Nilai besar = satu siklus lebih lama = gerakan lebih LAMBAT.
+              Tanpa keterangan arah, slider digeser ke kanan karena dikira
+              "lebih banyak", lalu pada 20s gerakannya nyaris tak terlihat
+              dan efeknya dikira tidak berfungsi. */}
           <span className="range-head">
             Durasi siklus<b>{loopSpeed || 6}s</b>
           </span>
@@ -13899,6 +13940,10 @@ function LoopEffectControls({
               onChange({ loopSpeed: Number(event.target.value) })
             }
           />
+          <span className="range-scale">
+            <span>2s · paling cepat</span>
+            <span>20s · paling lambat</span>
+          </span>
         </label>
       )}
     </div>

@@ -524,3 +524,46 @@ test("Retest-4: Animasi Layer Background benar-benar menggerakkan layer", () => 
   );
   assert.match(appCss, /\.layout-help\.is-muted\{/);
 });
+
+test("Retest-5: Template workspace tampil sebagai SATU card, bukan satu per canvas", () => {
+  // Canvas yang ditambahkan lewat tombol + di Template workspace dulu tidak
+  // membawa penanda grup apa pun, sehingga buildWebsiteDesignGroups jatuh ke
+  // kunci `custom-${section.id}` dan setiap canvas jadi card "Custom Design"
+  // sendiri-sendiri.
+  assert.match(appTsx, /singleGroup = false,\n\) \{\n\s*if \(singleGroup\)/);
+  assert.match(
+    appTsx,
+    /buildWebsiteDesignGroups\(\n\s*sections,\n\s*templateCatalog,\n\s*selectedTemplate,\n\s*editorMode === "template",\n\s*\)/,
+  );
+  // Penandaan saat canvas dibuat, supaya grup tetap utuh setelah disimpan
+  // dan dibuka lagi.
+  assert.match(
+    appTsx,
+    /templateInstanceId:\n\s*anchor\?\.templateInstanceId \|\| `template-\$\{selectedTemplate\.id\}`/,
+  );
+  assert.match(
+    appTsx,
+    /sourceTemplateId: anchor\?\.sourceTemplateId \|\| selectedTemplate\.id/,
+  );
+  // Penanda ini tidak boleh bocor ke instance customer.
+  const builder = appTsx.slice(
+    appTsx.indexOf("function buildSectionsFromTemplate"),
+    appTsx.indexOf("function buildTemplateSections"),
+  );
+  assert.match(builder, /const templateInstanceId = uid\("template-instance"\)/);
+  assert.match(builder, /sourceTemplateId: template\.id/);
+});
+
+test("Retest-6: layer yang bergerak tidak menyingkap tepi canvas", () => {
+  // .background-extra-layer memenuhi section persis (inset:0). Begitu
+  // digeser/diputar, tepi section terlihat sebagai celah.
+  assert.match(
+    appCss,
+    /\.background-extra-layer\.loop-float,\n\.background-extra-layer\.loop-sway,\n\.background-extra-layer\.loop-drift\{inset:-16px\}/,
+  );
+  // Arah slider durasi harus terbaca: 20s adalah paling LAMBAT, dan dulu
+  // dikira "paling banyak" lalu efeknya disangka tidak berfungsi.
+  assert.match(appTsx, /2s · paling cepat/);
+  assert.match(appTsx, /20s · paling lambat/);
+  assert.match(appCss, /label\.range-field>\.range-scale\{/);
+});
