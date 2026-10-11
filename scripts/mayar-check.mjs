@@ -24,20 +24,38 @@
 import fs from "node:fs";
 import path from "node:path";
 
-// --- muat .env tanpa dependency, supaya bisa dijalankan apa adanya ----------
-const envPath = path.resolve(process.cwd(), ".env");
-if (fs.existsSync(envPath))
-  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
-    const match = /^\s*([A-Z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-    if (match && process.env[match[1]] === undefined)
-      process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
-  }
-
 const argv = process.argv.slice(2);
 const argValue = (name) => {
   const index = argv.indexOf(`--${name}`);
   return index >= 0 ? argv[index + 1] : undefined;
 };
+/** --env-file <berkas> untuk menunjuk berkas env secara eksplisit. */
+function argEnvFile() {
+  return argValue("env-file");
+}
+
+// --- muat berkas env tanpa dependency, supaya bisa dijalankan apa adanya ----
+// Di VPS, docker-compose.staging.yml membaca `.env.staging`, bukan `.env`.
+// Keduanya dicoba agar skrip ini jalan di laptop maupun di server tanpa
+// perlu --env-file. Variabel yang sudah ada di environment tidak ditimpa.
+const envCandidates = [
+  argEnvFile(),
+  ".env.staging",
+  ".env",
+].filter(Boolean);
+let loadedEnvFile = null;
+for (const candidate of envCandidates) {
+  const envPath = path.resolve(process.cwd(), candidate);
+  if (!fs.existsSync(envPath)) continue;
+  loadedEnvFile = candidate;
+  for (const line of fs.readFileSync(envPath, "utf8").split("\n")) {
+    const match = /^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+    if (match && process.env[match[1]] === undefined)
+      process.env[match[1]] = match[2].replace(/^["']|["']$/g, "");
+  }
+  break;
+}
+
 
 const KEY = process.env.MAYAR_API_KEY || "";
 const BASE = (process.env.MAYAR_API_BASE || "https://api.mayar.id/hl/v1")
@@ -63,6 +81,11 @@ const section = (title) => console.log(`\n${title}`);
 
 // --- 1. variabel lingkungan ------------------------------------------------
 section("1. Variabel lingkungan");
+console.log(
+  loadedEnvFile
+    ? `  INFO  Membaca ${loadedEnvFile}`
+    : "  INFO  Tidak ada berkas .env/.env.staging di folder ini; memakai environment proses.",
+);
 if (process.env.PAYMENT_MODE !== "mayar")
   warn(
     `PAYMENT_MODE=${process.env.PAYMENT_MODE || "(kosong)"} — gateway belum aktif. Set ke "mayar" saat siap.`,

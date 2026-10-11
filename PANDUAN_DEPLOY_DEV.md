@@ -297,18 +297,41 @@ Command 'npm' not found
 Node hidup di dalam container. Memasang Node di host justru menambah versi
 kedua yang bisa berbeda dengan yang dipakai aplikasi.
 
-Jalankan perkakasnya di dalam container:
+Pinjam Node sebentar dari image resmi — tidak memasang apa pun, tidak
+perlu rebuild:
 
 ```bash
-docker compose -f docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs
+cd /opt/ikrarku
+docker run --rm -v /opt/ikrarku:/app -w /app node:22-bookworm-slim \
+  node scripts/<nama-skrip>.mjs
 ```
 
-Kalau muncul `No such file or directory`, image Anda dibangun sebelum
-folder `scripts/` ikut disalin. Build ulang:
+Container dihapus otomatis setelah selesai.
+
+### `Cannot find module '/app/scripts/...'` saat `docker compose exec`
+
+```
+Error: Cannot find module '/app/scripts/mayar-check.mjs'
+```
+
+Container yang berjalan memakai **image lama**. Runtime image sebelumnya
+hanya menyalin `dist/` dan `server/`; `scripts/` baru ikut setelah
+perubahan `Dockerfile`. Dua pilihan:
 
 ```bash
+# cepat — tanpa rebuild
+docker run --rm -v /opt/ikrarku:/app -w /app node:22-bookworm-slim \
+  node scripts/mayar-check.mjs
+
+# permanen — setelah Dockerfile terbaru terpasang
 git pull
 docker compose -f docker-compose.staging.yml up -d --build
+```
+
+Pastikan dulu berkasnya memang ada di VPS:
+
+```bash
+ls scripts/mayar-check.mjs
 ```
 
 > Konsekuensi lain: **seluruh `npm run ...` memang hanya untuk laptop.**

@@ -188,19 +188,35 @@ Ini bagian yang menghemat banyak waktu. Jalankan **di server**:
 
 ```bash
 cd /opt/ikrarku
+docker run --rm -v /opt/ikrarku:/app -w /app node:22-bookworm-slim \
+  node scripts/mayar-check.mjs
+```
+
+> **Kenapa lewat `docker run`, bukan `npm run`?**
+> VPS sengaja tidak memasang Node — semuanya berjalan di dalam container.
+> Perintah di atas meminjam Node sebentar dari image resmi, memasang folder
+> repo Anda ke dalamnya, lalu menghapus containernya begitu selesai.
+> Tidak ada yang terpasang permanen, dan **tidak perlu rebuild**.
+>
+> Skrip membaca `.env.staging` dari folder itu secara otomatis.
+>
+> Kalau muncul `Cannot find module`, berarti berkasnya belum ada di VPS:
+> ```bash
+> ls scripts/mayar-check.mjs    # harus ada
+> git pull                      # kalau belum ada
+> ```
+
+Alternatif, kalau image Anda sudah dibangun ulang setelah perkakas ini
+ditambahkan ke `Dockerfile`:
+
+```bash
 docker compose -f docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs
 ```
 
-> **Kenapa lewat `docker compose exec`, bukan `npm run`?**
-> VPS produksi tidak memasang Node/npm — semuanya berjalan di dalam
-> container. Perintah di atas menjalankan perkakas itu di dalam container,
-> yang sudah punya Node sekaligus seluruh variabel dari `.env.staging`.
->
-> Kalau muncul `executable file not found` atau `scripts/mayar-check.mjs:
-> No such file`, image Anda dibangun sebelum perkakas ini ada. Build ulang:
-> ```bash
-> docker compose -f docker-compose.staging.yml up -d --build
-> ```
+> `Cannot find module '/app/scripts/mayar-check.mjs'` pada perintah ini
+> berarti container masih memakai image lama. Pakai cara `docker run` di
+> atas, atau bangun ulang dengan
+> `docker compose -f docker-compose.staging.yml up -d --build`.
 
 Perintah ini **tidak membuat transaksi apa pun**. API key Anda tidak dicetak
 ke layar.

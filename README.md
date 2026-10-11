@@ -181,6 +181,8 @@ deploy/nginx/ikrarku-staging.conf
 .github/workflows/staging-check.yml
 ```
 
+Panduan gabungan deploy + slug Jurnal + Mayar: [PANDUAN_LENGKAP.md](PANDUAN_LENGKAP.md).
+
 Langkah demi langkah deploy ke `dev.ikrarku.id`: [PANDUAN_DEPLOY_DEV.md](PANDUAN_DEPLOY_DEV.md).
 Arsitektur, Nginx, dan backup/restore: [STAGING_DEPLOYMENT.md](STAGING_DEPLOYMENT.md).
 

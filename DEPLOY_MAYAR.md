@@ -196,8 +196,14 @@ Perubahan `.env.staging` sisi server tidak memerlukan rebuild frontend.
 
 ```bash
 cd /opt/ikrarku
-docker compose -f docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs
+docker run --rm -v /opt/ikrarku:/app -w /app node:22-bookworm-slim \
+  node scripts/mayar-check.mjs
 ```
+
+Cara ini tidak memerlukan rebuild dan tidak memasang apa pun di host.
+Bila image sudah memuat `scripts/`, `docker compose -f
+docker-compose.staging.yml exec ikrarku node scripts/mayar-check.mjs`
+juga bisa dipakai.
 
 Tidak membuat transaksi apa pun. API key tidak pernah dicetak.
 
