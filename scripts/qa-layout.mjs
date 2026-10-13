@@ -669,3 +669,33 @@ test("Mayar: kegagalan membuat invoice meninggalkan jejak di log", () => {
       `baris log berisiko membocorkan kredensial: ${line.trim()}`,
     );
 });
+
+test("Mayar: panggilan invoice punya batas waktu, tidak menggantung", () => {
+  // Tanpa batas waktu, fetch ke Mayar bisa menunggu selamanya: tombol Bayar
+  // tetap "Memproses pembayaran…", Nginx menyerah sendiri setelah
+  // proxy_read_timeout dan membalas 502 — sementara proses kita masih
+  // menunggu, sehingga TIDAK ADA baris log sama sekali. Gejalanya sama
+  // persis dengan Mayar menolak, padahal penyebabnya berbeda.
+  const fn = serverMjs.slice(
+    serverMjs.indexOf("async function createMayarInvoice("),
+    serverMjs.indexOf("app.post(\n  \"/api/orders/:id/pay\""),
+  );
+  assert.ok(fn.length > 0, "createMayarInvoice tidak ditemukan");
+  assert.match(fn, /signal: AbortSignal\.timeout\(timeoutMs\)/);
+  assert.match(
+    fn,
+    /const timeoutMs = Number\(process\.env\.MAYAR_TIMEOUT_MS \|\| 15000\)/,
+  );
+  // Harus lebih pendek daripada proxy_read_timeout Nginx (bawaan 60 detik),
+  // supaya yang menyerah lebih dulu adalah kita dan alasannya tercatat.
+  const fallback = Number(/MAYAR_TIMEOUT_MS \|\| (\d+)/.exec(fn)?.[1]);
+  assert.ok(
+    fallback > 0 && fallback < 60000,
+    `batas waktu ${fallback} ms tidak lebih pendek dari timeout Nginx`,
+  );
+  // Timeout harus dikenali dan dicatat, bukan jatuh ke pesan umum.
+  assert.match(fn, /error\.name === "TimeoutError" \|\| error\.name === "AbortError"/);
+  assert.match(fn, /\[mayar\] invoice\/create TIDAK MENJAWAB · order=\$\{order\.order_no\}/);
+  // 504 membedakannya dari 502 "Mayar menolak" pada tab Network.
+  assert.match(fn, /\{ status: 504 \}/);
+});

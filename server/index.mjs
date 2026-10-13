@@ -3800,14 +3800,41 @@ async function createMayarInvoice(order, template) {
     // memakai transactionId dari respons di bawah.
     extraData: { noCustomer: false, idProd: order.id },
   };
-  const response = await fetch(`${base}/invoice/create`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify(payload),
-  });
+  // Tanpa batas waktu, panggilan ini bisa menggantung selamanya: tombol
+  // Bayar tetap "Memproses pembayaran…", Nginx menyerah sendiri setelah
+  // proxy_read_timeout (bawaan 60 detik) dan membalas 502 — padahal proses
+  // kita masih menunggu, sehingga tidak ada satu pun baris log yang ditulis.
+  // Gejalanya persis sama dengan Mayar menolak, padahal penyebabnya beda.
+  // Batasnya dibuat lebih pendek daripada timeout Nginx supaya yang menyerah
+  // lebih dulu adalah kita, dan alasannya tercatat.
+  const timeoutMs = Number(process.env.MAYAR_TIMEOUT_MS || 15000);
+  let response;
+  try {
+    response = await fetch(`${base}/invoice/create`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${key}`,
+      },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    const timedOut = error.name === "TimeoutError" || error.name === "AbortError";
+    console.error(
+      `[mayar] invoice/create TIDAK MENJAWAB · order=${order.order_no} · ` +
+        `${timedOut ? `lewat ${timeoutMs} ms` : `${error.name}: ${error.message}`} · ` +
+        `tujuan=${base}`,
+    );
+    throw Object.assign(
+      new Error(
+        timedOut
+          ? `Mayar tidak menjawab dalam ${Math.round(timeoutMs / 1000)} detik`
+          : `Tidak bisa menghubungi Mayar: ${error.message}`,
+      ),
+      { status: 504 },
+    );
+  }
   const data = await response.json().catch(() => ({}));
   // Kegagalan pembayaran dulu tidak meninggalkan jejak apa pun di log: yang
   // terlihat hanya "502" di browser, dan 502 juga bentuk balasan Nginx saat
