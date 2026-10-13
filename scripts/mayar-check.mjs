@@ -61,6 +61,9 @@ const KEY = process.env.MAYAR_API_KEY || "";
 const BASE = (process.env.MAYAR_API_BASE || "https://api.mayar.id/hl/v1")
   .replace(/\/+$/, "");
 const ORIGIN = BASE.replace(/\/hl\/v\d+$/, "");
+/** Diisi oleh bagian 3b; dipakai peringatan penutup. Akun yang hanya punya
+ *  produksi tidak boleh disuruh "uji di sandbox". */
+let isProductionKey = false;
 const WEBHOOK_BASE = (
   argValue("webhook") ||
   process.env.PUBLIC_BASE_URL ||
@@ -137,6 +140,18 @@ if (parts.length !== 3) {
         bad(`Key sudah kedaluwarsa pada ${expiry.toISOString()}.`);
       else ok(`Key berlaku sampai ${expiry.toISOString()}.`);
     }
+    // Mayar menaruh izin key di klaim `scope`, mis. {"read":true} untuk key
+    // Read Only. Dibaca di sini supaya ketahuan SEBELUM panggilan jaringan,
+    // dan tanpa menebak dari kode status.
+    const scope = claims.scope;
+    if (scope && typeof scope === "object") {
+      const canWrite = Boolean(scope.write);
+      if (canWrite) ok("Key punya izin tulis (bisa membuat invoice).");
+      else
+        bad(
+          'Key ini READ ONLY (scope: {"read":true}, tanpa "write"). Membuat invoice adalah POST dan akan ditolak 403. Minta key dengan permission "Read & Write".',
+        );
+    }
     // Key Mayar terikat domain; kalau domain di key berbeda dengan domain
     // deploy, link pembayaran yang dikembalikan akan memakai domain lain.
     const bound = claims.domain || claims.subdomain || claims.website;
@@ -150,6 +165,21 @@ if (parts.length !== 3) {
 }
 
 // --- 3. panggilan jaringan -------------------------------------------------
+/** Pesan kesalahan Mayar datang dalam beberapa bentuk; rangkum jadi satu baris. */
+const mayarMessage = (payload) => {
+  if (!payload) return "";
+  const raw = payload.messages ?? payload.message ?? payload.error;
+  if (Array.isArray(raw))
+    return raw
+      .map((item) =>
+        typeof item === "string" ? item : JSON.stringify(item),
+      )
+      .join("; ");
+  if (raw && typeof raw === "object") return JSON.stringify(raw);
+  if (raw) return String(raw);
+  return JSON.stringify(payload).slice(0, 300);
+};
+
 const callMayar = async (method, url, body) => {
   try {
     const response = await fetch(url, {
@@ -230,6 +260,7 @@ if (KEY) {
         .join(", ")}. Sesuaikan MAYAR_API_BASE.`,
     );
   else ok("MAYAR_API_BASE sudah cocok dengan environment key.");
+  isProductionKey = accepted.some(([label]) => label === "Produksi");
 
   section("4. Apakah endpoint V1 masih hidup untuk akun ini?");
   console.log(
@@ -242,18 +273,94 @@ if (KEY) {
     bad(
       `V1 sudah tidak tersedia (${v1.status}). Server ini memakai /hl/v1 — payload invoice perlu dimigrasi ke V2.`,
     );
-  else if (v1.status === 400 || v1.status === 422)
+  else if (v1.status === 400 || v1.status === 422) {
     ok(
       `V1 masih hidup (${v1.status} = validasi payload, bukan path hilang).`,
     );
+    // Pesan validasinya menyebut field apa saja yang Mayar wajibkan. Dulu
+    // dibuang begitu saja, padahal inilah satu-satunya keterangan resmi
+    // tentang kontrak yang kita punya — dan jawaban tercepat saat tombol
+    // Bayar menjawab 502.
+    const reason = mayarMessage(v1.payload);
+    if (reason) console.log(`  INFO  Mayar menjawab: ${reason}`);
+  }
   else if (v1.status === 401 || v1.status === 403)
     bad(
-      `Ditolak (${v1.status}). Kemungkinan besar key ini Read Only — membuat invoice adalah POST dan butuh Read & Write.`,
+      `Ditolak (${v1.status}) — izin, bukan jalur. Key ini tidak boleh POST, jadi pertanyaan "V1 masih hidup atau tidak" BELUM terjawab; baru bisa diuji dengan key Read & Write.`,
     );
   else
     warn(
       `Status ${v1.status}: ${JSON.stringify(v1.payload)?.slice(0, 200)}`,
     );
+
+  // --- 4b. payload yang SEBENARNYA dikirim server ---------------------------
+  //
+  // Bagian 4 hanya membuktikan jalurnya hidup. Yang membuat tombol Bayar
+  // menjawab 502 adalah payload kita DITOLAK — dan itu tidak terlihat sampai
+  // ada pelanggan sungguhan yang mencoba. Di sini bentuk payload yang sama
+  // dikirim dengan data karangan, sehingga penolakannya terbaca sekarang.
+  //
+  // Bila Mayar menerimanya, sebuah invoice sungguhan ikut terbuat — tidak
+  // dibayar siapa pun dan hangus sendiri, tapi tetap muncul di dashboard.
+  // Karena itu wajib diminta dengan --probe-invoice.
+  section("4b. Apakah bentuk payload server diterima Mayar?");
+  if (!argv.includes("--probe-invoice")) {
+    console.log(
+      "  INFO  Dilewati. Jalankan ulang dengan --probe-invoice untuk mengujinya.",
+    );
+    console.log(
+      "        Bila payloadnya sah, satu invoice sungguhan akan terbuat di",
+    );
+    console.log(
+      "        dashboard Mayar — tidak dibayar siapa pun dan hangus sendiri.",
+    );
+  } else {
+    const probe = {
+      name: "Uji Preflight",
+      email: "preflight@example.com",
+      mobile: "081234567890",
+      description: "Uji preflight ikrarku — abaikan",
+      redirectUrl: `${(process.env.CLIENT_ORIGIN || "https://dev.ikrarku.id").replace(/\/$/, "")}/pembayaran-berhasil`,
+      expiredAt: new Date(Date.now() + 3600_000).toISOString(),
+      items: [
+        { quantity: 1, rate: 10000, description: "Uji preflight ikrarku" },
+      ],
+      extraData: { noCustomer: false, idProd: "preflight" },
+    };
+    console.log("  INFO  Mengirim bentuk payload yang sama dengan server.");
+    const probeResult = await callMayar(
+      "POST",
+      `${ORIGIN}/hl/v1/invoice/create`,
+      probe,
+    );
+    const link =
+      probeResult.payload?.data?.link ||
+      probeResult.payload?.data?.paymentUrl ||
+      probeResult.payload?.link;
+    if (probeResult.status === 0)
+      bad(`Tidak bisa menghubungi Mayar: ${probeResult.error}`);
+    else if (probeResult.status >= 200 && probeResult.status < 300 && link) {
+      ok("Payload diterima dan Mayar mengembalikan payment URL.");
+      console.log(`  INFO  Invoice uji: ${link}`);
+      console.log(
+        "        Biarkan hangus, atau batalkan dari dashboard Mayar.",
+      );
+      warn(
+        "Payload sah, jadi 502 saat Bayar berasal dari data order itu sendiri — " +
+          "paling sering nominal di bawah minimum, email kosong, atau nomor telepon kosong. " +
+          "Lihat baris [mayar] di log container.",
+      );
+    } else if (probeResult.status >= 200 && probeResult.status < 300)
+      bad(
+        `Mayar menerima (${probeResult.status}) tetapi tanpa payment URL. Field yang datang: ` +
+          `[${Object.keys(probeResult.payload || {}).join(", ")}] / data: ` +
+          `[${Object.keys(probeResult.payload?.data || {}).join(", ")}]`,
+      );
+    else
+      bad(
+        `Payload DITOLAK (${probeResult.status}). Mayar menjawab: ${mayarMessage(probeResult.payload)}`,
+      );
+  }
 }
 
 // --- 5. webhook ------------------------------------------------------------
@@ -307,7 +414,17 @@ section(
 );
 console.log(
   "Langkah terakhir yang tidak bisa diotomatiskan: lakukan satu transaksi\n" +
-    "nyata bernominal kecil di sandbox dan pastikan order berpindah\n" +
-    "Pending -> Paid. Integrasi uang tidak layak dipercaya sebelum itu.\n",
+    "bernominal kecil dan pastikan order berpindah Pending -> Paid.\n" +
+    "Integrasi uang tidak layak dipercaya sebelum itu.\n",
 );
+// Kalimat ini dulu berbunyi "di sandbox". Bagian 3b membuktikan tidak ada
+// sandbox untuk akun ini: api.mayar.io dan api.mayar.club menolak key-nya.
+// Menyuruh "uji di sandbox" pada akun yang hanya punya produksi membuat
+// orang mengira transaksinya aman, padahal uangnya nyata.
+if (isProductionKey)
+  console.log(
+    "PERHATIAN: key ini untuk PRODUKSI dan akun ini tidak punya sandbox.\n" +
+      "Transaksi uji memakai uang sungguhan — pakai nominal terkecil,\n" +
+      "lakukan dari akun sendiri, lalu refund.\n",
+  );
 process.exit(problems ? 1 : 0);
