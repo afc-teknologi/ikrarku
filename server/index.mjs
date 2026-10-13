@@ -3796,9 +3796,22 @@ async function createMayarInvoice(order, template) {
         description,
       },
     ],
-    // Dikirim kalau-kalau Mayar mengembalikannya; pencocokan utama tetap
-    // memakai transactionId dari respons di bawah.
-    extraData: { noCustomer: false, idProd: order.id },
+    // `extraData` SENGAJA TIDAK DIKIRIM.
+    //
+    // Mayar menolak seluruh permintaan dengan 400 "extraData Validation
+    // Error" — itulah penyebab setiap tombol Bayar menjawab 502, dan
+    // satu-satunya field yang disebut namanya oleh Mayar.
+    //
+    // Field ini memang tidak menanggung apa pun: pencocokan order memakai
+    // transactionId dari respons create, yang disimpan di orders.gateway_ref
+    // dan dicocokkan lagi saat webhook datang. `extraData` hanya cadangan
+    // "kalau-kalau Mayar mengembalikannya", dan tidak pernah terbukti
+    // dikembalikan. Menebak-nebak bentuk yang benar pada alur uang bukan
+    // pilihan; menghapus field yang tidak dipakai jelas lebih aman.
+    //
+    // Kalau nanti pencocokan lewat extraData memang dibutuhkan, minta dulu
+    // bentuk yang sah ke dokumentasi/support Mayar, lalu buktikan dengan
+    // `node scripts/mayar-check.mjs --probe-invoice` sebelum dipasang.
   };
   // Tanpa batas waktu, panggilan ini bisa menggantung selamanya: tombol
   // Bayar tetap "Memproses pembayaran…", Nginx menyerah sendiri setelah

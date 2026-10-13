@@ -699,3 +699,25 @@ test("Mayar: panggilan invoice punya batas waktu, tidak menggantung", () => {
   // 504 membedakannya dari 502 "Mayar menolak" pada tab Network.
   assert.match(fn, /\{ status: 504 \}/);
 });
+
+test("Mayar: extraData tidak dikirim — Mayar menolaknya dengan 400", () => {
+  // Mayar menjawab "extraData Validation Error" untuk SELURUH permintaan,
+  // jadi setiap tombol Bayar berakhir 502. Field itu tidak menanggung apa
+  // pun: pencocokan order memakai transactionId dari respons create yang
+  // disimpan di orders.gateway_ref.
+  const fn = serverMjs.slice(
+    serverMjs.indexOf("async function createMayarInvoice("),
+    serverMjs.indexOf("app.post(\n  \"/api/orders/:id/pay\""),
+  );
+  assert.ok(fn.length > 0, "createMayarInvoice tidak ditemukan");
+  assert.equal(
+    /^\s*extraData:/m.test(fn),
+    false,
+    "extraData dikirim lagi ke Mayar; permintaannya akan ditolak 400",
+  );
+  // Alasannya harus tetap tertulis, supaya tidak dipasang ulang "karena
+  // kelihatannya hilang".
+  assert.match(fn, /extraData.*SENGAJA TIDAK DIKIRIM/s);
+  // gateway_ref tetap jalur pencocokan utamanya.
+  assert.match(serverMjs, /gateway_ref=\?/);
+});

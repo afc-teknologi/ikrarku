@@ -315,7 +315,10 @@ if (KEY) {
       "        dashboard Mayar — tidak dibayar siapa pun dan hangus sendiri.",
     );
   } else {
-    const probe = {
+    // Bentuk yang SEKARANG dikirim server (tanpa extraData — Mayar menolaknya
+    // dengan "extraData Validation Error", dan field itu tidak menanggung
+    // apa pun).
+    const serverShape = {
       name: "Uji Preflight",
       email: "preflight@example.com",
       mobile: "081234567890",
@@ -325,40 +328,75 @@ if (KEY) {
       items: [
         { quantity: 1, rate: 10000, description: "Uji preflight ikrarku" },
       ],
-      extraData: { noCustomer: false, idProd: "preflight" },
     };
-    console.log("  INFO  Mengirim bentuk payload yang sama dengan server.");
-    const probeResult = await callMayar(
-      "POST",
-      `${ORIGIN}/hl/v1/invoice/create`,
-      probe,
-    );
-    const link =
-      probeResult.payload?.data?.link ||
-      probeResult.payload?.data?.paymentUrl ||
-      probeResult.payload?.link;
-    if (probeResult.status === 0)
-      bad(`Tidak bisa menghubungi Mayar: ${probeResult.error}`);
-    else if (probeResult.status >= 200 && probeResult.status < 300 && link) {
-      ok("Payload diterima dan Mayar mengembalikan payment URL.");
-      console.log(`  INFO  Invoice uji: ${link}`);
+    // Kalau yang dikirim server masih ditolak, tangga ini mempersempit
+    // sendiri field mana penyebabnya — tanpa harus menebak satu per satu.
+    // Penolakan tidak berbiaya apa pun; hanya penerimaan pertama yang
+    // membuat invoice, dan di situ pengujian langsung dihentikan.
+    const drop = (source, ...keys) => {
+      const copy = { ...source };
+      for (const key of keys) delete copy[key];
+      return copy;
+    };
+    const variants = [
+      ["bentuk yang dikirim server", serverShape],
+      ["tanpa mobile", drop(serverShape, "mobile")],
+      ["tanpa expiredAt", drop(serverShape, "expiredAt")],
+      ["tanpa redirectUrl", drop(serverShape, "redirectUrl")],
+      [
+        "minimal (name, email, items)",
+        drop(serverShape, "mobile", "expiredAt", "redirectUrl", "description"),
+      ],
+    ];
+    let accepted = false;
+    for (const [label, body] of variants) {
+      const result = await callMayar(
+        "POST",
+        `${ORIGIN}/hl/v1/invoice/create`,
+        body,
+      );
+      const link =
+        result.payload?.data?.link ||
+        result.payload?.data?.paymentUrl ||
+        result.payload?.link;
+      if (result.status === 0) {
+        bad(`Tidak bisa menghubungi Mayar: ${result.error}`);
+        break;
+      }
+      if (result.status >= 200 && result.status < 300 && link) {
+        accepted = true;
+        if (label === "bentuk yang dikirim server")
+          ok("Payload server diterima dan Mayar mengembalikan payment URL.");
+        else
+          warn(
+            `Diterima hanya setelah "${label}". Berarti field yang dibuang itulah penyebab penolakan — sesuaikan createMayarInvoice().`,
+          );
+        console.log(`  INFO  Invoice uji: ${link}`);
+        console.log(
+          "        Biarkan hangus, atau batalkan dari dashboard Mayar.",
+        );
+        break;
+      }
+      if (result.status >= 200 && result.status < 300) {
+        bad(
+          `Mayar menerima (${result.status}) tetapi tanpa payment URL. Field yang datang: ` +
+            `[${Object.keys(result.payload || {}).join(", ")}] / data: ` +
+            `[${Object.keys(result.payload?.data || {}).join(", ")}]`,
+        );
+        accepted = true;
+        break;
+      }
       console.log(
-        "        Biarkan hangus, atau batalkan dari dashboard Mayar.",
+        `  INFO  ${label}: ditolak (${result.status}) — ${mayarMessage(result.payload)}`,
       );
-      warn(
-        "Payload sah, jadi 502 saat Bayar berasal dari data order itu sendiri — " +
-          "paling sering nominal di bawah minimum, email kosong, atau nomor telepon kosong. " +
-          "Lihat baris [mayar] di log container.",
-      );
-    } else if (probeResult.status >= 200 && probeResult.status < 300)
+    }
+    if (!accepted)
       bad(
-        `Mayar menerima (${probeResult.status}) tetapi tanpa payment URL. Field yang datang: ` +
-          `[${Object.keys(probeResult.payload || {}).join(", ")}] / data: ` +
-          `[${Object.keys(probeResult.payload?.data || {}).join(", ")}]`,
+        "Tidak satu pun bentuk payload diterima. Baris INFO di atas menyebut alasan tiap percobaan — kirimkan ke support Mayar.",
       );
-    else
-      bad(
-        `Payload DITOLAK (${probeResult.status}). Mayar menjawab: ${mayarMessage(probeResult.payload)}`,
+    else if (accepted)
+      console.log(
+        "  INFO  Pengujian dihentikan pada bentuk pertama yang diterima, supaya hanya satu invoice yang terbuat.",
       );
   }
 }
