@@ -3809,23 +3809,50 @@ async function createMayarInvoice(order, template) {
     body: JSON.stringify(payload),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok)
+  // Kegagalan pembayaran dulu tidak meninggalkan jejak apa pun di log: yang
+  // terlihat hanya "502" di browser, dan 502 juga bentuk balasan Nginx saat
+  // upstream mati — dua penyebab yang sangat berbeda jadi tidak bisa
+  // dibedakan. Alasan sebenarnya dari Mayar dicatat di sini.
+  //
+  // Yang dicatat sengaja dibatasi: nomor order, status HTTP, dan pesan dari
+  // Mayar. API key tidak pernah ikut, dan payload tidak dicetak utuh karena
+  // memuat nama, email, serta nomor telepon pelanggan.
+  if (!response.ok) {
+    const reason =
+      (Array.isArray(data?.messages)
+        ? data.messages.join("; ")
+        : data?.messages) ||
+      data?.message ||
+      "tanpa pesan";
+    console.error(
+      `[mayar] invoice/create GAGAL · order=${order.order_no} · HTTP ${response.status} · ${reason}`,
+    );
     throw Object.assign(
       new Error(
         data?.messages || data?.message || "Gagal membuat invoice Mayar",
       ),
       { status: 502 },
     );
+  }
   const link =
     data?.data?.link ||
     data?.data?.paymentUrl ||
     data?.link ||
     data?.paymentUrl;
   const transactionId = data?.data?.id || data?.data?.transactionId || data?.id;
-  if (!link)
+  if (!link) {
+    // Mayar menerima permintaannya tetapi bentuk responsnya tidak dikenali.
+    // Nama field yang datang dicatat (bukan nilainya) supaya perubahan
+    // kontrak — misalnya saat V1 akhirnya diganti V2 — langsung terlihat.
+    console.error(
+      `[mayar] invoice/create OK tapi tanpa payment URL · order=${order.order_no} · ` +
+        `field teratas: [${Object.keys(data || {}).join(", ")}] · ` +
+        `field data: [${Object.keys(data?.data || {}).join(", ")}]`,
+    );
     throw Object.assign(new Error("Mayar tidak mengembalikan payment URL"), {
       status: 502,
     });
+  }
   return { link, transactionId };
 }
 
@@ -3880,6 +3907,13 @@ app.post(
           gateway: "mayar",
         });
       } catch (error) {
+        // Jaring terakhir: kegagalan jaringan ke Mayar (DNS, timeout, TLS)
+        // tidak lewat cabang-cabang di createMayarInvoice dan dulu hilang
+        // tanpa jejak sama sekali.
+        if (!error.status)
+          console.error(
+            `[mayar] pembayaran gagal · order=${order.order_no} · ${error.name}: ${error.message}`,
+          );
         return res
           .status(error.status || 502)
           .json({ error: error.message || "Gagal memproses pembayaran Mayar" });

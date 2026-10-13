@@ -642,3 +642,30 @@ test("Retest-7: background global tidak menimpa animasi layer milik canvas", () 
     /backgroundLayers: \[\n\s*\.\.\.\(source\.backgroundLayers \|\| \[\]\),\n\s*\.\.\.\(section\.backgroundLayers \|\| \[\]\),\n\s*\]/,
   );
 });
+
+test("Mayar: kegagalan membuat invoice meninggalkan jejak di log", () => {
+  // 502 di browser punya DUA penyebab yang sangat berbeda — Nginx saat
+  // upstream mati, dan aplikasi sendiri saat Mayar menolak. Tanpa log,
+  // keduanya tidak bisa dibedakan dan alasan penolakan Mayar hilang.
+  assert.match(
+    serverMjs,
+    /console\.error\(\n\s*`\[mayar\] invoice\/create GAGAL · order=\$\{order\.order_no\} · HTTP \$\{response\.status\} · \$\{reason\}`/,
+  );
+  // Respons diterima tapi bentuknya tidak dikenali: nama field dicatat agar
+  // perubahan kontrak (V1 -> V2) langsung terlihat.
+  assert.match(serverMjs, /invoice\/create OK tapi tanpa payment URL/);
+  assert.match(serverMjs, /field teratas: \[\$\{Object\.keys\(data \|\| \{\}\)\.join\(", "\)\}\]/);
+  // Gagal jaringan (DNS/timeout/TLS) tidak lewat cabang di atas.
+  assert.match(serverMjs, /\[mayar\] pembayaran gagal · order=\$\{order\.order_no\}/);
+  // Rahasia tidak boleh ikut tercatat.
+  const logLines = serverMjs
+    .split("\n")
+    .filter((line) => line.includes("[mayar]"));
+  assert.ok(logLines.length >= 3, "jejak log Mayar berkurang");
+  for (const line of logLines)
+    assert.equal(
+      /MAYAR_API_KEY|\bkey\b|Bearer/.test(line),
+      false,
+      `baris log berisiko membocorkan kredensial: ${line.trim()}`,
+    );
+});
