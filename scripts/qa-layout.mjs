@@ -102,6 +102,7 @@ test("Flow layout has no absolute positioning variables and keeps custom motion"
 // ---------------------------------------------------------------------------
 const appTsx = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const appCss = readFileSync(new URL("../src/App.css", import.meta.url), "utf8");
+const apiTs = readFileSync(new URL("../src/api.ts", import.meta.url), "utf8");
 
 /** Ambil blok deklarasi untuk selector persis (tanpa regex multi-baris rapuh). */
 // Komentar dibuang dulu; kalau tidak, teks komentar ikut terbawa ke dalam
@@ -150,10 +151,12 @@ test("Flip & skala ornamen dipasang pada anak, bukan pada elemen beranimasi", ()
     false,
     "flip ornamen kembali dipasang inline pada elemen beranimasi",
   );
-  // Rotasi (TC-186) ikut dirangkai di properti transform yang sama.
+  // Rotasi (TC-186) ikut dirangkai di properti transform yang sama. Sejak
+  // TC-221 rangkaian itu didahului penambat pojok & skala, jadi yang dikunci
+  // adalah urutan ujungnya: rotasi lalu cermin, keduanya di elemen anak.
   assert.match(
     appCss,
-    /\.section-decoration>svg[^}]*transform:rotate\(var\(--deco-rotate,0deg\)\) scaleX\(var\(--deco-flip,1\)\)/,
+    /\.section-decoration>svg[^}]*transform:[^;}]*rotate\(var\(--deco-rotate,0deg\)\) scaleX\(var\(--deco-flip,1\)\)/,
   );
 });
 
@@ -180,9 +183,10 @@ test("Full-bleed 100vw dinetralkan di dalam shell preview", () => {
 
 test("Inspector membaca nilai device yang sedang aktif", () => {
   // Tanpa ini setiap kontrol menampilkan angka Desktop walau mode Mobile aktif,
+  // editDevice = previewMode, kecuali Desktop + tata letak Kolom (isi Mobile).
   // dan read-modify-write menimpa override Mobile dengan isi Desktop.
-  assert.match(appTsx, /resolveSection\(rawSelectedSection, previewMode\)/);
-  assert.match(appTsx, /resolveFeature\(raw, previewMode\)/);
+  assert.match(appTsx, /resolveSection\(rawSelectedSection, editDevice\)/);
+  assert.match(appTsx, /resolveFeature\(raw, editDevice\)/);
 });
 
 test("Ornamen & layer ditulis dari state terbaru, bukan array tertangkap", () => {
@@ -720,4 +724,286 @@ test("Mayar: extraData tidak dikirim — Mayar menolaknya dengan 400", () => {
   assert.match(fn, /extraData.*SENGAJA TIDAK DIKIRIM/s);
   // gateway_ref tetap jalur pencocokan utamanya.
   assert.match(serverMjs, /gateway_ref=\?/);
+});
+
+// =====================================================================
+// QA 15 Oktober 2026 — MoM A4, Titip QC, TC-205/206/209/210/214/221, Credit
+// =====================================================================
+
+test("A4: musik dijeda saat tab disembunyikan dan dilanjutkan saat kembali", () => {
+  // Semua pemutaran lewat createSoundPlayback; aturannya dipasang sekali di sana.
+  assert.match(appTsx, /const activeSounds = new Set<SoundHandle>\(\)/);
+  assert.match(
+    appTsx,
+    /document\.addEventListener\("visibilitychange", \(\) =>\n\s*document\.hidden \? pauseAll\(\) : resumeAll\(\),/,
+  );
+  assert.match(appTsx, /window\.addEventListener\("pagehide", pauseAll\)/);
+  // Hanya yang tadi berbunyi yang dilanjutkan; yang dimatikan tamu tidak.
+  assert.match(appTsx, /for \(const sound of pausedByVisibility\)\n\s*if \(activeSounds\.has\(sound\)\) sound\.resume\(\)/);
+  // stop() harus melepas pemutar dari kedua daftar, kalau tidak resumeAll
+  // akan menghidupkan lagi musik yang sudah dihentikan.
+  assert.match(appTsx, /activeSounds\.delete\(handle\);\n\s*pausedByVisibility\.delete\(handle\);/);
+  // Interval preset dulu memanggil context.resume() terus-menerus dan
+  // menghidupkan lagi suara yang baru dijeda.
+  assert.match(appTsx, /if \(stopped \|\| paused\) return;/);
+});
+
+test("QC: pratinjau card memilih section yang benar-benar tampil", () => {
+  assert.match(appTsx, /const section = pickPreviewSection\(sections\);/);
+  const fn = appTsx.slice(
+    appTsx.indexOf("function pickPreviewSection("),
+    appTsx.indexOf("function WebsiteTemplatePreview("),
+  );
+  assert.ok(fn.length > 0);
+  // Cover lebih dulu, lalu section pertama yang berisi.
+  assert.match(fn, /sections\.find\(hasCover\) \|\| sections\.find\(hasVisibleContent\) \|\| sections\[0\]/);
+  // Background global ikut terbawa saat section dirender sendirian.
+  assert.match(fn, /applyGlobalBackground\(chosen, globalSource\)/);
+  // .sr-only dipakai tetapi dulu tidak pernah didefinisikan.
+  assert.match(appCss, /\.sr-only\{position:absolute!important;width:1px!important/);
+  // Pratinjau statis: animasi loop dimatikan di dalam card.
+  assert.match(appCss, /\.actual-render-content \.background-extra-layer,/);
+});
+
+test("TC-205/221: ornamen menempel ke tambatannya berapa pun ukurannya", () => {
+  // Penyusutan mobile dulu berporos di tengah gambar -> celah = ukuran x 0,2.
+  assert.match(
+    appCss,
+    /translate\(calc\(var\(--deco-pin-x\) \* \(1 - var\(--deco-scale\)\) \* 50%\),calc\(var\(--deco-pin-y\) \* \(1 - var\(--deco-scale\)\) \* 50%\)\) scale\(var\(--deco-scale\)\)/,
+  );
+  // Skala mobile kini hanya mengganti variabel, tidak menulis ulang transform
+  // tanpa penambat.
+  assert.equal(
+    /\.section-decoration>img\{transform:scale\(\.6/.test(appCss),
+    false,
+    "transform mobile ditulis ulang tanpa penambat pojok",
+  );
+  assert.match(appCss, /\.wedding-site\.device-mobile \.section-decoration\{--deco-scale:\.6\}/);
+  // Kotak persegi + object-fit:contain menaruh gambar di tengah kotak.
+  assert.match(appCss, /\.section-decoration img\{width:100%;height:auto;display:block\}/);
+  assert.match(appTsx, /height: decoration\.imageUrl \? undefined : decoration\.size,/);
+});
+
+test("TC-206/209/210: geser, duplikat, dan posisi tengah sisi untuk ornamen", () => {
+  for (const corner of ["top-center", "bottom-center", "middle-left", "middle-right"]) {
+    assert.ok(appTsx.includes(`| "${corner}"`), `tipe DecorCorner tanpa ${corner}`);
+    assert.ok(appTsx.includes(`<option value="${corner}">`), `opsi ${corner} tidak ada di editor`);
+    assert.ok(appCss.includes(`.section-decoration.corner-${corner}{`), `CSS ${corner} tidak ada`);
+  }
+  // Posisi tengah TIDAK boleh memakai translate(-50%) pada span: span
+  // menjalankan keyframes loop-* yang menganimasikan transform.
+  assert.match(appCss, /\.section-decoration\.corner-top-center\{top:0;left:0;right:0;margin-inline:auto;/);
+  assert.match(appTsx, /"--deco-dx": `\$\{decoration\.offsetX \?\? 0\}px`/);
+  assert.match(appCss, /transform:translate\(var\(--deco-dx,0px\),var\(--deco-dy,0px\)\)/);
+  assert.match(appTsx, /const copy = \{ \.\.\.current\[at\], id: uid\("decor"\) \};/);
+});
+
+test("TC-214: ornamen, layer, toggle sembunyi, dan musik mengikuti aturan device", () => {
+  // Ornamen & layer dulu selalu ditulis ke nilai dasar.
+  assert.match(
+    appTsx,
+    /applyDevicePatch\(\n\s*section,\n\s*producePatch\(resolveSection\(section, device\)\),\n\s*device,\n\s*\)/,
+  );
+  // Sumber background global dipakai dalam versi device aktif.
+  assert.match(appTsx, /\? resolveSection\(sections\[0\], device\)/);
+  // Toggle sembunyi menentukan device mana yang menampilkan: harus dibaca
+  // keduanya, jadi selalu ditulis ke nilai dasar.
+  assert.match(appTsx, /const \{ hideDesktop, hideMobile, \.\.\.rest \} = patch;/);
+  // Musik satu untuk seluruh undangan.
+  assert.match(appTsx, /for \(const key of SHARED_SOUND_KEYS\)/);
+  // Fitur baru dari mode Mobile lahir tersembunyi di Desktop.
+  assert.match(appTsx, /\? \{ \.\.\.makeFeature\(type\), hideDesktop: true \}/);
+});
+
+test("Credit: memilih musik tidak lagi menimpa ucapan, upload dari Credit berfungsi", () => {
+  assert.match(
+    appTsx,
+    /\.\.\.\(feature\.type === "credit"\n\s*\? \{ creditSongTitle: item\.name \}\n\s*: \{ title: item\.name, body: item\.description \}\)/,
+  );
+  assert.match(
+    appTsx,
+    /\(selectedFeature\.type !== "sound" && selectedFeature\.type !== "credit"\)/,
+  );
+});
+
+test("TC-204: section yang hanya berisi cover tidak muncul lagi sebagai slide kosong", () => {
+  // Background di section cover milik layar cover. Aturan hasOwnBackdrop dulu
+  // merendernya lagi setelah undangan dibuka sebagai slide berisi background.
+  assert.match(appTsx, /const isCoverOnly =\n\s*!hasContentFeatures &&/);
+  assert.match(appTsx, /\(hasOwnBackdrop && !isCoverOnly\) \|\|/);
+});
+
+test("TC-197: Background tetap memakai satu lapisan sticky, bukan attachment:fixed", () => {
+  assert.match(appTsx, /const fixedBackdrop = !thumbnail \? globalBackgroundSource : null;/);
+  assert.match(appTsx, /<FixedBackdrop\n\s*source=\{fixedBackdrop\}/);
+  // Section tidak melukis ulang background bersama.
+  assert.match(appTsx, /\? withoutSharedBackdrop\(\n\s*resolveSection\(rawSection, device\),/);
+  // Layer Canvas 1 sudah masuk backdrop; tidak boleh tampil dua kali.
+  assert.match(appTsx, /backgroundLayers: isSource \? \[\] : section\.backgroundLayers,/);
+  assert.match(appCss, /\.site-fixed-backdrop\{position:sticky;top:0;/);
+  // overflow:hidden bawaan .wedding-site mematahkan sticky. Terukur: dengan
+  // hidden backdrop tergulir -440 px; dengan clip menempel di 0 px.
+  assert.match(appCss, /\.wedding-site\.has-fixed-backdrop\{overflow:visible;overflow:clip\}/);
+  // Pengukuran tinggi diulang setelah cover dibuka (root baru terpasang).
+  assert.match(appTsx, /\}, \[fixedBackdrop, opened\]\);/);
+  assert.match(appTsx, /<strong>Background tetap<\/strong>/);
+});
+
+test("TC-216: preview Desktop selebar canvas desain, tidak selebar layar", () => {
+  assert.match(appTsx, /const DESKTOP_DESIGN_WIDTH = 1050;/);
+  // Batas itu harus sama dengan batas atas canvas editor.
+  assert.match(appCss, /\.canvas-frame\.desktop\{width:min\(1050px,/);
+  assert.match(appTsx, /document\.querySelector\("\.canvas-frame\.desktop"\)/);
+  for (const selector of [
+    ".preview-full-stage.desktop .preview-content",
+    ".actual-template-preview-shell.device-desktop>.wedding-site",
+    ".template-dialog-actual-preview.live.device-desktop>.wedding-site",
+  ])
+    assert.ok(appCss.includes(selector), `${selector} tidak dibatasi lebarnya`);
+  assert.match(appCss, /width:min\(var\(--design-width,1050px\),100%\);margin-inline:auto/);
+});
+
+test("VN 6: Templates & Approval — filter bawaan, nama pengaju, 8 per halaman", () => {
+  const fn = appTsx.slice(
+    appTsx.indexOf("function TemplateApprovalManager("),
+    appTsx.indexOf("{takedownTarget && (", appTsx.indexOf("function TemplateApprovalManager(")),
+  );
+  assert.ok(fn.length > 0);
+  // Bawaan hanya Published & Pending; ditolak & takedown tetap bisa dibuka.
+  assert.match(fn, /\["active", "Published & Pending", \["Published", "Pending"\]\]/);
+  assert.match(fn, /useState<FilterKey>\("active"\)/);
+  assert.match(fn, /\["rejected", "Ditolak", \["Rejected"\]\]/);
+  assert.match(fn, /\["takedown", "Takedown", \["Takedown"\]\]/);
+  assert.match(fn, /\["all", "Semua \(riwayat\)", null\]/);
+  // Admin melihat siapa yang mengajukan.
+  assert.match(fn, /Diajukan oleh\{" "\}\n\s*<b>\{template\.createdByName \|\| template\.createdBy\}<\/b>/);
+  // Dua baris empat kolom.
+  assert.match(fn, /const PAGE_SIZE = 8;/);
+  assert.match(fn, /\{pageItems\.map\(\(template\) => \(/);
+  assert.match(appCss, /\.template-status-grid\{grid-template-columns:repeat\(4,minmax\(0,1fr\)\)\}/);
+});
+
+test("VN 7: sidebar — desain di atas, layanan di tengah, konfigurasi admin di bawah", () => {
+  const fn = appTsx.slice(
+    appTsx.indexOf("function Sidebar("),
+    appTsx.indexOf("function Topbar("),
+  );
+  assert.ok(fn.length > 0);
+  const at = (needle) => {
+    const index = fn.indexOf(needle);
+    assert.ok(index >= 0, `${needle} tidak ditemukan di Sidebar`);
+    return index;
+  };
+  // Templates & Approval naik tepat sesudah dashboard.
+  assert.ok(at('"dashboard",') < at('"templates",'));
+  assert.ok(at('"templates",') < at('["cs-dashboard"'));
+  // Layanan sebelum konfigurasi admin.
+  assert.ok(at('["tasks"') < at('["users"'));
+  assert.ok(at('"customer-service",') < at('["roles"'));
+  // Konfigurasi admin sebelum menu akun.
+  assert.ok(at('["audit-log"') < at('["help"'));
+  assert.match(fn, /const groupOrder: MenuGroup\[\] = \["design", "service", "admin", "account"\];/);
+  assert.match(appCss, /\.sidebar nav \.sidebar-group-label\{/);
+});
+
+test("QA 15 Okt: undo — blur tanpa perubahan tidak membuat entri riwayat", () => {
+  // Setiap commit teks contentEditable wajib membandingkan nilai lama.
+  const blurs = appTsx.match(/onBlur=\{\(event\) => \{[\s\S]*?\}\}/g) || [];
+  const commits = blurs.filter((b) => /onUpdate\(|patchItem\(/.test(b));
+  assert.ok(commits.length >= 8, `hanya ${commits.length} commit blur`);
+  for (const b of commits) assert.match(b, /if \(\s*next !==/, b.slice(0, 120));
+  // Tidak boleh tersisa pola lama: blur langsung memanggil onUpdate/patchItem.
+  assert.doesNotMatch(appTsx, /onBlur=\{\(event\) =>\s*(onUpdate|patchItem)\(/);
+  // Ctrl/Cmd+Z di field yang sedang diedit dibiarkan ke browser.
+  assert.match(appTsx, /active\.isContentEditable \|\|\n\s*\["INPUT", "TEXTAREA", "SELECT"\]\.includes\(active\.tagName\)/);
+});
+
+test("QA 15 Okt: tipografi gambar/galeri, tombol lokasi, credit, fokus galeri", () => {
+  assert.match(appTsx, /const typographyTypes: FeatureType\[\] = \[\s*\.\.\.textTypes,[\s\S]*?"image",[\s\S]*?"gallery",/);
+  assert.match(appTsx, /typographyTypes\.includes\(feature\.type\)/);
+  assert.match(appTsx, /mapButtonIcon\?: "map-pin" \| "navigation" \| "map" \| "external" \| "none"/);
+  assert.match(appTsx, /variant="event"/);
+  assert.match(appTsx, /creditFontSize\?: number/);
+  assert.match(appTsx, /galleryOffsets\?: \{ x: number; y: number \}\[\]/);
+  assert.match(appTsx, /function galleryImageStyle\(/);
+  assert.match(appCss, /\.gallery-focus/);
+});
+
+test("MoM A3: label menampilkan data akun, bukan 'workspace' generik", () => {
+  assert.doesNotMatch(appTsx, /ikrarku Workspace|"Website workspace"|Template workspace · no public URL|\$\{displayRole\(role\)\} workspace/);
+  assert.match(appTsx, /editorName=\{currentAccount\?\.name \|\| displayRole\(role\)\}/);
+  assert.match(appTsx, /\{editorName \? ` · diedit oleh \$\{editorName\}` : ""\}/);
+  assert.match(appTsx, /title="Akun yang sedang masuk">\n\s*<span \/>\n\s*\{currentAccount\?\.email \|\| displayRole\(role\)\}/);
+});
+
+test("QC #2: preview penuh ringan — tanpa blur latar, canvas dimemo", () => {
+  assert.match(appCss, /\.dialog-overlay\.template-quick-preview\{backdrop-filter:none;/);
+  assert.match(appTsx, /const TemplateLivePreview = memo\(function TemplateLivePreview\(/);
+  // Tidak ada lagi hydrateSections() langsung di JSX preview penuh.
+  assert.doesNotMatch(appTsx, /sections=\{hydrateSections\((previewTemplate|preview|template)\.canvasSections\)\}/);
+  assert.equal((appTsx.match(/<TemplateLivePreview template=/g) || []).length, 2);
+});
+
+test("Serein: tata letak desktop Kolom — isi Mobile di kolom sempit, backdrop penuh", () => {
+  assert.match(appTsx, /desktopLayout\?: "full" \| "column";/);
+  const wrap = appTsx.slice(appTsx.indexOf("function WeddingCanvas(props"), appTsx.indexOf("function WeddingCanvasBody("));
+  assert.ok(wrap.length > 0);
+  assert.match(wrap, /device === "desktop" &&\n\s*!thumbnail &&/);
+  assert.match(wrap, /<DeviceContext value="mobile">\n\s*<WeddingCanvasBody \{\.\.\.props\} \/>/);
+  assert.match(wrap, /source=\{desktopColumnBackdrop\(first\)\}/);
+  // Di editor, mode Desktop + Kolom menulis ke Mobile (yang tampil).
+  assert.match(appTsx, /previewMode === "desktop" && desktopColumn \? "mobile" : previewMode;/);
+  assert.match(appTsx, /applyDevicePatch\(section, patch, editDevice\)/);
+  assert.match(appCss, /\.desktop-column\{position:relative;z-index:1;width:min\(var\(--desktop-column-w,430px\),100%\)/);
+  // Sticky butuh kontainer gulir yang sebenarnya: canvas-frame tidak boleh hidden.
+  assert.match(appCss, /\.canvas-frame\{overflow:clip\}/);
+});
+
+test("MoM A7/A6/A9: UI harga admin, buat akun customer, banner tim membantu", () => {
+  // A7 — Web Designer tidak mengisi harga; admin mengubahnya dari kartu.
+  assert.match(appTsx, /useState\(canSetPrice \? 499000 : 0\)/);
+  assert.match(appTsx, /<input value="Ditetapkan Administrator" disabled readOnly \/>/);
+  assert.match(appTsx, /<TemplatePriceControl\n\s*price=\{template\.price \|\| 0\}/);
+  assert.match(apiTs, /setTemplatePrice: \(id: string, price: number\) =>/);
+  // A6 — tombol di Orders untuk order lunas tanpa akun.
+  assert.match(appTsx, /row\.payment_status === "Paid" &&\n\s*!row\.user_id &&/);
+  assert.match(apiTs, /createOrderCustomerAccount: \(id: string\) =>/);
+  // A9 — banner di dashboard customer.
+  assert.match(appTsx, /className="team-edit-banner" role="status"/);
+  assert.match(appTsx, /setTeamEdit\(site\?\.teamEdit \|\| null\)/);
+});
+
+test("QA 17 Okt TC-216/217: canvas editor setinggi preview; preview buka di mode aktif", () => {
+  // Label fitur di editor tidak boleh memakan tempat (dulu +19 px per fitur).
+  assert.match(appCss, /\.feature-block>\.feature-handle\{position:absolute\}/);
+  assert.match(appTsx, /document\.querySelector\("\.canvas-frame\.mobile"\) \? "mobile" : "desktop"/);
+  assert.match(appTsx, /return measured \|\| lastDesktopCanvasWidth \|\| DESKTOP_DESIGN_WIDTH;/);
+});
+
+test("QA 17 Okt TC-208/212/213: ukuran tombol lokasi, logo bank, elemen musik credit", () => {
+  assert.match(appTsx, /mapButtonFontSize\?: number;/);
+  assert.match(appTsx, /size=\{feature\.mapButtonIconSize \|\| 14\}/);
+  assert.match(appTsx, /function bankLogoStyle\(feature: Feature\)/);
+  assert.match(appTsx, /style=\{bankLogoStyle\(feature\)\}/);
+  assert.match(appTsx, /className="bank-logo-style"/);
+  assert.match(appTsx, /creditMusicIcon\?: "disc" \| "note" \| "none";/);
+  assert.match(appTsx, /text-\$\{feature\.creditTextStyle \|\| "normal"\}/);
+});
+
+test("QA 17 Okt TC-218/219: upload tidak macet; undo dari state terbaru, batas jelas", () => {
+  // Semua input file dikosongkan saat dibuka, jadi berkas yang sama tetap diproses.
+  const inputs = appTsx.match(/type="file"[\s\S]{0,1500}?\/>/g) || [];
+  assert.ok(inputs.length >= 14);
+  for (const block of inputs)
+    assert.ok(
+      /onClick=\{resetFileInput\}|value = ""/.test(block),
+      `input file tanpa reset: ${block.slice(0, 80)}`,
+    );
+  assert.match(appTsx, /async function shrinkImageToLimit\(file: File, maxBytes: number\)/);
+  assert.match(appTsx, /if \(type === "image"\) file = await shrinkImageToLimit\(file, limit\);/);
+  // Undo: snapshot dari ref state terbaru, batas 30 dan jumlahnya tampil.
+  assert.match(appTsx, /const HISTORY_LIMIT = 30;/);
+  assert.match(appTsx, /const previous = sectionsRef\.current;/);
+  assert.match(appTsx, /historyRef\.current\.push\(structuredClone\(previous\)\);/);
+  assert.match(appTsx, /className="history-count"/);
 });

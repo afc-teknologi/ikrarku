@@ -956,22 +956,45 @@ label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8p
    menutupi seluruh ornamen pojok. */
 .section-decoration{position:absolute;z-index:4;pointer-events:none;display:block}
 .section-decoration svg{width:100%;height:100%;display:block}
-.section-decoration.corner-top-left{top:0;left:0}
-.section-decoration.corner-top-right{top:0;right:0}
-.section-decoration.corner-bottom-left{bottom:0;left:0}
-.section-decoration.corner-bottom-right{bottom:0;right:0}
+/* --deco-pin-x / --deco-pin-y: sisi tempat ornamen ditambatkan (-1 kiri/atas,
+   1 kanan/bawah, 0 tengah). Dipakai di bawah untuk menjaga ornamen tetap
+   menempel pada tambatannya saat diperkecil. */
+.section-decoration{--deco-scale:1;--deco-pin-x:0;--deco-pin-y:0}
+.section-decoration.corner-top-left{top:0;left:0;--deco-pin-x:-1;--deco-pin-y:-1}
+.section-decoration.corner-top-right{top:0;right:0;--deco-pin-x:1;--deco-pin-y:-1}
+.section-decoration.corner-bottom-left{bottom:0;left:0;--deco-pin-x:-1;--deco-pin-y:1}
+.section-decoration.corner-bottom-right{bottom:0;right:0;--deco-pin-x:1;--deco-pin-y:1}
+/* TC-210 — tengah tiap sisi. Diposisikan dengan inset + margin auto, BUKAN
+   translate(-50%): elemen ini menjalankan keyframes .loop-* yang menganimasikan
+   transform, dan animasi mengalahkan transform pada elemen yang sama. */
+.section-decoration.corner-top-center{top:0;left:0;right:0;margin-inline:auto;--deco-pin-y:-1}
+.section-decoration.corner-bottom-center{bottom:0;left:0;right:0;margin-inline:auto;--deco-pin-y:1}
+.section-decoration.corner-middle-left{left:0;top:0;bottom:0;margin-block:auto;height:fit-content;--deco-pin-x:-1}
+.section-decoration.corner-middle-right{right:0;top:0;bottom:0;margin-block:auto;height:fit-content;--deco-pin-x:1}
 .section-decoration.corner-top-left.loop-sway{transform-origin:0 0}
 .section-decoration.corner-top-right.loop-sway{transform-origin:100% 0}
 .section-decoration.corner-bottom-left.loop-sway{transform-origin:0 100%}
 .section-decoration.corner-bottom-right.loop-sway{transform-origin:100% 100%}
+.section-decoration.corner-top-center.loop-sway{transform-origin:50% 0}
+.section-decoration.corner-bottom-center.loop-sway{transform-origin:50% 100%}
+.section-decoration.corner-middle-left.loop-sway{transform-origin:0 50%}
+.section-decoration.corner-middle-right.loop-sway{transform-origin:100% 50%}
 /* Transform ornamen dipasang pada anaknya, bukan pada .section-decoration:
    elemen itu menjalankan keyframes .loop-* yang juga menganimasikan transform,
    dan animasi mengalahkan transform apa pun di elemen yang sama. Akibatnya
    dulu "Cermin horizontal" tidak berfungsi dan ornamen tetap seukuran desktop
-   di mobile. --deco-flip dikirim inline dari React. */
-.section-decoration>svg,.section-decoration>img{transform:rotate(var(--deco-rotate,0deg)) scaleX(var(--deco-flip,1))}
+   di mobile. --deco-flip dikirim inline dari React.
+
+   TC-221 — penyusutan di mobile dulu berporos di TENGAH gambar, sehingga gambar
+   menyusut menjauhi pojoknya sejauh ukuran x (1 - skala) / 2: makin besar
+   ornamen, makin jauh ia "bergeser ke tengah". translate pertama mengembalikan
+   tepi yang ditambatkan tepat ke tempatnya. Rotasi & cermin tetap berporos di
+   tengah supaya gambar tidak berputar keluar dari kotaknya.
+
+   TC-206 — --deco-dx/--deco-dy adalah geseran halus pilihan Web Designer. */
+.section-decoration>svg,.section-decoration>img{transform:translate(var(--deco-dx,0px),var(--deco-dy,0px)) translate(calc(var(--deco-pin-x) * (1 - var(--deco-scale)) * 50%),calc(var(--deco-pin-y) * (1 - var(--deco-scale)) * 50%)) scale(var(--deco-scale)) rotate(var(--deco-rotate,0deg)) scaleX(var(--deco-flip,1))}
 @media(max-width:900px){
-  .section-decoration>svg,.section-decoration>img{transform:scale(.62) rotate(var(--deco-rotate,0deg)) scaleX(var(--deco-flip,1))}
+  .section-decoration{--deco-scale:.62}
 }
 
 .loop-effect-controls,.decoration-editor{border-top:1px solid #e5e9e6;margin-top:14px;padding-top:13px}
@@ -1020,8 +1043,9 @@ label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8p
 .wedding-site.device-mobile .love-story-item{flex-direction:column}
 .wedding-site.device-mobile .canvas-form.cols-2 .canvas-form-grid{grid-template-columns:1fr}
 .wedding-site.device-mobile .greetings-widget{grid-template-columns:1fr}
-.wedding-site.device-mobile .section-decoration>svg,
-.wedding-site.device-mobile .section-decoration>img{transform:scale(.6) rotate(var(--deco-rotate,0deg)) scaleX(var(--deco-flip,1))}
+/* Penyusutan mobile di editor: hanya nilai skalanya yang diganti. Rangkaian
+   transform-nya (termasuk penambat pojok) tetap dari aturan utama. */
+.wedding-site.device-mobile .section-decoration{--deco-scale:.6}
 
 /* Thumbnail landing: background tidak boleh dikunci ke viewport */
 .wedding-site.is-thumbnail .background-layer,
@@ -1144,7 +1168,9 @@ label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8p
 /* Ornamen berbasis gambar */
 .decor-preview{width:100%;height:78px;display:grid;place-items:center;background:#f7f9f8;border-radius:8px;border:1px solid #e0e6e2;overflow:hidden}
 .decor-preview img{width:100%;height:100%;object-fit:cover;display:block}
-.section-decoration img{width:100%;height:100%;object-fit:contain;display:block}
+/* Tinggi mengikuti rasio gambar (lihat render di App.tsx): kotak persegi dengan
+   object-fit:contain dulu menaruh gambar di tengah kotak dan menyisakan celah. */
+.section-decoration img{width:100%;height:auto;display:block}
 
 /* layout-help di luar feature-layout-controls ikut ukuran group-heading */
 .layout-help{font-size:9px;line-height:1.5;color:#7c8b85;background:#f4f7f5;padding:9px;border-radius:7px}
@@ -1660,3 +1686,142 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 
 /* TC-198 — panel Posisi Player pada inspector Sound. */
 .sound-position-editor{border-top:1px solid #e5e9e6;margin-top:13px;padding-top:12px;display:flex;flex-direction:column;gap:8px}
+
+/* Teks khusus pembaca layar. Kelas ini dipakai (mis. judul pratinjau card
+   "Template pada website") tetapi dulu tidak pernah didefinisikan, sehingga
+   teksnya tampil besar sebagai pita abu di bawah setiap pratinjau. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+
+/* Pratinjau card hanya gambar diam. Belasan card yang masing-masing
+   menjalankan animasi layer, ornamen, dan orb cover membuat halaman
+   Templates & Approval berat tanpa menambah informasi apa pun. Skala layer
+   tetap berlaku karena dipasang inline saat tidak ada animasi. */
+.actual-render-content .background-layer,
+.actual-render-content .background-extra-layer,
+.actual-render-content .section-decoration,
+.actual-render-content .canvas-section,
+.actual-render-content .cover-orb,
+.actual-render-content .background-video-layer{animation:none!important}
+
+/* TC-209 — tombol duplikat & hapus berdampingan di kepala tiap ornamen. */
+.decor-head-actions{display:flex;gap:4px}
+
+/* TC-197 — Background tetap. Satu lapisan sticky selebar halaman: menempel di
+   puncak kontainer gulirnya dan tidak memakan tempat (margin-bottom negatif
+   sebesar tingginya), sehingga seluruh canvas bergulir di atasnya.
+   --site-viewport-h diisi dari JS saat undangan berada di dalam kotak gulir
+   (preview, editor); di halaman publik nilainya 100vh. Dipilih karena
+   background-attachment:fixed tidak didukung Safari iOS dan tidak bekerja di
+   dalam kotak preview. */
+.site-fixed-backdrop{position:sticky;top:0;z-index:0;height:var(--site-viewport-h,100vh);margin-bottom:calc(-1 * var(--site-viewport-h,100vh));overflow:hidden;pointer-events:none}
+.site-fixed-backdrop>.background-layer,
+.site-fixed-backdrop>.background-video-layer,
+.site-fixed-backdrop>.background-extra-layer{position:absolute;inset:0}
+.site-fixed-backdrop>.background-video-layer{width:100%;height:100%;object-fit:cover}
+/* Canvas bergulir di atas backdrop. Overlay gradasi tipis bawaan section
+   (::after) dibiarkan — ia transparan dan menjaga kontras teks. */
+.wedding-site.has-fixed-backdrop .canvas-section{position:relative;z-index:1}
+/* overflow:hidden bawaan .wedding-site menjadikannya kontainer gulir bagi
+   sticky, padahal ia tidak pernah bergulir — backdrop jadi tidak pernah
+   menempel. overflow:clip tetap memotong tanpa menjadi kontainer gulir;
+   peramban lama yang belum mengenal clip jatuh ke visible. */
+.wedding-site.has-fixed-backdrop{overflow:visible;overflow:clip}
+
+/* TC-216 — preview Desktop selebar canvas desain, di tengah, dengan ruang
+   kosong di kiri-kanan pada layar lebar. Dulu ketiganya width:100%, sehingga
+   desain yang ditata di area kerja ~860 px dibentangkan ke ~1530 px dan
+   posisi bebas, crop background, serta tinggi section bergeser.
+   --design-width diisi oleh PreviewModal dari lebar canvas editor; permukaan
+   lain memakai 1050 px, batas atas .canvas-frame.desktop. */
+.preview-full-stage.desktop .preview-content,
+.actual-template-preview-shell.device-desktop>.wedding-site,
+.template-dialog-actual-preview.live.device-desktop>.wedding-site{width:min(var(--design-width,1050px),100%);margin-inline:auto;box-shadow:0 15px 50px rgba(18,48,39,.14)}
+
+/* VN 6 — Templates & Approval: filter status, nama pengaju, dan halaman.
+   Grid dibatasi empat kolom supaya 8 kartu per halaman jatuh tepat dua baris. */
+.template-status-filters{display:flex;flex-wrap:wrap;gap:7px;margin-top:12px}
+.template-status-filters button{border:1px solid var(--line);background:#fff;border-radius:999px;padding:7px 12px;font-size:10px;color:#3c554c;display:inline-flex;align-items:center;gap:6px}
+.template-status-filters button b{font-weight:600;color:#7d8a85}
+.template-status-filters button.active{background:#125946;border-color:#125946;color:#fff}
+.template-status-filters button.active b{color:#cfe4dc}
+.template-status-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+/* Di bawah 1440 px area konten (dikurangi sidebar) terlalu sempit untuk empat
+   kartu berisi tujuh tombol; dua kolom tetap membagi 8 kartu dengan rata. */
+@media(max-width:1439px){.template-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){.template-status-grid{grid-template-columns:1fr}}
+.template-status-creator{display:block;margin-top:3px;font-size:9px;color:#7d8a85}
+.template-status-creator b{color:#2f4a40;font-weight:600}
+.template-status-pager{display:flex;align-items:center;justify-content:center;gap:5px;margin-top:16px;flex-wrap:wrap}
+.template-status-pager button{min-width:32px;height:32px;border:1px solid var(--line);background:#fff;border-radius:8px;font-size:10px;color:#3c554c;display:inline-grid;place-items:center}
+.template-status-pager button.active{background:#125946;border-color:#125946;color:#fff}
+.template-status-pager button:disabled{opacity:.4;cursor:not-allowed}
+.template-status-pager span{font-size:10px;color:#7d8a85;margin-left:8px}
+
+/* VN 7 — label kelompok menu sidebar (Desain / Layanan / Administrasi). */
+.sidebar nav .sidebar-group-label{display:block;margin:16px 14px 6px;font-size:9px;font-weight:600;letter-spacing:1.6px;text-transform:uppercase;color:#93a29c}
+.sidebar nav .sidebar-group-label:first-child{margin-top:4px}
+
+/* QA 15 Okt — galeri: titik fokus per gambar di bawah tiap thumbnail. */
+.gallery-media-entry{display:flex;flex-direction:column;gap:6px}
+.gallery-focus{border:1px solid #e5e9e6;border-radius:8px;padding:6px 8px;background:#fafbfa}
+.gallery-focus>summary{cursor:pointer;font-size:9px;color:#486158;list-style:none}
+.gallery-focus>summary::-webkit-details-marker{display:none}
+.gallery-focus>summary::before{content:'▸ ';color:#93a29c}
+.gallery-focus[open]>summary::before{content:'▾ '}
+.gallery-focus[open]{display:flex;flex-direction:column;gap:8px}
+/* QC #2 — blur di belakang dialog preview penuh membuat setiap frame scroll
+   harus mem-blur ulang seluruh halaman; pada uji 4× CPU scroll 2× lebih
+   lambat dan memunculkan long task. Latar gelap pekat cukup. */
+.dialog-overlay.template-quick-preview{backdrop-filter:none;background:rgba(5,21,16,.84)}
+/* Tata letak desktop "Kolom" (ala serein): isi versi Mobile di kolom sempit,
+   background desktop diam memenuhi layar di belakangnya. */
+.desktop-column-stage{position:relative;min-height:var(--site-viewport-h,100vh);overflow:clip;background:#0f1f1a}
+.desktop-column{position:relative;z-index:1;width:min(var(--desktop-column-w,430px),100%);margin-inline:auto;box-shadow:0 0 70px rgba(0,0,0,.38)}
+.desktop-column-stage.align-right>.desktop-column{margin-inline:auto 7%}
+.desktop-column-stage.align-left>.desktop-column{margin-inline:7% auto}
+.desktop-column>.wedding-site{width:100%;min-height:var(--site-viewport-h,100vh);margin:0;box-shadow:none}
+.desktop-column>.wedding-site.invitation-locked{height:var(--site-viewport-h,100vh)}
+.actual-template-preview-shell.device-desktop>.desktop-column-stage,
+.template-dialog-actual-preview.live.device-desktop>.desktop-column-stage{width:min(var(--design-width,1050px),100%);margin-inline:auto}
+.desktop-layout-panel{margin:10px 14px 0;border:1px solid #e3e8e5;border-radius:10px;padding:9px 11px;background:#fafcfb;display:grid;gap:8px}
+.desktop-layout-panel .setting-row{padding:0;border:0}
+.segmented-control{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:3px;border-radius:9px;background:#edf2ef}
+.segmented-control button{border:0;border-radius:7px;padding:7px 8px;background:transparent;color:#365a4f;font-size:11px;font-weight:600;cursor:pointer}
+.segmented-control button.active{background:#fff;color:#123f33;box-shadow:0 1px 4px rgba(18,63,51,.14)}
+.desktop-layout-options{display:grid;gap:8px;font-size:11px;color:#46625a}
+.desktop-layout-options label{display:grid;gap:4px}
+.desktop-layout-options input[type=color]{width:100%;height:30px;border:1px solid #d9e2de;border-radius:7px;padding:2px;background:#fff}
+/* overflow:hidden menjadikan .canvas-frame kontainer gulir sendiri (yang tak
+   pernah bergulir), sehingga backdrop sticky — Background tetap & tata letak
+   Kolom — ikut tergulir di area kerja. clip memotong sama tanpa efek itu. */
+.canvas-frame{overflow:clip}
+/* MoM A7 — ubah harga cepat di kartu Templates & Approval. */
+.template-price-edit{display:inline-flex;align-items:center;gap:5px;margin-top:4px;border:0;background:none;padding:0;color:#125946;font-size:11px;font-weight:600;cursor:pointer}
+.template-price-form{display:flex;gap:4px;margin-top:5px}
+.template-price-form input{width:90px;min-width:0;border:1px solid #cfdad5;border-radius:6px;padding:3px 5px;font-size:9px}
+.template-price-form button{border:1px solid #cfdad5;border-radius:6px;background:#fff;padding:3px 7px;font-size:9px;cursor:pointer}
+.template-price-form button[type=submit]{background:#125946;border-color:#125946;color:#fff}
+/* MoM A6/A9 */
+.order-account-btn{margin-top:6px;border:1px solid #125946;border-radius:6px;background:#fff;color:#125946;padding:4px 8px;font-size:11px;font-weight:600;cursor:pointer}
+.order-account-done{display:block;margin-top:6px;color:#2f6b55}
+.order-account-done button{border:0;background:none;color:#125946;text-decoration:underline;padding:0;font-size:inherit;cursor:pointer}
+.team-edit-banner{display:flex;align-items:flex-start;gap:10px;margin-bottom:16px;padding:11px 14px;border:1px solid #cfe3da;border-radius:10px;background:#eef7f2;color:#1f4b3d;font-size:13px;line-height:1.5}
+.team-edit-banner svg{flex:none;margin-top:2px}
+.template-status-meta .template-price-edit{display:flex;width:fit-content;height:auto;min-height:0;margin-top:3px;padding:0;border:0;background:none;box-shadow:none;font-size:8px;font-weight:700;color:#125946}
+.template-status-meta .template-price-form button{height:auto;min-height:0}
+/* TC-216/217 — label "⋮⋮ nama fitur" di editor dulu tertimpa aturan
+   `.feature-block>*{position:relative}` sehingga ikut memakan 19 px per fitur.
+   Canvas di editor jadi lebih tinggi daripada di Preview/undangan, dan layer
+   background berposisi % serta ornamen bawah bergeser. Label harus melayang. */
+.feature-block>.feature-handle{position:absolute}
+/* TC-212 */
+.bank-logo-style{display:grid;gap:8px;margin-bottom:14px;padding:10px;border:1px solid #e3e8e5;border-radius:9px;background:#fafcfb}
+.bank-logo-style label{display:grid;gap:4px}
+/* TC-213 */
+.credit-created.text-italic{font-style:italic}
+.credit-created.text-bold{font-weight:700}
+.credit-created.text-uppercase{text-transform:uppercase;letter-spacing:.12em}
+.credit-subhead{display:block;margin-top:6px;font-size:12px}
+/* TC-219 — jumlah langkah undo yang tersedia. */
+.history-actions .icon-btn{position:relative}
+.history-count{position:absolute;top:-5px;right:-5px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:#125946;color:#fff;font-size:8px;font-weight:700;line-height:15px;text-align:center}

@@ -127,6 +127,9 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
     customer = await createUser("customer", "role_user"),
     other = await createUser("other", "role_user");
   let order, template, conversation;
+  // MoM A8 — order dibagi bergiliran, jadi Web Designer order ini ditentukan
+  // saat QA-10 dari data, bukan diasumsikan pembuat template.
+  let assignedEditor = editor;
   await t.test(
     "QA-01 production reset never returns development token",
     async () => {
@@ -454,17 +457,62 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
     );
     assert.equal(r.status, 201);
     template = r.data;
+    // MoM A7 — harga dari Web Designer diabaikan; Administrator yang menetapkan.
+    assert.equal(template.price, 0);
+    const noPrice = await call(
+      "POST",
+      `/templates/${template.id}/review`,
+      { decision: "approved" },
+      admin.token,
+    );
+    assert.equal(noPrice.status, 400);
+    assert.match(noPrice.data.error, /harga/i);
+    assert.equal(
+      (
+        await call(
+          "PATCH",
+          `/templates/${template.id}/price`,
+          { price: 1 },
+          editor.token,
+        )
+      ).status,
+      403,
+    );
     assert.equal(
       (
         await call(
           "POST",
           `/templates/${template.id}/review`,
-          { decision: "approved" },
+          { decision: "approved", price: 100000 },
           admin.token,
         )
       ).status,
       200,
     );
+  });
+  await t.test("MoM A7 admin changes price instantly; editor revision cannot", async () => {
+    const changed = await call(
+      "PATCH",
+      `/templates/${template.id}/price`,
+      { price: 150000 },
+      admin.token,
+    );
+    assert.equal(changed.status, 200);
+    assert.equal(changed.data.price, 150000);
+    const revision = await call(
+      "PATCH",
+      `/templates/${template.id}`,
+      { price: 1000 },
+      editor.token,
+    );
+    assert.equal(revision.status, 200);
+    assert.equal(
+      db.prepare("SELECT price FROM templates WHERE id=?").get(template.id).price,
+      150000,
+    );
+    // Kembalikan nominal fixture & bersihkan draft revisi uji ini.
+    await call("PATCH", `/templates/${template.id}/price`, { price: 100000 }, admin.token);
+    await call("POST", `/templates/${template.id}/review`, { decision: "rejected" }, admin.token);
   });
   await t.test(
     "QA-15 draft revision does not change published version",
@@ -805,14 +853,15 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
     const assigned = db
       .prepare("SELECT assigned_editor_id FROM orders WHERE id=?")
       .get(order.id).assigned_editor_id;
-    assert.equal(assigned, editor.user.id);
+    assignedEditor = [editor, editor2].find((e) => e.user.id === assigned);
+    assert.ok(assignedEditor, "order harus ditugaskan ke Web Designer aktif");
     assert.equal(
       (
         await call(
           "GET",
           `/clients/${customer.user.id}/site`,
           undefined,
-          editor.token,
+          assignedEditor.token,
         )
       ).status,
       200,
@@ -835,7 +884,7 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
           "PATCH",
           `/tasks/${task.id}`,
           { status: "Done" },
-          editor.token,
+          assignedEditor.token,
         )
       ).status,
       200,
@@ -879,7 +928,7 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
             "PATCH",
             `/tasks/${task.id}`,
             { status: "In Progress" },
-            editor.token,
+            assignedEditor.token,
           )
         ).status,
         200,
@@ -896,7 +945,7 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
             "PATCH",
             `/tasks/${task.id}`,
             { status: "Done" },
-            editor.token,
+            assignedEditor.token,
           )
         ).status,
         200,
@@ -914,7 +963,7 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
         "PATCH",
         `/tasks/${task.id}`,
         { status: "Done" },
-        editor.token,
+        assignedEditor.token,
       );
       assert.equal(countMessages("%sudah selesai dikerjakan%") - doneBefore, 1);
       assert.equal(countMail() - mailBefore, 1);
@@ -928,7 +977,7 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
             "PATCH",
             `/tasks/${task.id}`,
             { status: "Waiting Customer" },
-            editor.token,
+            assignedEditor.token,
           )
         ).status,
         200,
@@ -1283,6 +1332,148 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       );
       assert.equal(live.name, "Approved revision");
       assert.equal(live.canvasSections[0].id, "revision");
+    },
+  );
+  // ---- MoM 13 Okt: aturan bisnis A6, A8, A9 ----
+  let momSeq = 0;
+  const paidGuestOrder = async (label) => {
+    momSeq += 1;
+    const orderId = `ord_mom_${momSeq}`;
+    const email = `${label}-${momSeq}@example.test`;
+    const amount = Number(
+      db.prepare("SELECT price FROM templates WHERE id=?").get(template.id).price,
+    );
+    db.prepare(
+      `INSERT INTO orders(id,order_no,customer_name,email,phone,template_id,amount,currency,payment_status,order_status,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+    ).run(
+      orderId,
+      `IKR-MOM-${momSeq}`,
+      `Tamu ${label} ${momSeq}`,
+      email,
+      "081200000000",
+      template.id,
+      amount,
+      "IDR",
+      "Pending",
+      "Awaiting Payment",
+      new Date().toISOString(),
+    );
+    const paid = await webhook({ event: "paid", reference: orderId, amount, currency: "IDR" });
+    assert.equal(paid.status, 200, JSON.stringify(paid.data));
+    return db.prepare("SELECT * FROM orders WHERE id=?").get(orderId);
+  };
+  const activeOf = (editorId) =>
+    Number(
+      db
+        .prepare(
+          `SELECT COUNT(DISTINCT order_id) n FROM tasks WHERE assigned_user_id=? AND assigned_role_id='role_editor' AND order_id IS NOT NULL AND status NOT IN ('Done','Cancelled')`,
+        )
+        .get(editorId).n,
+    );
+  await t.test(
+    "MoM A8 round-robin, maksimal 5 order aktif per Web Designer, sisanya antre",
+    async () => {
+      const editors = [editor.user.id, editor2.user.id];
+      const slots = editors.reduce((total, id) => total + Math.max(0, 5 - activeOf(id)), 0);
+      const orders = [];
+      for (let i = 0; i < slots + 1; i++) orders.push(await paidGuestOrder("rr"));
+      // Bergiliran: dua order berurutan saat keduanya masih punya slot tidak
+      // jatuh ke orang yang sama.
+      const assigned = orders.map((o) => o.assigned_editor_id);
+      for (const id of editors) assert.ok(activeOf(id) <= 5, `editor ${id} > 5 order aktif`);
+      for (const id of editors) assert.equal(activeOf(id), 5);
+      const last = orders.at(-1);
+      assert.equal(last.assigned_editor_id, null, "order ke-(slot+1) harus antre");
+      assert.equal(last.order_status, "Paid - Antre Web Designer");
+      assert.equal(last.fulfillment_status, "Complete");
+      assert.ok(assigned.slice(0, slots).every(Boolean));
+      // Selesaikan satu order milik editor -> antrean langsung dibagi.
+      const done = db
+        .prepare(
+          `SELECT id FROM tasks WHERE assigned_user_id=? AND assigned_role_id='role_editor' AND order_id IS NOT NULL AND status NOT IN ('Done','Cancelled') LIMIT 1`,
+        )
+        .get(editor.user.id);
+      assert.equal(
+        (await call("PATCH", `/tasks/${done.id}`, { status: "Done" }, editor.token)).status,
+        200,
+      );
+      const drained = db.prepare("SELECT * FROM orders WHERE id=?").get(last.id);
+      assert.equal(drained.assigned_editor_id, editor.user.id);
+      assert.equal(drained.order_status, "Paid - Onboarding");
+    },
+  );
+  await t.test(
+    "MoM A6 CS membuatkan akun customer dari order guest; link buat password terkirim via chat",
+    async () => {
+      const guest = await paidGuestOrder("guest");
+      assert.equal(guest.user_id, null);
+      assert.equal(
+        (await call("POST", `/orders/${guest.id}/customer-account`, {}, customer.token)).status,
+        403,
+      );
+      const created = await call("POST", `/orders/${guest.id}/customer-account`, {}, cs.token);
+      assert.equal(created.status, 200, JSON.stringify(created.data));
+      assert.equal(created.data.existing, false);
+      const user = db.prepare("SELECT * FROM users WHERE lower(email)=lower(?)").get(guest.email);
+      assert.equal(user.role_id, "role_user");
+      assert.equal(db.prepare("SELECT user_id FROM orders WHERE id=?").get(guest.id).user_id, user.id);
+      const chat = db
+        .prepare(
+          `SELECT m.body FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE c.customer_email=? ORDER BY m.created_at DESC LIMIT 1`,
+        )
+        .get(guest.email);
+      assert.match(chat.body, /reset-password\?token=/);
+      // Staff tidak pernah memegang password: customer membuatnya sendiri.
+      const token = new URL(created.data.setupUrl).searchParams.get("token");
+      const reset = await call("POST", "/auth/reset-password", {
+        token,
+        password: "Customer-baru-123",
+        passwordConfirm: "Customer-baru-123",
+      });
+      assert.equal(reset.status, 200, JSON.stringify(reset.data));
+      const login = await call("POST", "/auth/login", {
+        username: guest.email,
+        password: "Customer-baru-123",
+      });
+      assert.equal(login.status, 200, JSON.stringify(login.data));
+      // Kedua kalinya akun lama dipakai ulang, bukan digandakan.
+      const again = await call("POST", `/orders/${guest.id}/customer-account`, {}, admin.token);
+      assert.equal(again.data.existing, true);
+      assert.equal(
+        Number(db.prepare("SELECT COUNT(*) n FROM users WHERE lower(email)=lower(?)").get(guest.email).n),
+        1,
+      );
+    },
+  );
+  await t.test(
+    "MoM A9 customer diberi tahu saat tim mengedit websitenya (chat dibatasi)",
+    async () => {
+      const current = await call("GET", `/clients/${customer.user.id}/site`, undefined, assignedEditor.token);
+      assert.equal(current.status, 200);
+      const payload = {
+        title: current.data?.title || "Undangan",
+        slug: current.data?.slug || "customer-site",
+        templateId: current.data?.templateId || template.id,
+        sections: current.data?.sections || [],
+        status: "Draft",
+      };
+      const notices = () =>
+        Number(
+          db
+            .prepare(
+              `SELECT COUNT(*) n FROM messages m JOIN conversations c ON c.id=m.conversation_id WHERE lower(c.customer_email)=lower(?) AND m.body LIKE '%sedang membantu mengedit%'`,
+            )
+            .get("customer@example.test").n,
+        );
+      const before = notices();
+      for (let i = 0; i < 2; i++) {
+        const saved = await call("PUT", `/clients/${customer.user.id}/site`, payload, assignedEditor.token);
+        assert.equal(saved.status, 200, JSON.stringify(saved.data));
+      }
+      assert.equal(notices() - before, 1, "dua kali simpan hanya satu pesan chat");
+      const own = await call("GET", "/site", undefined, customer.token);
+      assert.match(own.data.teamEdit.name, /Web Designer/);
+      assert.ok(own.data.teamEdit.at);
     },
   );
 });

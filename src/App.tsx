@@ -10,6 +10,8 @@ import {
   useState,
   lazy,
   Suspense,
+  Fragment,
+  memo,
 } from "react";
 import {
   AlignCenter,
@@ -79,6 +81,8 @@ import {
   X,
   Zap,
   MapPin,
+  Navigation,
+  Map as MapIcon,
   MailOpen,
   UserPlus,
   Download,
@@ -116,6 +120,7 @@ import {
   UserRoundCog,
   PackageCheck,
   History as HistoryIcon,
+  PenLine,
 } from "lucide-react";
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 import "./App.css";
@@ -333,7 +338,12 @@ type DecorCorner =
   | "top-left"
   | "top-right"
   | "bottom-left"
-  | "bottom-right";
+  | "bottom-right"
+  // TC-210 — ornamen di tengah tiap sisi, bukan hanya di pojok.
+  | "top-center"
+  | "bottom-center"
+  | "middle-left"
+  | "middle-right";
 // Ornamen yang ditempel di pojok section, mis. bunga yang bergoyang pelan.
 type SectionDecoration = {
   id: string;
@@ -348,6 +358,9 @@ type SectionDecoration = {
   rotation?: number; // TC-186 — sudut putar ornamen (derajat)
   motion: LoopEffect;
   speed?: number;
+  // TC-206 — geser halus dari titik tambatnya (px). Positif = kanan / bawah.
+  offsetX?: number;
+  offsetY?: number;
 };
 type ImageFrame =
   | "none"
@@ -522,6 +535,12 @@ type Feature = DesignerLayout & {
   cardTextColor?: string;
   cardBorderColor?: string;
   cardRadius?: number;
+  // TC-212 — tampilan logo bank pada Wedding Gift.
+  bankLogoSize?: number;
+  bankLogoShape?: "pill" | "square" | "plain";
+  bankLogoBackground?: string;
+  bankLogoTextColor?: string;
+  bankLogoAlign?: "flex-start" | "center" | "flex-end";
   mapButtonBackground?: string; // TC-124 button Buka Google Maps
   mapButtonTextColor?: string;
   mapButtonRadius?: number;
@@ -529,6 +548,24 @@ type Feature = DesignerLayout & {
   mapButtonBorderWidth?: number;
   mapButtonShape?: "rounded" | "pill" | "square" | "outline";
   mapButtonLabel?: string;
+  // QA 15 Okt — ikon tombol lokasi (Lokasi & Event) dulu terkunci MapPin.
+  mapButtonIcon?: "map-pin" | "navigation" | "map" | "external" | "none";
+  // TC-208 — ukuran tombol lokasi (teks + padding) dan ukuran ikonnya.
+  mapButtonFontSize?: number;
+  mapButtonIconSize?: number;
+  // QA 15 Okt — ukuran teks kotak "Created by" pada Credit (dulu 8 px tetap).
+  creditFontSize?: number;
+  // TC-213 — elemen musik & gaya teks credit.
+  creditMusicColor?: string;
+  creditMusicIcon?: "disc" | "note" | "none";
+  creditMusicIconSize?: number;
+  creditTextStyle?: "normal" | "italic" | "uppercase" | "bold";
+  // QA 15 Okt — galeri selain grid memotong gambar (object-fit:cover) tanpa
+  // cara memilih bagian yang tampil. `galleryOffsets` sejajar dengan
+  // galleryUrls (persen, seperti imageOffsetX/Y pada fitur gambar), dan
+  // `galleryFit: "contain"` menampilkan gambar utuh tanpa dipotong.
+  galleryFit?: "cover" | "contain";
+  galleryOffsets?: { x: number; y: number }[];
   showLocationQr?: boolean; // TC-132
   showMapEmbed?: boolean; // Preview peta Google Maps langsung di section
   mapEmbedHeight?: number;
@@ -616,6 +653,16 @@ type CanvasSection = {
   columnWidths?: number[]; // TC-114 lebar kolom hasil drag grid line
   showGuides?: boolean; // TC-113 garis guide/margin
   backgroundGlobal?: boolean; // TC-146 satu background untuk semua canvas
+  /** Tata letak desktop (disimpan di Canvas 1, berlaku untuk seluruh
+   *  undangan). "column" = ala wevitation serein: di desktop isi undangan
+   *  tampil dalam versi Mobile di kolom sempit, background Canvas 1 versi
+   *  Desktop memenuhi layar di belakangnya. */
+  desktopLayout?: "full" | "column";
+  desktopColumnWidth?: number; // px, lebar kolom isi
+  desktopColumnAlign?: "center" | "left" | "right";
+  desktopBackdropUrl?: string; // background luar kolom (opsional)
+  desktopBackdropKey?: string;
+  desktopBackdropColor?: string;
   backgroundGlobalMode?: "image" | "color"; // sumber background global
   backgroundScrollType?: "section" | "parallax"; // cara background bergerak
   loopEffect?: LoopEffect; // Efek berulang pada seluruh section
@@ -1076,6 +1123,18 @@ function resolveSection(
   delete (override as { id?: unknown }).id;
   return { ...section, ...override };
 }
+/** Pengaturan musik yang selalu berlaku untuk kedua device (lihat updateFeature). */
+const SHARED_SOUND_KEYS = [
+  "soundCatalogId",
+  "soundPreset",
+  "mediaKey",
+  "mediaUrl",
+  "mediaName",
+  "autoplay",
+  "soundPersist",
+  "creditSongTitle",
+] as const satisfies readonly (keyof Feature)[];
+
 // Patch ditulis ke slot device yang sedang aktif agar Desktop tidak ikut berubah
 // saat designer mengedit tampilan Mobile (dan sebaliknya).
 function applyDevicePatch<T extends { mobile?: Partial<T> }>(
@@ -2432,6 +2491,10 @@ function App() {
   const [articleSlug, setArticleSlug] = useState<string | null>(null);
   const [activeManagedUserId, setActiveManagedUserId] = useState("");
   const [siteOwnerUserId, setSiteOwnerUserId] = useState("");
+  // MoM A9 — siapa dari tim yang terakhir membantu mengedit website customer.
+  const [teamEdit, setTeamEdit] = useState<{ name: string; at: string } | null>(
+    null,
+  );
   const [selectedDashboardCanvasId, setSelectedDashboardCanvasId] = useState(
     sections[0]?.id || "",
   );
@@ -2852,6 +2915,7 @@ function App() {
         if (permitted("dashboard.user"))
           try {
             const site = await api.site();
+            setTeamEdit(site?.teamEdit || null);
             if (site) {
               setSiteOwnerUserId(currentAccountId);
               setActiveManagedUserId(currentAccountId);
@@ -4089,8 +4153,10 @@ function App() {
       setPublicTemplates((previous) =>
         previous.filter((item) => item.id !== templateId),
       );
+      // VN 6 — kartu kini langsung hilang dari tampilan bawaan; beri tahu
+      // ke mana ia pindah supaya tidak dikira terhapus.
       flash(
-        "Template ditarik dari publikasi dan tidak dapat dipesan customer.",
+        "Template ditarik dari publikasi dan tidak dapat dipesan customer. Lihat lagi lewat filter Takedown.",
       );
     } catch (error) {
       flash(
@@ -4193,6 +4259,21 @@ function App() {
   const uploadTemplateThumbnail = (templateId: string, file: File) =>
     uploadTemplateImage(templateId, file, "thumbnail");
   // QA TC-151 — tandai/lepas tanda rekomendasi pada katalog publik.
+  const setTemplatePrice = async (templateId: string, price: number) => {
+    try {
+      const updated = await api.setTemplatePrice(templateId, price);
+      const patch = (item: Template) =>
+        item.id === templateId
+          ? { ...item, price: updated.price, premium: updated.premium }
+          : item;
+      setTemplateCatalog((previous) => previous.map(patch));
+      setPublicTemplates((previous) => previous.map(patch));
+      flash(`Harga diperbarui: ${formatRupiah(updated.price || 0)}.`);
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Gagal mengubah harga.");
+      throw error;
+    }
+  };
   const toggleTemplateRecommended = async (
     templateId: string,
     next: boolean,
@@ -4804,6 +4885,7 @@ function App() {
       <>
         <Editor
           managingCustomer={Boolean(siteOwnerUserId)}
+          editorName={currentAccount?.name || displayRole(role)}
           sections={sections}
           setSections={setSections}
           slug={slug}
@@ -4922,6 +5004,7 @@ function App() {
               setSelectedCanvasId={setSelectedDashboardCanvasId}
               setGuestsOpen={setGuestsOpen}
               setPreviewOpen={setPreviewOpen}
+              teamEdit={teamEdit}
             />
           )}
         {view === "dashboard" && hasPermission("dashboard.editor") && (
@@ -4974,6 +5057,9 @@ function App() {
             onUploadSample={uploadTemplateSample}
             onUploadThumbnail={uploadTemplateThumbnail}
             onToggleRecommended={toggleTemplateRecommended}
+            onSetPrice={
+              hasPermission("templates.approve") ? setTemplatePrice : undefined
+            }
             onEditTemplate={openTemplateCanvas}
             canvasOrders={canvasOrderOptions}
             canvasOrderBusy={canvasOrderBusy}
@@ -5294,6 +5380,7 @@ function App() {
         <TemplateCreatorModal
           onClose={() => setTemplateCreatorOpen(false)}
           onCreate={createTemplate}
+          canSetPrice={hasPermission("*")}
         />
       )}
       {toast && <Toast message={toast} />}
@@ -6317,6 +6404,10 @@ function TemplateJourneyPage({
   // QA TC-136: mode preview (Desktop / Mobile) pada halaman detail template.
   const [journeyDevice, setJourneyDevice] = useState<DeviceMode>("desktop");
   const previewShellRef = useRef<HTMLDivElement | null>(null);
+  const journeySections = useMemo(
+    () => hydrateSections(template.canvasSections || []),
+    [template.canvasSections],
+  );
   // Preview harus selalu mulai dari section pembuka. Container-nya overflow:auto
   // dan posisi scroll-nya bertahan saat preview dibuka ulang atau mode device
   // diganti, sehingga preview sebelumnya terbuka di tengah undangan.
@@ -6463,7 +6554,9 @@ function TemplateJourneyPage({
               <X size={18} />
             </button>
           </div>
-          {/* QA TC-137: mode Desktop memakai lebar penuh layar, bukan ukuran tablet. */}
+          {/* TC-216 menggantikan TC-137: mode Desktop selebar canvas desain
+              (DESKTOP_DESIGN_WIDTH), dengan ruang kosong di layar lebar —
+              bukan dibentangkan selebar layar. */}
           <DeviceContext value={journeyDevice}>
           <PreviewSurfaceContext value={true}>
           <div
@@ -6473,7 +6566,7 @@ function TemplateJourneyPage({
             {template.canvasSections?.length ? (
               <WeddingCanvas
                 page="pages"
-                sections={hydrateSections(template.canvasSections)}
+                sections={journeySections}
                 selectedTemplate={template}
                 greetings={[]}
                 addGreeting={() => undefined}
@@ -7313,23 +7406,7 @@ function TasksPage({
               ref={previewStageRef}
               className={`template-dialog-actual-preview live device-${previewDevice}`}
             >
-              {previewTemplate.canvasSections?.length ? (
-                <WeddingCanvas
-                  page="pages"
-                  sections={hydrateSections(previewTemplate.canvasSections)}
-                  selectedTemplate={previewTemplate}
-                  greetings={[]}
-                  addGreeting={() => undefined}
-                  guests={[]}
-                  addGuest={() => undefined}
-                />
-              ) : (
-                <WebsiteTemplatePreview
-                  template={previewTemplate}
-                  title={previewTemplate.name}
-                  sections={previewTemplate.canvasSections || []}
-                />
-              )}
+              <TemplateLivePreview template={previewTemplate} />
             </div>
             </PreviewSurfaceContext>
             </DeviceContext>
@@ -7593,76 +7670,123 @@ function Sidebar({
   const permissions = currentAccount?.permissions || [];
   const can = (permission: string) =>
     permissions.includes("*") || permissions.includes(permission);
-  const menuCandidates: [View, typeof LayoutDashboard, string, string][] = [
-    ["admin", LayoutDashboard, "Platform Overview", "*"],
+  // VN 7 (15 Okt) — urutan mengikuti seberapa sering menu dipakai:
+  //   1. Desain   : pekerjaan harian Web Designer (Templates & Approval naik
+  //                 tepat di bawah dashboard), plus menu customer;
+  //   2. Layanan  : CS & tiket;
+  //   3. Admin    : konfigurasi yang hanya terlihat Administrator.
+  // Setiap role hanya melihat menu yang izinnya ia punya, jadi urutan ini
+  // tidak menambah atau mengurangi menu siapa pun.
+  type MenuGroup = "design" | "service" | "admin" | "account";
+  const isAdminConfig = can("users.manage");
+  const menuCandidates: [
+    View,
+    typeof LayoutDashboard,
+    string,
+    string,
+    MenuGroup,
+  ][] = [
+    // --- 1. Desain ---------------------------------------------------------
+    ["admin", LayoutDashboard, "Platform Overview", "*", "design"],
     [
       "dashboard",
       LayoutDashboard,
       can("dashboard.editor") ? "Web Designer Dashboard" : "Wedding Dashboard",
       can("dashboard.editor") ? "dashboard.editor" : "dashboard.user",
+      "design",
     ],
-    // QA TC-175: dari sudut pandang customer istilahnya "order", bukan "project".
-    ["my-orders", PackageCheck, "My Order", "dashboard.user"],
-    // Dashboard customer: Add Canvas diganti pengelolaan tamu dan RSVP.
-    ["invitee-management", Users, "List Undangan", "dashboard.user"],
-    ["rsvp-confirmation", CheckCircle, "RSVP Confirmation", "dashboard.user"],
-    ["cs-dashboard", BarChart3, "CS Dashboard", "dashboard.cs"],
-    ["tasks", ClipboardList, "Tasks & Tickets", "tasks.view"],
-    // QA TC-168: "Client Assignment" dilebur ke Manage Canvas — assign dan
-    // kelola canvas customer kini satu alur. Menu ini tinggal "Users & Roles"
-    // untuk Administrator.
-    ["users", UserCog, "Users & Roles", "users.manage"],
-    ["roles", KeyRound, "Roles & Permissions", "roles.manage"],
     [
       "templates",
       Palette,
       can("templates.create") ? "Templates & Approval" : "Templates & Canvas",
       "templates.view",
+      "design",
     ],
     // QA TC-170 & TC-181: Canvas Editor bukan lagi menu mandiri untuk Admin
     // maupun Customer. Alurnya sekarang lewat Manage Canvas / Templates, jadi
     // menu ini hanya relevan bagi Web Designer yang mengerjakan order.
     ...(role === "Editor"
-      ? ([["editor", WandSparkles, "Canvas Editor", "canvas.manage"]] as [
-          View,
-          typeof LayoutDashboard,
-          string,
-          string,
-        ][])
+      ? ([
+          ["editor", WandSparkles, "Canvas Editor", "canvas.manage", "design"],
+        ] as [View, typeof LayoutDashboard, string, string, MenuGroup][])
       : []),
-
-    // Articles CMS dikelola Administrator; Web Designer dan Customer tidak
-    // perlu menu ini (QA TC-182) — artikel diakses dari landing page.
-    ...(role === "Admin"
-      ? ([["articles", BookOpen, "Articles CMS", "articles.manage"]] as [
-          View,
-          typeof LayoutDashboard,
-          string,
-          string,
-        ][])
-      : []),
+    ["sound-library", Music2, "Sound Library", "sounds.manage", "design"],
+    // QA TC-175: dari sudut pandang customer istilahnya "order", bukan "project".
+    ["my-orders", PackageCheck, "My Order", "dashboard.user", "design"],
+    // Dashboard customer: Add Canvas diganti pengelolaan tamu dan RSVP.
+    ["invitee-management", Users, "List Undangan", "dashboard.user", "design"],
+    ["rsvp-confirmation", CheckCircle, "RSVP Confirmation", "dashboard.user", "design"],
+    // Komisi milik Web Designer ada di kelompok kerjanya; versi Administrator
+    // (pengaturan share fee) adalah konfigurasi, jadi turun ke bawah.
     [
       "commissions",
       Wallet,
-      can("users.manage") ? "Komisi & Share Fee" : "Komisi Saya",
-      can("users.manage") ? "users.manage" : "templates.create",
+      isAdminConfig ? "Komisi & Share Fee" : "Komisi Saya",
+      isAdminConfig ? "users.manage" : "templates.create",
+      isAdminConfig ? "admin" : "design",
     ],
-    ["sound-library", Music2, "Sound Library", "sounds.manage"],
-    ["payment-settings", CreditCard, "Payment Methods", "settings.payment"],
-    ["orders", ReceiptText, "Orders & Revenue", "orders.view"],
-    ["audit-log", ShieldCheck, "Audit Trail", "*"],
+    // --- 2. Layanan --------------------------------------------------------
+    ["cs-dashboard", BarChart3, "CS Dashboard", "dashboard.cs", "service"],
+    ["tasks", ClipboardList, "Tasks & Tickets", "tasks.view", "service"],
     [
       "customer-service",
       MessageSquareText,
       "Support Inbox",
       "conversations.view",
+      "service",
     ],
-    ["help", CircleHelp, "Pusat Bantuan", ""],
-    ["settings", Settings, "Settings", ""],
+    ["orders", ReceiptText, "Orders & Revenue", "orders.view", "service"],
+    // --- 3. Admin ----------------------------------------------------------
+    // QA TC-168: "Client Assignment" dilebur ke Manage Canvas — assign dan
+    // kelola canvas customer kini satu alur. Menu ini tinggal "Users & Roles"
+    // untuk Administrator.
+    ["users", UserCog, "Users & Roles", "users.manage", "admin"],
+    ["roles", KeyRound, "Roles & Permissions", "roles.manage", "admin"],
+    // Articles CMS dikelola Administrator; Web Designer dan Customer tidak
+    // perlu menu ini (QA TC-182) — artikel diakses dari landing page.
+    ...(role === "Admin"
+      ? ([
+          ["articles", BookOpen, "Articles CMS", "articles.manage", "admin"],
+        ] as [View, typeof LayoutDashboard, string, string, MenuGroup][])
+      : []),
+    ["payment-settings", CreditCard, "Payment Methods", "settings.payment", "admin"],
+    ["audit-log", ShieldCheck, "Audit Trail", "*", "admin"],
+    // --- Akun --------------------------------------------------------------
+    ["help", CircleHelp, "Pusat Bantuan", "", "account"],
+    ["settings", Settings, "Settings", "", "account"],
   ];
-  const menus: [View, typeof LayoutDashboard, string][] = menuCandidates
-    .filter(([, , , permission]) => !permission || can(permission))
-    .map(([target, icon, label]) => [target, icon, label]);
+  const groupOrder: MenuGroup[] = ["design", "service", "admin", "account"];
+  const groupLabel: Record<MenuGroup, string> = {
+    design: "Desain",
+    service: "Layanan",
+    admin: "Administrasi",
+    account: "",
+  };
+  const allowed = menuCandidates.filter(
+    ([, , , permission]) => !permission || can(permission),
+  );
+  // Label kelompok hanya berguna bila menu terbagi lebih dari satu kelompok
+  // kerja; customer yang hanya punya menu "Desain" tidak perlu melihatnya.
+  const workGroups = new Set(
+    allowed.map(([, , , , group]) => group).filter((group) => group !== "account"),
+  );
+  const showGroupLabels = workGroups.size > 1;
+  const menus: [View, typeof LayoutDashboard, string, string | null][] =
+    groupOrder.flatMap((group) =>
+      allowed
+        .filter(([, , , , itemGroup]) => itemGroup === group)
+        .map(
+          ([target, icon, label], index) =>
+            [
+              target,
+              icon,
+              label,
+              showGroupLabels && index === 0 && groupLabel[group]
+                ? groupLabel[group]
+                : null,
+            ] as [View, typeof LayoutDashboard, string, string | null],
+        ),
+    );
   return (
     <aside className={`sidebar ${open ? "" : "hidden"}`}>
       <Brand />
@@ -7681,24 +7805,26 @@ function Sidebar({
                     ? "Support Desk"
                     : "Administrator Console")}
           </strong>
-          <span>
-            {currentAccount?.email || `${displayRole(role)} workspace`}
-          </span>
+          <span>{currentAccount?.email || displayRole(role)}</span>
         </div>
       </div>
       <nav>
-        {menus.map(([target, Icon, label]) => (
-          <button
-            className={view === target ? "active" : ""}
-            onClick={() => {
-              if (target === "editor") onResetEditor?.();
-              setView(target);
-            }}
-            key={target}
-          >
-            <Icon size={18} />
-            <span>{label}</span>
-          </button>
+        {menus.map(([target, Icon, label, groupHeading]) => (
+          <Fragment key={target}>
+            {groupHeading && (
+              <span className="sidebar-group-label">{groupHeading}</span>
+            )}
+            <button
+              className={view === target ? "active" : ""}
+              onClick={() => {
+                if (target === "editor") onResetEditor?.();
+                setView(target);
+              }}
+            >
+              <Icon size={18} />
+              <span>{label}</span>
+            </button>
+          </Fragment>
         ))}
       </nav>
       <div className="sidebar-bottom">
@@ -7754,9 +7880,9 @@ function Topbar({
         )}
       </button>
       <div className="topbar-right">
-        <div className="status-dot">
+        <div className="status-dot" title="Akun yang sedang masuk">
           <span />
-          ikrarku Workspace
+          {currentAccount?.email || displayRole(role)}
         </div>
         <button
           className="icon-btn topbar-chat"
@@ -7839,7 +7965,9 @@ function Dashboard({
   setSelectedCanvasId,
   setGuestsOpen,
   setPreviewOpen,
+  teamEdit = null,
 }: {
+  teamEdit?: { name: string; at: string } | null;
   setView: (view: View) => void;
   slug: string;
   siteTitle: string;
@@ -7936,6 +8064,21 @@ function Dashboard({
     );
   return (
     <div className="page dashboard-page">
+      {/* MoM A9 — customer tahu tim sedang membantu mengedit undangannya. */}
+      {teamEdit && (
+        <div className="team-edit-banner" role="status">
+          <Users size={16} />
+          <span>
+            <strong>{teamEdit.name}</strong> sedang membantu mengedit undangan
+            Anda · terakhir{" "}
+            {new Date(teamEdit.at).toLocaleString("id-ID", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+            . Ada yang ingin diubah? Balas lewat chat.
+          </span>
+        </div>
+      )}
       <div className="page-heading">
         <div>
           <div className="eyebrow">GOOD AFTERNOON</div>
@@ -8809,6 +8952,17 @@ function buildCustomerDesignGroups(
  */
 const MOBILE_PREVIEW_WIDTH = 390;
 
+/**
+ * TC-216 — lebar desain Desktop. Sama dengan batas atas `.canvas-frame.desktop`
+ * di App.css (`min(1050px, …)`), yaitu lebar terbesar yang pernah dilihat Web
+ * Designer saat menata. Preview dari landing & Templates memakai lebar ini;
+ * preview dari editor memakai lebar canvas yang sedang tampil.
+ */
+const DESKTOP_DESIGN_WIDTH = 1050;
+/** Lebar area kerja Desktop terakhir di editor (untuk Preview yang dibuka
+ *  dari mode Mobile, saat canvas Desktop tidak sedang terpasang). */
+let lastDesktopCanvasWidth = 0;
+
 const ThumbnailContext = createContext(false);
 /**
  * QA TC-159 — menandai bahwa canvas sedang dirender di dalam kotak preview
@@ -8821,6 +8975,84 @@ const ThumbnailContext = createContext(false);
  * ditempel pada kotak preview itu sendiri.
  */
 const PreviewSurfaceContext = createContext(false);
+
+/**
+ * Section yang dipakai sebagai gambar pratinjau sebuah design.
+ *
+ * Urutannya mengikuti apa yang dilihat tamu lebih dulu:
+ *   1. section yang memuat cover "Buka Undangan";
+ *   2. section pertama yang benar-benar punya isi di mode publik — aturan
+ *      yang sama dengan `hasVisibleFeatures` di WeddingCanvas, supaya yang
+ *      dipilih tidak dibuang lagi saat dirender;
+ *   3. sections[0] sebagai jalan terakhir.
+ *
+ * Bila Background global aktif dan section terpilih bukan Canvas 1,
+ * backdrop Canvas 1 digabungkan lebih dulu: section dirender sendirian di
+ * sini, jadi tanpa penggabungan itu ia kehilangan background-nya.
+ */
+function pickPreviewSection(
+  sections: CanvasSection[],
+): CanvasSection | undefined {
+  if (!sections.length) return undefined;
+  const hasCover = (section: CanvasSection) =>
+    section.columns.some((column) =>
+      column.features.some((feature) => feature.type === "invitation-cover"),
+    );
+  const hasVisibleContent = (section: CanvasSection) =>
+    Boolean(
+      section.backgroundUrl ||
+        section.backgroundVideoUrl ||
+        (section.backgroundLayers || []).some((layer) => layer.url) ||
+        (section.decorations || []).length,
+    ) ||
+    section.columns.some((column) =>
+      column.features.some(
+        (feature) =>
+          feature.type !== "invitation-cover" && feature.type !== "sound",
+      ),
+    );
+  const chosen =
+    sections.find(hasCover) || sections.find(hasVisibleContent) || sections[0];
+  const globalSource = sections[0].backgroundGlobal ? sections[0] : null;
+  return globalSource && chosen.id !== globalSource.id
+    ? applyGlobalBackground(chosen, globalSource)
+    : chosen;
+}
+
+/** QC #2 — "preview dari Templates & Approval terasa berat". Canvas penuh
+ *  (puluhan canvas, ribuan node) dulu dirender ulang setiap kali induknya
+ *  render: polling notifikasi/chat tiap 8–10 detik, mengetik feedback, dsb.,
+ *  dan hydrateSections() membuat array baru setiap kali sehingga tidak ada
+ *  yang bisa dilewati. Template yang dipratinjau disimpan di state saat
+ *  tombol Preview diklik, jadi identitasnya stabil: memo cukup. */
+const TemplateLivePreview = memo(function TemplateLivePreview({
+  template,
+}: {
+  template: Template;
+}) {
+  const sections = useMemo(
+    () => hydrateSections(template.canvasSections || []),
+    [template.canvasSections],
+  );
+  return template.canvasSections?.length ? (
+    <WeddingCanvas
+      page="pages"
+      sections={sections}
+      selectedTemplate={template}
+      greetings={[]}
+      addGreeting={noop}
+      guests={[]}
+      addGuest={noop}
+    />
+  ) : (
+    <WebsiteTemplatePreview
+      template={template}
+      title={template.name}
+      sections={template.canvasSections || []}
+    />
+  );
+});
+const noop = () => undefined;
 
 function WebsiteTemplatePreview({
   template,
@@ -8867,7 +9099,14 @@ function WebsiteTemplatePreview({
         Math.min(Math.round((contentHeight * width) / 800), maxViewportHeight),
       )
     : maxViewportHeight;
-  const section = sections[0];
+  // QC 15 Okt — "Preview masih blank". Dulu yang dirender selalu sections[0].
+  // Di mode publik WeddingCanvas membuang section yang tidak punya isi tampak
+  // (hanya sound/credit, tanpa backdrop sendiri), sehingga kartu berisi
+  // kotak krem kosong — warna latar viewport itu sendiri — padahal template
+  // punya 14 canvas berisi. Sekarang yang dipilih adalah yang memang akan
+  // dilihat tamu lebih dulu: cover bila ada, kalau tidak canvas pertama yang
+  // punya isi. Hanya satu section yang dirender, jadi biayanya tidak naik.
+  const section = pickPreviewSection(sections);
   const selected: Template = template || {
     id: "preview",
     name: title,
@@ -9125,6 +9364,7 @@ function Templates({
   onCaptureSample,
   onEditTemplate,
   onToggleRecommended,
+  onSetPrice,
   canvasOrders = [],
   onOpenCanvasOrder,
   canvasOrderBusy = false,
@@ -9155,6 +9395,7 @@ function Templates({
   onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
   onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
+  onSetPrice?: (templateId: string, price: number) => Promise<void>;
   canvasOrders?: CanvasOrderOption[];
   onOpenCanvasOrder?: (option: CanvasOrderOption) => void;
   canvasOrderBusy?: boolean;
@@ -9361,6 +9602,7 @@ function Templates({
           onCaptureSample={onCaptureSample}
           onEditTemplate={onEditTemplate}
           onToggleRecommended={onToggleRecommended}
+          onSetPrice={onSetPrice}
         />
       )}
       {/* QA TC-177: customer tidak lagi browse seluruh katalog dari sini —
@@ -9638,6 +9880,9 @@ type EditorProps = {
   saveSite: () => Promise<boolean>;
   editorMode: "site" | "template";
   managingCustomer?: boolean;
+  /** Nama akun yang sedang mengedit (MoM A3: tampilkan data orangnya,
+   *  bukan label generik "workspace"). */
+  editorName?: string;
   saved: boolean;
   setView: (view: View) => void;
   setPreviewOpen: (value: boolean) => void;
@@ -9673,6 +9918,7 @@ function Editor({
   saveSite,
   editorMode,
   managingCustomer = false,
+  editorName = "",
   saved,
   setView,
   setPreviewOpen,
@@ -9704,23 +9950,31 @@ function Editor({
   const [previewMode, setPreviewMode] = useState<"desktop" | "mobile">(
     "desktop",
   );
+  // Tata letak kolom (ala serein): di Desktop isi undangan adalah versi
+  // Mobile, jadi apa yang terlihat dan diedit di mode Desktop pun Mobile.
+  const desktopColumn = usesDesktopColumn(sections);
+  const editDevice: DeviceMode =
+    previewMode === "desktop" && desktopColumn ? "mobile" : previewMode;
   // Lebar kerja canvas ditampilkan pada chip mode supaya Web Designer tahu
   // persis pada lebar berapa desainnya sedang dilihat.
   const canvasFrameRef = useRef<HTMLDivElement | null>(null);
   const [canvasWidth, setCanvasWidth] = useState(0);
-  // Lebar saat Preview dibuka. Berbeda dari area kerja editor: pada mode
-  // Desktop `.preview-content` memakai width:100% sehingga selebar jendela,
-  // sementara area kerja editor hanya sisa ruang di antara dua panel.
+  // Lebar saat Preview dibuka. Sejak TC-216 sama dengan area kerja editor
+  // pada mode Desktop (dulu selebar jendela), dan 390 px pada mode Mobile.
   const [previewWidth, setPreviewWidth] = useState(0);
   useEffect(() => {
     const node = canvasFrameRef.current;
     if (!node) return;
     const read = () => {
       setCanvasWidth(Math.round(node.getBoundingClientRect().width));
+      if (previewMode === "desktop")
+        lastDesktopCanvasWidth = Math.round(node.getBoundingClientRect().width);
+      // TC-216 — preview Desktop kini selebar area kerja ini, bukan selebar
+      // jendela, jadi kedua angka di chip mode seharusnya sama.
       setPreviewWidth(
         previewMode === "mobile"
           ? MOBILE_PREVIEW_WIDTH
-          : document.documentElement.clientWidth,
+          : Math.round(node.getBoundingClientRect().width),
       );
     };
     read();
@@ -9775,6 +10029,12 @@ function Editor({
   const historyRef = useRef<CanvasSection[][]>([]);
   const lastHistoryAtRef = useRef(0);
   const futureRef = useRef<CanvasSection[][]>([]);
+  // TC-219 — riwayat diambil dari state TERBARU, bukan dari `sections` milik
+  // render saat handler dibuat. Handler yang tertangkap lebih awal (slider,
+  // drag, upload async) atau dua commit beruntun sebelum render ulang dulu
+  // menyimpan snapshot basi, sehingga undo melompat ke kondisi yang salah.
+  const sectionsRef = useRef(sections);
+  sectionsRef.current = sections;
   const savedBaselineRef = useRef<{
     sections: CanvasSection[];
     slug: string;
@@ -9797,10 +10057,12 @@ function Editor({
     setDirty(false);
     setAutosaveState("idle");
   };
-  // Undo history dibatasi 15 langkah. Sebelumnya 40 salinan penuh pohon section
-  // ditahan di memori dan setiap edit membuat satu structuredClone baru; pada
-  // canvas besar itu memblokir main thread sampai editor terasa freeze.
-  const HISTORY_LIMIT = 15;
+  // Batas undo. Dulu 40 lalu diturunkan ke 15 karena setiap event (puluhan
+  // per detik saat menggeser slider) membuat satu structuredClone dan editor
+  // freeze. Sejak clone digabung per gestur (HISTORY_COALESCE_MS) biayanya
+  // per langkah, bukan per event, jadi TC-219 menaikkannya ke 30 dan
+  // menampilkan jumlah langkah yang tersedia di tombol Undo.
+  const HISTORY_LIMIT = 30;
   // Perubahan beruntun dalam jendela ini dianggap satu gestur (satu entri undo).
   const HISTORY_COALESCE_MS = 450;
   const commitSections = (
@@ -9813,14 +10075,26 @@ function Editor({
       // structuredClone seluruh desain -> main thread tersendat dan editor
       // terasa "tiba-tiba berhenti berfungsi". Efek sampingnya dulu: satu
       // geseran slider menghabiskan ke-15 slot undo.
+      const previous = sectionsRef.current;
+      const next =
+        typeof updater === "function" ? updater(previous) : updater;
+      // Perubahan yang hasilnya sama persis tidak membuat entri undo.
+      if (next === previous) return;
       const now = Date.now();
-      if (now - lastHistoryAtRef.current > HISTORY_COALESCE_MS) {
-        historyRef.current.push(structuredClone(sections));
+      if (
+        now - lastHistoryAtRef.current > HISTORY_COALESCE_MS &&
+        JSON.stringify(next) !== JSON.stringify(previous)
+      ) {
+        historyRef.current.push(structuredClone(previous));
         while (historyRef.current.length > HISTORY_LIMIT)
           historyRef.current.shift();
+        futureRef.current = [];
       }
       lastHistoryAtRef.current = now;
-      futureRef.current = [];
+      sectionsRef.current = next;
+      setDirty(true);
+      setSectionsRaw(next);
+      return;
     }
     setDirty(true);
     setSectionsRaw(updater);
@@ -9828,7 +10102,8 @@ function Editor({
   const undo = () => {
     const previous = historyRef.current.pop();
     if (!previous) return;
-    futureRef.current.push(structuredClone(sections));
+    futureRef.current.push(structuredClone(sectionsRef.current));
+    sectionsRef.current = previous;
     setSectionsRaw(structuredClone(previous));
     // Edit berikutnya harus membuka entri undo baru, bukan menyatu dengan
     // gestur sebelum undo.
@@ -9838,7 +10113,8 @@ function Editor({
   const redo = () => {
     const next = futureRef.current.pop();
     if (!next) return;
-    historyRef.current.push(structuredClone(sections));
+    historyRef.current.push(structuredClone(sectionsRef.current));
+    sectionsRef.current = next;
     setSectionsRaw(structuredClone(next));
     lastHistoryAtRef.current = 0;
     setDirty(true);
@@ -9938,6 +10214,15 @@ function Editor({
   }, [dirty]);
   useEffect(() => {
     const handler = (event: KeyboardEvent) => {
+      // Saat mengetik di field/teks yang bisa diedit, Ctrl+Z milik browser
+      // (undo ketikan). Undo editor baru berlaku setelah fokus keluar.
+      const active = document.activeElement as HTMLElement | null;
+      if (
+        active &&
+        (active.isContentEditable ||
+          ["INPUT", "TEXTAREA", "SELECT"].includes(active.tagName))
+      )
+        return;
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
         event.preventDefault();
         if (event.shiftKey) redo();
@@ -10002,9 +10287,9 @@ function Editor({
   const selectedSection = useMemo(
     () =>
       rawSelectedSection
-        ? resolveSection(rawSelectedSection, previewMode)
+        ? resolveSection(rawSelectedSection, editDevice)
         : undefined,
-    [rawSelectedSection, previewMode],
+    [rawSelectedSection, editDevice],
   );
   const selectedColumn = useMemo(
     () =>
@@ -10020,8 +10305,8 @@ function Editor({
         .flatMap((section) => section.columns)
         .flatMap((column) => column.features)
         .find((feature) => feature.id === selectedFeatureId);
-    return raw ? resolveFeature(raw, previewMode) : undefined;
-  }, [sections, selectedColumn, selectedFeatureId, previewMode]);
+    return raw ? resolveFeature(raw, editDevice) : undefined;
+  }, [sections, selectedColumn, selectedFeatureId, editDevice]);
 
   const selectSection = (section: CanvasSection) => {
     setSelectedSectionId(section.id);
@@ -10055,7 +10340,7 @@ function Editor({
     commitSections((previous) =>
       previous.map((section) =>
         section.id === sectionId
-          ? applyDevicePatch(section, patch, previewMode)
+          ? applyDevicePatch(section, patch, editDevice)
           : section,
       ),
     );
@@ -10074,10 +10359,22 @@ function Editor({
     producePatch: (current: CanvasSection) => Partial<CanvasSection>,
   ) => {
     setDirty(true);
+    // TC-214 — ornamen & layer dulu SELALU ditulis ke nilai dasar section,
+    // sehingga merapikan ornamen di Mobile langsung merusak Desktop yang sudah
+    // rapi. Kini keduanya mengikuti aturan yang sama dengan teks & background:
+    // `produce` menerima tampilan device yang sedang diedit, dan hasilnya
+    // masuk ke slot device itu. Edit pertama di Mobile menyalin daftarnya ke
+    // section.mobile; sejak itu keduanya berdiri sendiri, dan "Reset Mobile"
+    // menyamakannya kembali dengan Desktop.
+    const device = editDevice;
     commitSections((previous) =>
       previous.map((section) =>
         section.id === sectionId
-          ? { ...section, ...producePatch(section) }
+          ? applyDevicePatch(
+              section,
+              producePatch(resolveSection(section, device)),
+              device,
+            )
           : section,
       ),
     );
@@ -10126,11 +10423,32 @@ function Editor({
         ...section,
         columns: section.columns.map((column) => ({
           ...column,
-          features: column.features.map((feature) =>
-            feature.id === featureId
-              ? applyDevicePatch(feature, patch, previewMode)
-              : feature,
-          ),
+          features: column.features.map((feature) => {
+            if (feature.id !== featureId) return feature;
+            // TC-214 — "Sembunyikan di Desktop/Mobile" menentukan di device
+            // MANA fitur muncul, jadi nilainya harus dibaca kedua device.
+            // Dulu ikut masuk slot device yang aktif: dicentang dari mode
+            // Mobile, nilainya tersimpan di feature.mobile, padahal Desktop
+            // membaca nilai dasar — toggle itu tidak pernah berefek.
+            const { hideDesktop, hideMobile, ...rest } = patch;
+            const shared: Partial<Feature> = {};
+            if (hideDesktop !== undefined) shared.hideDesktop = hideDesktop;
+            if (hideMobile !== undefined) shared.hideMobile = hideMobile;
+            // Musik juga satu untuk seluruh undangan. Pemutar membaca nilai
+            // dasar, jadi lagu yang dipilih dari mode Mobile dulu tersimpan
+            // di slot Mobile dan tidak pernah terdengar.
+            const perDevice: Partial<Feature> = { ...rest };
+            if (feature.type === "sound" || feature.type === "credit")
+              for (const key of SHARED_SOUND_KEYS)
+                if (key in perDevice) {
+                  (shared as Record<string, unknown>)[key] = perDevice[key];
+                  delete perDevice[key];
+                }
+            const withShared = { ...feature, ...shared };
+            return Object.keys(perDevice).length
+              ? applyDevicePatch(withShared, perDevice, editDevice)
+              : withShared;
+          }),
         })),
       })),
     );
@@ -10389,7 +10707,15 @@ function Editor({
         : (section.columns.find((item) => item.id === columnId) ??
           section.columns[0]);
     if (!column) return;
-    const feature = makeFeature(type);
+    // TC-214 — fitur yang ditambahkan saat merapikan Mobile dulu langsung
+    // muncul juga di Desktop yang sudah rapi. Struktur canvas tetap satu
+    // (keputusan 15 Okt), tetapi fitur baru dari mode Mobile kini lahir
+    // tersembunyi di Desktop. Bisa dimunculkan dari tab Style kapan saja.
+    // Cover tidak ikut: tamu di semua device harus melewatinya.
+    const addedFromMobile = previewMode === "mobile" && type !== "invitation-cover";
+    const feature = addedFromMobile
+      ? { ...makeFeature(type), hideDesktop: true }
+      : makeFeature(type);
     setDirty(true);
     commitSections((previous) =>
       previous.map((item) =>
@@ -10414,6 +10740,10 @@ function Editor({
     selectFeature(section.id, column.id, feature.id);
     if (type === "invitation-cover" && requestedSection.id !== firstSection.id)
       flash("Buka Undangan otomatis ditempatkan pada Canvas paling awal.");
+    else if (addedFromMobile)
+      flash(
+        "Ditambahkan khusus Mobile — Desktop tidak berubah. Munculkan di Desktop lewat tab Style → Sembunyikan di desktop.",
+      );
     setInspectorTab("content");
     window.setTimeout(
       () =>
@@ -10540,6 +10870,7 @@ function Editor({
   ) => {
     if (!file || !selectedFeature) return;
     const limit = type === "image" ? 1024 * 1024 : 5 * 1024 * 1024;
+    if (type === "image") file = await shrinkImageToLimit(file, limit);
     if (file.size > limit) {
       flash(
         `${type === "image" ? "Image" : "Video"} melebihi batas ${type === "image" ? "1 MB" : "5 MB"}.`,
@@ -10578,6 +10909,7 @@ function Editor({
       flash("Background harus berupa image.");
       return;
     }
+    file = await shrinkImageToLimit(file, 2 * 1024 * 1024);
     if (file.size > 2 * 1024 * 1024) {
       flash("Background image maksimal 2 MB.");
       return;
@@ -10597,7 +10929,14 @@ function Editor({
   };
 
   const uploadSoundMedia = async (file: File | undefined) => {
-    if (!file || !selectedFeature || selectedFeature.type !== "sound") return;
+    // Tombol Upload Sound tampil di Sound DAN Credit (TC-165), tetapi dulu
+    // handler ini menolak Credit tanpa pesan — tombolnya mati diam-diam.
+    if (
+      !file ||
+      !selectedFeature ||
+      (selectedFeature.type !== "sound" && selectedFeature.type !== "credit")
+    )
+      return;
     const allowed =
       file.type.startsWith("audio/") ||
       file.type.startsWith("video/") ||
@@ -10619,6 +10958,11 @@ function Editor({
         mediaUrl: saved.url,
         mediaName: saved.name,
         soundPreset: "custom-upload",
+        ...(selectedFeature.type === "credit"
+          ? {
+              creditSongTitle: saved.name.replace(/\.[a-z0-9]+$/i, ""),
+            }
+          : {}),
       });
       flash("Sound berhasil disimpan ke server.");
     } catch (error) {
@@ -10628,7 +10972,10 @@ function Editor({
 
   const uploadGallery = async (files: FileList | null) => {
     if (!files || !selectedFeature) return;
-    const validFiles = Array.from(files).filter(
+    const prepared = await Promise.all(
+      Array.from(files).map((file) => shrinkImageToLimit(file, 2 * 1024 * 1024)),
+    );
+    const validFiles = prepared.filter(
       (file) => file.type.startsWith("image/") && file.size <= 2 * 1024 * 1024,
     );
     if (validFiles.length !== files.length)
@@ -10662,6 +11009,7 @@ function Editor({
       flash("Gambar layer harus berupa image.");
       return null;
     }
+    file = await shrinkImageToLimit(file, 2 * 1024 * 1024);
     if (file.size > 2 * 1024 * 1024) {
       flash("Gambar layer maksimal 2 MB.");
       return null;
@@ -10685,6 +11033,7 @@ function Editor({
       return;
     }
     const limit = isVideo ? 10 * 1024 * 1024 : 4 * 1024 * 1024;
+    if (!isVideo) file = await shrinkImageToLimit(file, limit);
     if (file.size > limit) {
       flash(
         isVideo
@@ -10869,8 +11218,11 @@ function Editor({
               <span>
                 <span className="green-dot" />{" "}
                 {editorMode === "template"
-                  ? "Template workspace · no public URL"
-                  : "Website workspace"}
+                  ? "Template"
+                  : managingCustomer
+                    ? "Website customer"
+                    : "Website"}
+                {editorName ? ` · diedit oleh ${editorName}` : ""}
               </span>
             </div>
           </div>
@@ -10892,15 +11244,22 @@ function Editor({
             <div className="history-actions">
               <button
                 className="icon-btn"
-                title="Undo (Ctrl/Cmd+Z)"
+                title={`Undo (Ctrl/Cmd+Z) · ${historyRef.current.length} langkah tersedia, maksimal ${HISTORY_LIMIT}`}
+                aria-label="Undo"
                 disabled={!historyRef.current.length}
                 onClick={undo}
               >
                 <ChevronLeft size={17} />
+                {historyRef.current.length > 0 && (
+                  <span className="history-count">
+                    {historyRef.current.length}
+                  </span>
+                )}
               </button>
               <button
                 className="icon-btn"
-                title="Redo (Ctrl/Cmd+Y)"
+                title={`Redo (Ctrl/Cmd+Y) · ${futureRef.current.length} langkah`}
+                aria-label="Redo"
                 disabled={!futureRef.current.length}
                 onClick={redo}
               >
@@ -11148,31 +11507,42 @@ function Editor({
                 <div>
                   <ImageIcon size={16} />
                   <span>
-                    <strong>Background global</strong>
+                    {/* TC-197 — dulu "Background global": gambar Canvas 1
+                        dilukis ulang di tiap canvas dan dicoba dikunci dengan
+                        background-attachment:fixed, yang tidak bekerja di
+                        preview maupun di Safari iOS. Kini benar-benar satu
+                        lapisan diam di belakang seluruh undangan. */}
+                    <strong>Background tetap</strong>
                     <small>
-                      Aktifkan apabila semua canvas memakai background Canvas 1.
-                      Matikan untuk mengatur background sendiri setiap canvas.
+                      {sections[0].backgroundGlobal
+                        ? "Aktif: background Canvas 1 diam di belakang seluruh undangan; isi setiap canvas bergulir di atasnya."
+                        : "Mati: setiap canvas punya background sendiri dan ikut bergulir. Aktifkan untuk satu background diam di belakang seluruh undangan."}
                     </small>
                   </span>
                 </div>
                 <button
                   className={`toggle ${sections[0].backgroundGlobal ? "on" : ""}`}
+                  aria-pressed={Boolean(sections[0].backgroundGlobal)}
+                  aria-label="Background tetap"
                   onClick={() => {
                     const next = !sections[0].backgroundGlobal;
-                    // backgroundGlobal struktural (berlaku ke semua canvas),
-                    // tapi backgroundScrollType murni gaya tampilan -> harus
-                    // lewat jalur device-aware agar Mobile tidak ikut Desktop.
+                    // Struktural: berlaku untuk semua canvas dan kedua device.
                     updateSectionShared(sections[0].id, {
                       backgroundGlobal: next,
-                    });
-                    updateSection(sections[0].id, {
-                      backgroundScrollType: next ? "parallax" : "section",
                     });
                   }}
                 >
                   <i />
                 </button>
               </div>
+            )}
+            {sections[0] && (
+              <DesktopLayoutPanel
+                first={sections[0]}
+                update={(patch) => updateSectionShared(sections[0].id, patch)}
+                flash={flash}
+                uploadToServer={uploadToServer}
+              />
             )}
             <div className="page-settings">
               <strong>Site Pages</strong>
@@ -11284,14 +11654,15 @@ function Editor({
             </div>
             <div className="inspector-scroll">
               {/* QA TC-112: penanda bahwa perubahan hanya berlaku untuk mode aktif. */}
-              {previewMode === "mobile" && (selectedFeature || selectedSection) && (
+              {editDevice === "mobile" && (selectedFeature || selectedSection) && (
                 <div className="device-scope-banner">
                   <Smartphone size={15} />
                   <div>
                     <strong>Mengedit tampilan Mobile</strong>
                     <span>
-                      Perubahan di sini hanya berlaku untuk Mobile. Tampilan
-                      Desktop tidak ikut berubah.
+                      {previewMode === "desktop"
+                        ? "Tata letak kolom aktif: di Desktop isi undangan memakai versi Mobile, jadi perubahan di sini mengubah Mobile."
+                        : "Perubahan di sini hanya berlaku untuk Mobile. Tampilan Desktop tidak ikut berubah."}
                     </span>
                   </div>
                   <button
@@ -11310,7 +11681,7 @@ function Editor({
                 <FeatureInspector
                   feature={selectedFeature}
                   tab={inspectorTab}
-                  activeDevice={previewMode}
+                  activeDevice={editDevice}
                   update={(patch) => updateFeature(selectedFeature.id, patch)}
                   addFormField={addFormField}
                   imageInput={imageInput}
@@ -11562,6 +11933,19 @@ function FeatureInspector({
     "sound",
     "icon",
   ];
+  // QA 15 Okt — fitur yang menampilkan judul & teks pendukung tetapi tidak
+  // termasuk textTypes (yang juga mengatur editor di tab Content) dulu tidak
+  // mendapat panel Typography, sehingga ukuran header & supporting text-nya
+  // terkunci di bawaan. Dipisah dari textTypes supaya tab Content tidak
+  // mendapat editor judul ganda (Credit & Love Story punya editornya sendiri).
+  const typographyTypes: FeatureType[] = [
+    ...textTypes,
+    "image",
+    "video",
+    "gallery",
+    "credit",
+    "love-story",
+  ];
   const objectAlign =
     feature.objectAlign ||
     (feature.type === "invitation-cover" ? "center" : "stretch");
@@ -11741,6 +12125,7 @@ function FeatureInspector({
               ref={imageInput}
               hidden
               type="file"
+              onClick={resetFileInput}
               accept="image/*"
               onChange={(event) =>
                 void uploadSingleMedia(event.target.files?.[0], "image")
@@ -11771,6 +12156,7 @@ function FeatureInspector({
               ref={videoInput}
               hidden
               type="file"
+              onClick={resetFileInput}
               accept="video/*"
               onChange={(event) =>
                 void uploadSingleMedia(event.target.files?.[0], "video")
@@ -11802,6 +12188,7 @@ function FeatureInspector({
               hidden
               multiple
               type="file"
+              onClick={resetFileInput}
               accept="image/*"
               onChange={(event) => void uploadGallery(event.target.files)}
             />
@@ -11818,27 +12205,127 @@ function FeatureInspector({
             <div className="gallery-counter">
               {feature.galleryUrls?.length || 0} image tersedia
             </div>
+            {/* QA 15 Okt — layout selain grid memotong gambar. */}
+            <div className="setting-row compact">
+              <div>
+                <ImageIcon size={16} />
+                <span>
+                  <strong>Tampilkan gambar utuh</strong>
+                  <small>
+                    Gambar tidak dipotong; sisa ruang dibiarkan kosong. Matikan
+                    untuk memenuhi kotak lalu pilih bagian yang tampil per
+                    gambar di bawah.
+                  </small>
+                </span>
+              </div>
+              <button
+                className={`toggle ${feature.galleryFit === "contain" ? "on" : ""}`}
+                aria-pressed={feature.galleryFit === "contain"}
+                aria-label="Tampilkan gambar utuh"
+                onClick={() =>
+                  update({
+                    galleryFit:
+                      feature.galleryFit === "contain" ? "cover" : "contain",
+                  })
+                }
+              >
+                <i />
+              </button>
+            </div>
             <div className="gallery-media-manager">
-              {(feature.galleryUrls || []).map((url, index) => (
-                <div key={`${url}-${index}`} className="gallery-media-item">
-                  <img src={assetUrl(url)} alt={`Gallery ${index + 1}`} />
-                  <span>Image {index + 1}</span>
-                  <button
-                    onClick={() =>
-                      update({
-                        galleryUrls: feature.galleryUrls?.filter(
-                          (_, itemIndex) => itemIndex !== index,
-                        ),
-                        galleryKeys: feature.galleryKeys?.filter(
-                          (_, itemIndex) => itemIndex !== index,
-                        ),
-                      })
-                    }
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
+              {(feature.galleryUrls || []).map((url, index) => {
+                const offset = feature.galleryOffsets?.[index] || {
+                  x: 50,
+                  y: 50,
+                };
+                // Posisi per gambar sejajar dengan galleryUrls. Array diisi
+                // sampai indeks ini supaya gambar sebelumnya tetap 50/50.
+                const setOffset = (x: number, y: number) => {
+                  const next = (feature.galleryUrls || []).map(
+                    (_, itemIndex) =>
+                      feature.galleryOffsets?.[itemIndex] || { x: 50, y: 50 },
+                  );
+                  next[index] = { x, y };
+                  update({ galleryOffsets: next });
+                };
+                return (
+                  <div key={`${url}-${index}`} className="gallery-media-entry">
+                    <div className="gallery-media-item">
+                      <img
+                        src={assetUrl(url)}
+                        alt={`Gallery ${index + 1}`}
+                        style={{ objectPosition: `${offset.x}% ${offset.y}%` }}
+                      />
+                      <span>Image {index + 1}</span>
+                      <button
+                        title="Hapus gambar"
+                        onClick={() =>
+                          update({
+                            galleryUrls: feature.galleryUrls?.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                            galleryKeys: feature.galleryKeys?.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                            // Posisi ikut dihapus, kalau tidak gambar
+                            // sesudahnya mewarisi posisi gambar ini.
+                            galleryOffsets: feature.galleryOffsets?.filter(
+                              (_, itemIndex) => itemIndex !== index,
+                            ),
+                          })
+                        }
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
+                    {feature.galleryFit !== "contain" && (
+                      <details className="gallery-focus">
+                        <summary>
+                          Atur bagian yang tampil · {offset.x}% / {offset.y}%
+                        </summary>
+                        <LayerOffsetPad
+                          previewUrl={url}
+                          size="cover"
+                          repeat="no-repeat"
+                          offsetX={offset.x}
+                          offsetY={offset.y}
+                          onChange={(x, y) => setOffset(x, y)}
+                        />
+                        <div className="two-inputs">
+                          <label className="range-field">
+                            <span className="range-head">
+                              Geser X<b>{offset.x}%</b>
+                            </span>
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={offset.x}
+                              onChange={(event) =>
+                                setOffset(Number(event.target.value), offset.y)
+                              }
+                            />
+                          </label>
+                          <label className="range-field">
+                            <span className="range-head">
+                              Geser Y<b>{offset.y}%</b>
+                            </span>
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              value={offset.y}
+                              onChange={(event) =>
+                                setOffset(offset.x, Number(event.target.value))
+                              }
+                            />
+                          </label>
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
@@ -11848,6 +12335,7 @@ function FeatureInspector({
               ref={coverBackgroundInput}
               hidden
               type="file"
+              onClick={resetFileInput}
               accept="image/*"
               onChange={(event) =>
                 void uploadFeatureBackground(event.target.files?.[0])
@@ -12072,8 +12560,14 @@ function FeatureInspector({
                     mediaKey: item.mediaKey,
                     mediaUrl: item.mediaUrl,
                     mediaName: item.fileName,
-                    title: item.name,
-                    body: item.description,
+                    // Pada Credit, title & body adalah ucapan terima kasih yang
+                    // ditulis Web Designer; judul lagu punya tempatnya sendiri
+                    // (creditSongTitle). Dulu keduanya ditimpa nama & deskripsi
+                    // lagu setiap kali musik dipilih. Feature Sound lama memang
+                    // menampilkan judul lagu di title/body, jadi tetap begitu.
+                    ...(feature.type === "credit"
+                      ? { creditSongTitle: item.name }
+                      : { title: item.name, body: item.description }),
                   });
                 }}
               >
@@ -12091,6 +12585,7 @@ function FeatureInspector({
               ref={soundInput}
               hidden
               type="file"
+              onClick={resetFileInput}
               accept="audio/*,video/mp4,.mp3,.m4a,.wav,.ogg,.aac,.mp4"
               onChange={(event) =>
                 void uploadSoundMedia(event.target.files?.[0])
@@ -12118,7 +12613,11 @@ function FeatureInspector({
                       mediaName: undefined,
                       soundCatalogId: "sound-romantic-piano",
                       soundPreset: "romantic-piano",
-                      body: "Romantic Piano",
+                      // Sama seperti pemilihan katalog: jangan sentuh ucapan
+                      // pada Credit.
+                      ...(feature.type === "credit"
+                        ? { creditSongTitle: "Romantic Piano" }
+                        : { body: "Romantic Piano" }),
                     })
                   }
                 >
@@ -12268,16 +12767,6 @@ function FeatureInspector({
                 placeholder="https://maps.google.com/..."
               />
             </label>
-            <label>
-              Label tombol lokasi
-              <input
-                value={feature.eventButtonLabel || ""}
-                onChange={(event) =>
-                  update({ eventButtonLabel: event.target.value })
-                }
-                placeholder="Lihat Lokasi"
-              />
-            </label>
           </>
         )}
         {feature.type === "gift" && (
@@ -12317,6 +12806,9 @@ function FeatureInspector({
         {feature.type === "location" && (
           <MapButtonEditor feature={feature} update={update} />
         )}
+        {feature.type === "event" && (
+          <MapButtonEditor feature={feature} update={update} variant="event" />
+        )}
         <ExtraTextEditor feature={feature} update={update} />
       </div>
     );
@@ -12348,7 +12840,7 @@ function FeatureInspector({
             feature.type === "invitation-cover" && Boolean(feature.mediaUrl)
           }
         />
-        {textTypes.includes(feature.type) && (
+        {typographyTypes.includes(feature.type) && (
           <>
             <label>
               Font family
@@ -13658,6 +14150,7 @@ function InviteeManagementPage({
           ref={csvRef}
           hidden
           type="file"
+          onClick={resetFileInput}
           accept=".csv,text/csv"
           onChange={(event) => void importCsv(event.target.files?.[0])}
         />
@@ -14001,7 +14494,7 @@ function SectionDecorationEditor({
   return (
     <div className="decoration-editor">
       <div className="group-heading">
-        <strong>Ornamen Pojok</strong>
+        <strong>Ornamen</strong>
         <button
           onClick={() =>
             commit((current) => [
@@ -14023,22 +14516,46 @@ function SectionDecorationEditor({
         </button>
       </div>
       <div className="layout-help">
-        Ornamen ditempel di pojok section dan bergerak terus-menerus. Cocok untuk
-        bunga, ranting, atau kilau di sudut undangan.
+        Ornamen ditempel di pojok atau di tengah sisi section dan bergerak
+        terus-menerus. Posisinya tetap menempel ke titik tambat itu berapa pun
+        ukurannya; gunakan <strong>Geser X/Y</strong> untuk menggesernya sedikit.
       </div>
       {items.map((item, index) => (
         <div className="extra-text-row" key={item.id}>
           <div className="form-spec-head">
             <span>Ornamen {index + 1}</span>
-            <button
-              onClick={() =>
-                commit((current) =>
-                  current.filter((value) => value.id !== item.id),
-                )
-              }
-            >
-              <Trash2 size={12} />
-            </button>
+            <div className="decor-head-actions">
+              {/* TC-209 — duplikat: gambar & seluruh pengaturannya ikut, jadi
+                  Web Designer tidak perlu mengunggah ulang untuk pojok lain. */}
+              <button
+                title="Duplikat ornamen ini"
+                aria-label={`Duplikat ornamen ${index + 1}`}
+                onClick={() =>
+                  commit((current) => {
+                    const at = current.findIndex((value) => value.id === item.id);
+                    const copy = { ...current[at], id: uid("decor") };
+                    return [
+                      ...current.slice(0, at + 1),
+                      copy,
+                      ...current.slice(at + 1),
+                    ];
+                  })
+                }
+              >
+                <Copy size={12} />
+              </button>
+              <button
+                title="Hapus ornamen ini"
+                aria-label={`Hapus ornamen ${index + 1}`}
+                onClick={() =>
+                  commit((current) =>
+                    current.filter((value) => value.id !== item.id),
+                  )
+                }
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
           </div>
           <div className="decor-preview" style={{ color: item.color }}>
             {item.imageUrl ? (
@@ -14088,17 +14605,31 @@ function SectionDecorationEditor({
               </select>
             </label>
             <label>
-              Pojok
+              Posisi
               <select
                 value={item.corner}
                 onChange={(event) =>
-                  patch(item.id, { corner: event.target.value as DecorCorner })
+                  patch(item.id, {
+                    corner: event.target.value as DecorCorner,
+                    // Geseran lama mengacu ke titik tambat lama; dibawa ke
+                    // titik tambat baru hasilnya terasa acak.
+                    offsetX: 0,
+                    offsetY: 0,
+                  })
                 }
               >
-                <option value="top-left">Kiri atas</option>
-                <option value="top-right">Kanan atas</option>
-                <option value="bottom-left">Kiri bawah</option>
-                <option value="bottom-right">Kanan bawah</option>
+                <optgroup label="Pojok">
+                  <option value="top-left">Kiri atas</option>
+                  <option value="top-right">Kanan atas</option>
+                  <option value="bottom-left">Kiri bawah</option>
+                  <option value="bottom-right">Kanan bawah</option>
+                </optgroup>
+                <optgroup label="Tengah sisi">
+                  <option value="top-center">Atas tengah</option>
+                  <option value="bottom-center">Bawah tengah</option>
+                  <option value="middle-left">Kiri tengah</option>
+                  <option value="middle-right">Kanan tengah</option>
+                </optgroup>
               </select>
             </label>
           </div>
@@ -14158,6 +14689,41 @@ function SectionDecorationEditor({
               </select>
             </label>
           </div>
+          {/* TC-206 — ornamen tidak lagi terkunci di titik tambatnya. */}
+          <div className="two-inputs">
+            <label className="range-field">
+              <span className="range-head">
+                Geser X<b>{item.offsetX ?? 0}px</b>
+              </span>
+              <input
+                type="range"
+                min="-200"
+                max="200"
+                step="1"
+                value={item.offsetX ?? 0}
+                onChange={(event) =>
+                  patch(item.id, { offsetX: Number(event.target.value) })
+                }
+                onDoubleClick={() => patch(item.id, { offsetX: 0 })}
+              />
+            </label>
+            <label className="range-field">
+              <span className="range-head">
+                Geser Y<b>{item.offsetY ?? 0}px</b>
+              </span>
+              <input
+                type="range"
+                min="-200"
+                max="200"
+                step="1"
+                value={item.offsetY ?? 0}
+                onChange={(event) =>
+                  patch(item.id, { offsetY: Number(event.target.value) })
+                }
+                onDoubleClick={() => patch(item.id, { offsetY: 0 })}
+              />
+            </label>
+          </div>
           {/* TC-186 — ornamen dekoratif perlu bisa diputar mengikuti sudut
               layout, bukan hanya dicerminkan. */}
           <label className="range-field">
@@ -14209,6 +14775,107 @@ function SectionDecorationEditor({
 
 // QA TC-146 — mode background global: seluruh canvas memakai background canvas
 // pertama, sehingga Web Designer tidak perlu upload ulang tiap menambah canvas.
+/**
+ * TC-197 — section dalam mode Background tetap: background bersama dilukis
+ * oleh FixedBackdrop, jadi section melepas latar & gambar utamanya. Layer dan
+ * ornamen miliknya sendiri tetap, kecuali milik Canvas 1 — itu sudah menjadi
+ * bagian backdrop dan tidak boleh tampil dua kali.
+ */
+function withoutSharedBackdrop(
+  section: CanvasSection,
+  isSource: boolean,
+): CanvasSection {
+  return {
+    ...section,
+    backgroundColor: "transparent",
+    backgroundGradientEnabled: false,
+    backgroundUrl: undefined,
+    backgroundVideoUrl: undefined,
+    backgroundFixed: false,
+    backgroundLayers: isSource ? [] : section.backgroundLayers,
+  };
+}
+
+/** Satu lapisan background diam untuk seluruh undangan (TC-197). */
+function FixedBackdrop({
+  source,
+  viewportHeight,
+}: {
+  source: CanvasSection;
+  viewportHeight: number;
+}) {
+  const filter = getBackgroundFilter(source.backgroundEffect);
+  return (
+    <div
+      className="site-fixed-backdrop"
+      aria-hidden
+      style={
+        {
+          background: getGradientBackground(
+            source.backgroundGradientEnabled,
+            source.backgroundGradientFrom,
+            source.backgroundGradientTo,
+            source.backgroundGradientAngle,
+            source.backgroundColor,
+          ),
+          ...(viewportHeight
+            ? { "--site-viewport-h": `${viewportHeight}px` }
+            : {}),
+        } as React.CSSProperties
+      }
+    >
+      <div
+        className={`background-layer ${getBackgroundMotionClass(source.backgroundMotion)}`}
+        style={{
+          backgroundImage: source.backgroundUrl
+            ? `url(${assetUrl(source.backgroundUrl)})`
+            : undefined,
+          backgroundPosition: source.backgroundPosition,
+          backgroundRepeat: source.backgroundRepeat,
+          backgroundSize:
+            source.backgroundSize ||
+            (source.backgroundRepeat === "no-repeat" ? "cover" : "auto"),
+          filter,
+        }}
+      />
+      {source.backgroundVideoUrl && (
+        <video
+          className="background-video-layer"
+          src={assetUrl(source.backgroundVideoUrl)}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          style={{ filter }}
+        />
+      )}
+      {(source.backgroundLayers || []).map((layer, layerIndex) => (
+        <div
+          key={layer.id}
+          className="background-extra-layer"
+          style={{
+            backgroundImage: layer.url
+              ? `url(${assetUrl(layer.url)})`
+              : undefined,
+            backgroundSize: layer.size,
+            backgroundPosition: `${layer.offsetX ?? 50}% ${layer.offsetY ?? 50}%`,
+            backgroundRepeat: layer.repeat,
+            opacity: (layer.opacity ?? 100) / 100,
+            mixBlendMode:
+              (layer.blend as React.CSSProperties["mixBlendMode"]) || "normal",
+            transform:
+              layer.scale && layer.scale !== 100
+                ? `scale(${layer.scale / 100})`
+                : undefined,
+            zIndex: Math.min(1 + layerIndex, 3),
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 function applyGlobalBackground(
   section: CanvasSection,
   source: CanvasSection | null,
@@ -14514,9 +15181,9 @@ function BackgroundLayerEditor({
           ini dan digambar DI ATAS background global Canvas 1. */}
       {locked && (
         <div className="layout-help is-locked">
-          <strong>Background Utama canvas ini.</strong> Background global
-          Canvas 1 tetap menjadi dasarnya; layer yang Anda tambahkan di sini
-          digambar di atasnya dan hanya berlaku untuk canvas ini.
+          <strong>Layer milik canvas ini.</strong> Background tetap Canvas 1
+          diam di belakang; layer yang Anda tambahkan di sini digambar di
+          atasnya, hanya untuk canvas ini, dan ikut bergulir bersama isinya.
         </div>
       )}
       <div className="layout-help">
@@ -14859,11 +15526,12 @@ function SectionInspector({
           <div className="layout-help background-locked-note">
             <Anchor size={14} />
             <span>
-              <strong>Background global sedang aktif.</strong> Canvas ini
-              memakai background dari <strong>Canvas 1</strong>. Untuk
-              mengubahnya, buka Canvas 1 — atau matikan Background global pada
-              panel Page Structure bila setiap canvas ingin punya background
-              sendiri.
+              <strong>Background tetap sedang aktif.</strong> Canvas ini
+              bergulir di atas background <strong>Canvas 1</strong> yang diam.
+              Untuk mengubahnya, buka Canvas 1 — atau matikan Background tetap
+              pada panel Page Structure bila setiap canvas ingin punya
+              background sendiri. Layer dan ornamen di bawah tetap milik canvas
+              ini dan ikut bergulir.
             </span>
           </div>
         ) : (
@@ -15148,7 +15816,255 @@ function SectionInspector({
   );
 }
 
-function WeddingCanvas({
+type WeddingCanvasProps = Parameters<typeof WeddingCanvasBody>[0];
+
+/** True bila undangan memakai tata letak kolom di desktop. */
+function usesDesktopColumn(sections: CanvasSection[]) {
+  return sections[0]?.desktopLayout === "column";
+}
+const DESKTOP_COLUMN_DEFAULT = 430;
+/** Background di luar kolom: yang diunggah khusus untuk itu, atau — bila
+ *  belum ada — background Canvas 1 versi Desktop. */
+function desktopColumnBackdrop(first: CanvasSection): CanvasSection {
+  if (first.desktopBackdropUrl || first.desktopBackdropColor)
+    return {
+      ...first,
+      backgroundUrl: first.desktopBackdropUrl,
+      backgroundVideoUrl: undefined,
+      backgroundColor: first.desktopBackdropColor || "#0f1f1a",
+      backgroundGradientEnabled: false,
+      backgroundSize: "cover",
+      backgroundPosition: "center",
+      backgroundRepeat: "no-repeat",
+      backgroundMotion: "none",
+      backgroundEffect: "none",
+      backgroundLayers: [],
+    };
+  return resolveSection(first, "desktop");
+}
+
+/** Tata letak desktop ala serein. Isi undangan dirender sebagai Mobile di
+ *  kolom sempit — desainer tidak perlu menyusun ulang versi Desktop — dan
+ *  background Canvas 1 versi Desktop diam memenuhi layar di belakangnya. */
+function WeddingCanvas(props: WeddingCanvasProps) {
+  const device = useContext(DeviceContext);
+  const thumbnail = useContext(ThumbnailContext);
+  const stageRef = useRef<HTMLDivElement | null>(null);
+  const [viewportHeight, setViewportHeight] = useState(0);
+  const column =
+    device === "desktop" &&
+    !thumbnail &&
+    props.page !== "rsvp-page" &&
+    usesDesktopColumn(props.sections);
+  useEffect(() => {
+    if (!column) return;
+    const root = stageRef.current;
+    if (!root) return;
+    let scroller: HTMLElement | null = root.parentElement;
+    while (scroller && scroller !== document.body) {
+      const overflowY = getComputedStyle(scroller).overflowY;
+      if (overflowY === "auto" || overflowY === "scroll") break;
+      scroller = scroller.parentElement;
+    }
+    if (!scroller || scroller === document.body) return;
+    const target = scroller;
+    const observer = new ResizeObserver(() =>
+      setViewportHeight(target.clientHeight),
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [column]);
+  if (!column) return <WeddingCanvasBody {...props} />;
+  const first = props.sections[0];
+  const width = first.desktopColumnWidth || DESKTOP_COLUMN_DEFAULT;
+  return (
+    <div
+      ref={stageRef}
+      className={`desktop-column-stage align-${first.desktopColumnAlign || "center"}`}
+      style={
+        {
+          "--desktop-column-w": `${width}px`,
+          ...(viewportHeight
+            ? { "--site-viewport-h": `${viewportHeight}px` }
+            : {}),
+        } as React.CSSProperties
+      }
+    >
+      <FixedBackdrop
+        source={desktopColumnBackdrop(first)}
+        viewportHeight={viewportHeight}
+      />
+      <div className="desktop-column">
+        <DeviceContext value="mobile">
+          <WeddingCanvasBody {...props} />
+        </DeviceContext>
+      </div>
+    </div>
+  );
+}
+
+/** Pengaturan tata letak desktop di panel Page Structure. */
+function DesktopLayoutPanel({
+  first,
+  update,
+  flash,
+  uploadToServer,
+}: {
+  first: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+  flash: (message: string) => void;
+  uploadToServer: (
+    file: File,
+    category: string,
+  ) => Promise<{ key: string; url: string }>;
+}) {
+  const input = useRef<HTMLInputElement | null>(null);
+  const column = first.desktopLayout === "column";
+  const upload = async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      flash("Background desktop harus berupa gambar.");
+      return;
+    }
+    if (file.size > 4 * 1024 * 1024) {
+      flash("Background desktop maksimal 4 MB.");
+      return;
+    }
+    try {
+      const saved = await uploadToServer(file, "canvas-background");
+      update({ desktopBackdropUrl: saved.url, desktopBackdropKey: saved.key });
+      flash("Background desktop disimpan.");
+    } catch (error) {
+      flash(
+        error instanceof Error ? error.message : "Upload background gagal.",
+      );
+    }
+  };
+  return (
+    <div className="desktop-layout-panel">
+      <div className="setting-row compact">
+        <div>
+          <Monitor size={16} />
+          <span>
+            <strong>Tata letak desktop</strong>
+            <small>
+              {column
+                ? "Kolom: di desktop undangan tampil seperti di ponsel, di kolom sempit; background memenuhi layar di belakangnya."
+                : "Penuh: desain Desktop memenuhi lebar layar."}
+            </small>
+          </span>
+        </div>
+      </div>
+      <div className="segmented-control" role="group" aria-label="Tata letak desktop">
+        <button
+          className={!column ? "active" : ""}
+          aria-pressed={!column}
+          onClick={() => update({ desktopLayout: "full" })}
+        >
+          Penuh
+        </button>
+        <button
+          className={column ? "active" : ""}
+          aria-pressed={column}
+          onClick={() => update({ desktopLayout: "column" })}
+        >
+          Kolom (ala serein)
+        </button>
+      </div>
+      {column && (
+        <div className="desktop-layout-options">
+          <label>
+            Lebar kolom: {first.desktopColumnWidth || DESKTOP_COLUMN_DEFAULT}px
+            <input
+              type="range"
+              min={340}
+              max={600}
+              step={10}
+              value={first.desktopColumnWidth || DESKTOP_COLUMN_DEFAULT}
+              onChange={(event) =>
+                update({ desktopColumnWidth: Number(event.target.value) })
+              }
+            />
+          </label>
+          <label>
+            Posisi kolom
+            <select
+              value={first.desktopColumnAlign || "center"}
+              onChange={(event) =>
+                update({
+                  desktopColumnAlign: event.target
+                    .value as CanvasSection["desktopColumnAlign"],
+                })
+              }
+            >
+              <option value="center">Tengah</option>
+              <option value="right">Kanan</option>
+              <option value="left">Kiri</option>
+            </select>
+          </label>
+          <label>
+            Warna background desktop
+            <input
+              type="color"
+              value={
+                first.desktopBackdropColor ||
+                (/^#[0-9a-f]{6}$/i.test(
+                  resolveSection(first, "desktop").backgroundColor || "",
+                )
+                  ? resolveSection(first, "desktop").backgroundColor
+                  : "#0f1f1a")
+              }
+              onChange={(event) =>
+                update({ desktopBackdropColor: event.target.value })
+              }
+            />
+          </label>
+          <input
+            ref={input}
+            hidden
+            type="file"
+            accept="image/*"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              void upload(file);
+            }}
+          />
+          <button className="upload-control" onClick={() => input.current?.click()}>
+            <Upload size={18} />
+            <span>
+              <strong>
+                {first.desktopBackdropUrl
+                  ? "Ganti background desktop"
+                  : "Upload background desktop"}
+              </strong>
+              <small>
+                Gambar lanskap untuk area di luar kolom. Tanpa ini dipakai
+                background Canvas 1 versi Desktop.
+              </small>
+            </span>
+          </button>
+          {(first.desktopBackdropUrl || first.desktopBackdropColor) && (
+            <button
+              className="text-button"
+              onClick={() =>
+                update({
+                  desktopBackdropUrl: undefined,
+                  desktopBackdropKey: undefined,
+                  desktopBackdropColor: undefined,
+                })
+              }
+            >
+              Pakai background Canvas 1
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WeddingCanvasBody({
   page,
   sections,
   selectedTemplate,
@@ -15223,10 +16139,24 @@ function WeddingCanvas({
   const device = useContext(DeviceContext);
 
   // QA TC-146: canvas pertama menjadi sumber background bila mode global aktif.
+  // Sumber dipakai dalam versi device yang aktif. Dulu mentah: di Mobile,
+  // canvas lain tetap memakai background & layer Canvas 1 versi Desktop.
   const globalBackgroundSource = useMemo(
-    () => (sections[0]?.backgroundGlobal ? sections[0] : null),
-    [sections],
+    () =>
+      sections[0]?.backgroundGlobal
+        ? resolveSection(sections[0], device)
+        : null,
+    [sections, device],
   );
+  // TC-197 — Background tetap. Dulu dikerjakan dengan
+  // background-attachment:fixed per section, yang (1) sengaja dimatikan di
+  // editor & preview — tempat QA menguji — dan (2) tidak didukung Safari iOS
+  // sama sekali, padahal undangan kebanyakan dibuka di ponsel. Kini satu
+  // lapisan position:sticky, yang menempel pada kontainer gulir terdekat:
+  // halaman, kotak preview, maupun area kerja editor. Thumbnail tetap memakai
+  // cara lama karena isinya hanya satu section yang diperkecil.
+  const fixedBackdrop = !thumbnail ? globalBackgroundSource : null;
+  const [scrollViewportHeight, setScrollViewportHeight] = useState(0);
   const coverEntry = useMemo(() => {
     for (const section of sections)
       for (const column of section.columns)
@@ -15342,6 +16272,32 @@ function WeddingCanvas({
     return () => observer.disconnect();
   }, [editable, thumbnail, opened, sections, animationNonce]);
 
+  useEffect(() => {
+    if (!fixedBackdrop) return;
+    const root = revealRootRef.current;
+    if (!root) return;
+    // Tinggi backdrop harus sama dengan jendela gulirnya. Di halaman publik
+    // itu 100vh; di kotak preview/editor tingginya lebih pendek, dan backdrop
+    // setinggi layar akan terpotong di bagian bawah kotak.
+    let scroller: HTMLElement | null = root.parentElement;
+    while (scroller && scroller !== document.body) {
+      const overflowY = getComputedStyle(scroller).overflowY;
+      if (overflowY === "auto" || overflowY === "scroll") break;
+      scroller = scroller.parentElement;
+    }
+    if (!scroller || scroller === document.body) {
+      setScrollViewportHeight(0);
+      return;
+    }
+    const target = scroller;
+    const observer = new ResizeObserver(() =>
+      setScrollViewportHeight(target.clientHeight),
+    );
+    observer.observe(target);
+    return () => observer.disconnect();
+    // `opened`: bila ada cover, root halaman baru terpasang setelah cover
+    // dibuka, jadi pengukuran harus diulang saat itu.
+  }, [fixedBackdrop, opened]);
   if (page === "rsvp-page")
     return <RsvpPage guests={guests} addGuest={addGuest} />;
   if (!editable && coverEntry && !opened) {
@@ -15376,7 +16332,7 @@ function WeddingCanvas({
   return (
     <div
       ref={revealRootRef}
-      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} theme-${selectedTemplate.preset || "classic"}`}
+      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} theme-${selectedTemplate.preset || "classic"}`}
       style={{ "--accent": selectedTemplate.accent } as React.CSSProperties}
     >
       <nav>
@@ -15388,14 +16344,29 @@ function WeddingCanvas({
           <a>RSVP</a>
         </div>
       </nav>
+      {fixedBackdrop && (
+        <FixedBackdrop
+          source={fixedBackdrop}
+          viewportHeight={scrollViewportHeight}
+        />
+      )}
       {sections.map((rawSection) => {
         // QA TC-112: nilai section mengikuti device aktif (Desktop / Mobile).
         // QA TC-146: bila mode background global aktif, seluruh canvas memakai
         // background canvas pertama sehingga tidak perlu upload berulang.
-        const section = applyGlobalBackground(
-          resolveSection(rawSection, device),
-          globalBackgroundSource,
-        );
+        // TC-197 — mode Background tetap: backdrop Canvas 1 dilukis SEKALI
+        // sebagai lapisan sticky di belakang seluruh canvas (lihat
+        // FixedBackdrop), jadi section tidak melukis ulang background itu.
+        // Layer & ornamen milik section sendiri tetap ikut bergulir.
+        const section = fixedBackdrop
+          ? withoutSharedBackdrop(
+              resolveSection(rawSection, device),
+              rawSection.id === sections[0]?.id,
+            )
+          : applyGlobalBackground(
+              resolveSection(rawSection, device),
+              globalBackgroundSource,
+            );
         const filter = getBackgroundFilter(section.backgroundEffect);
         // "Animasi Layer Background" berlaku untuk background utama DAN semua
         // layer tumpang tindih, sesuai keterangan kontrolnya.
@@ -15419,15 +16390,30 @@ function WeddingCanvas({
             (section.backgroundLayers || []).some((layer) => layer.url) ||
             (section.decorations || []).length,
         );
-        const hasVisibleFeatures =
-          editable ||
-          hasOwnBackdrop ||
+        const hasContentFeatures = section.columns.some((column) =>
+          column.features.some(
+            (feature) =>
+              feature.type !== "invitation-cover" && feature.type !== "sound",
+          ),
+        );
+        // TC-204 — section yang hanya berisi cover "Buka Undangan". Background
+        // yang diunggah di sana milik layar cover, dan layar itu sudah tampil
+        // sebelum undangan dibuka. Dulu aturan hasOwnBackdrop di bawah ikut
+        // merendernya lagi setelah dibuka, sebagai slide berisi background
+        // saja. Mengunggah di fitur cover tidak memicunya karena section-nya
+        // tidak punya backdrop sendiri — itu sebabnya hanya satu jalur yang
+        // bermasalah. Kedua jalur upload tetap tersedia.
+        const isCoverOnly =
+          !hasContentFeatures &&
           section.columns.some((column) =>
             column.features.some(
-              (feature) =>
-                feature.type !== "invitation-cover" && feature.type !== "sound",
+              (feature) => feature.type === "invitation-cover",
             ),
           );
+        const hasVisibleFeatures =
+          editable ||
+          (hasOwnBackdrop && !isCoverOnly) ||
+          hasContentFeatures;
         if (!hasVisibleFeatures) return null;
         return (
           <section
@@ -15529,7 +16515,13 @@ function WeddingCanvas({
                 style={
                   {
                     width: decoration.size,
-                    height: decoration.size,
+                    // TC-205 — kotak gambar dulu selalu persegi, padahal
+                    // gambarnya `object-fit: contain`. Gambar yang tidak
+                    // persegi diletakkan di TENGAH kotak itu, menyisakan
+                    // celah di pojok berapa pun ukurannya. Ornamen gambar kini
+                    // mengikuti rasio gambarnya sendiri; bentuk bawaan (SVG)
+                    // memang persegi dan tetap memakai tinggi yang sama.
+                    height: decoration.imageUrl ? undefined : decoration.size,
                     color: decoration.color,
                     opacity: (decoration.opacity ?? 70) / 100,
                     // transform inline kalah dari keyframes .loop-* yang juga
@@ -15539,6 +16531,8 @@ function WeddingCanvas({
                     // dalam keyframes.
                     "--deco-flip": decoration.flip ? -1 : 1,
                     "--deco-rotate": `${decoration.rotation ?? 0}deg`,
+                    "--deco-dx": `${decoration.offsetX ?? 0}px`,
+                    "--deco-dy": `${decoration.offsetY ?? 0}px`,
                     "--loop-speed": `${decoration.speed || 7}s`,
                   } as React.CSSProperties
                 }
@@ -16257,14 +17251,18 @@ function FeatureBlock({
             document.execCommand("insertLineBreak");
           }
         }}
-        onBlur={(event) =>
-          onUpdate({
-            [field]: (event.currentTarget as HTMLElement).innerText.replace(
-              /\n$/,
-              "",
-            ),
-          })
-        }
+        // QA 15 Okt — "undo sering gagal". Setiap blur dulu menyimpan, walau
+        // teksnya tidak berubah, dan tiap simpanan membuat satu entri undo.
+        // Klik masuk-keluar teks saja sudah mengisi riwayat (dibatasi 15)
+        // dengan entri kosong: undo pertama "tidak melakukan apa-apa", dan
+        // perubahan sungguhan terdorong keluar. Hanya simpan bila berubah.
+        onBlur={(event) => {
+          const next = (event.currentTarget as HTMLElement).innerText.replace(
+            /\n$/,
+            "",
+          );
+          if (next !== (feature[field] ?? "")) onUpdate({ [field]: next });
+        }}
         style={style}
       >
         {feature[field]}
@@ -16345,22 +17343,34 @@ function FeatureBlock({
           {editableText("title", "editable-title")}
           {editableText("body", "editable-body")}
           {/* QA TC-119: button lokasi selalu tampil pada section Event. */}
-          {feature.eventMapUrl ? (
-            <a
-              className="event-map-button"
-              href={feature.eventMapUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <MapPin size={14} />
-              {feature.eventButtonLabel || "Lihat Lokasi"}
-            </a>
-          ) : (
-            <span className="event-map-button placeholder" title="Isi Link lokasi acara pada panel Content">
-              <MapPin size={14} />
-              {feature.eventButtonLabel || "Lihat Lokasi"}
-            </span>
-          )}
+          {(() => {
+            const button = mapButtonStyle(feature);
+            // Belum diatur: biarkan gaya CSS bawaan, supaya Event lama tidak
+            // berubah tampilan setelah pembaruan ini.
+            const style = button.customized ? button.style : undefined;
+            const className = `event-map-button ${button.customized ? `shape-${button.shape}` : ""}`;
+            return feature.eventMapUrl ? (
+              <a
+                className={className}
+                style={style}
+                href={feature.eventMapUrl}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MapButtonIcon feature={feature} size={feature.mapButtonIconSize || 14} />
+                {feature.eventButtonLabel || "Lihat Lokasi"}
+              </a>
+            ) : (
+              <span
+                className={`${className} placeholder`}
+                style={style}
+                title="Isi Link lokasi acara pada panel Content"
+              >
+                <MapButtonIcon feature={feature} size={feature.mapButtonIconSize || 14} />
+                {feature.eventButtonLabel || "Lihat Lokasi"}
+              </span>
+            );
+          })()}
         </div>
       )}
       {feature.type === "gift" && (
@@ -16437,9 +17447,11 @@ function FeatureBlock({
                   ? { fontSize: feature.eyebrowFontSize }
                   : {}),
               }}
-              onBlur={(event) =>
-                onUpdate({ eyebrowText: event.currentTarget.textContent || "" })
-              }
+              onBlur={(event) => {
+                const next = event.currentTarget.textContent || "";
+                if (next !== (feature.eyebrowText || "UNDANGAN PERNIKAHAN"))
+                  onUpdate({ eyebrowText: next });
+              }}
             >
               {feature.eyebrowText || "UNDANGAN PERNIKAHAN"}
             </small>
@@ -16453,11 +17465,14 @@ function FeatureBlock({
                   ? { fontSize: feature.guestLabelFontSize }
                   : {}),
               }}
-              onBlur={(event) =>
-                onUpdate({
-                  guestLabelText: event.currentTarget.textContent || "",
-                })
-              }
+              onBlur={(event) => {
+                const next = event.currentTarget.textContent || "";
+                if (
+                  next !==
+                  (feature.guestLabelText || "Kepada Yth. Bapak/Ibu/Saudara/i")
+                )
+                  onUpdate({ guestLabelText: next });
+              }}
             >
               {feature.guestLabelText || "Kepada Yth. Bapak/Ibu/Saudara/i"}
             </p>
@@ -16470,11 +17485,14 @@ function FeatureBlock({
                   ? { fontSize: feature.guestNameFontSize }
                   : {}),
               }}
-              onBlur={(event) =>
-                onUpdate({
-                  guestNameText: event.currentTarget.textContent || "",
-                })
-              }
+              onBlur={(event) => {
+                const next = event.currentTarget.textContent || "";
+                if (
+                  next !==
+                  (inviteeName || feature.guestNameText || "Tamu Terhormat")
+                )
+                  onUpdate({ guestNameText: next });
+              }}
             >
               {inviteeName || feature.guestNameText || "Tamu Terhormat"}
             </strong>
@@ -16507,11 +17525,11 @@ function FeatureBlock({
               <span
                 contentEditable={editable}
                 suppressContentEditableWarning
-                onBlur={(event) =>
-                  onUpdate({
-                    buttonLabel: event.currentTarget.textContent || "",
-                  })
-                }
+                onBlur={(event) => {
+                  const next = event.currentTarget.textContent || "";
+                  if (next !== (feature.buttonLabel || "Buka Undangan"))
+                    onUpdate({ buttonLabel: next });
+                }}
               >
                 {feature.buttonLabel || "Buka Undangan"}
               </span>
@@ -16664,11 +17682,10 @@ function LoveStoryFeature({
               <strong
                 contentEditable={editable && !feature.locked}
                 suppressContentEditableWarning
-                onBlur={(event) =>
-                  patchItem(item.id, {
-                    title: (event.currentTarget as HTMLElement).innerText.trim(),
-                  })
-                }
+                onBlur={(event) => {
+                  const next = (event.currentTarget as HTMLElement).innerText.trim();
+                  if (next !== (item.title ?? "")) patchItem(item.id, { title: next });
+                }}
                 style={{
                   fontSize: feature.fontSize ? feature.fontSize * 0.45 : undefined,
                   color: feature.titleColor || undefined,
@@ -16685,14 +17702,13 @@ function LoveStoryFeature({
                     document.execCommand("insertLineBreak");
                   }
                 }}
-                onBlur={(event) =>
-                  patchItem(item.id, {
-                    body: (event.currentTarget as HTMLElement).innerText.replace(
-                      /\n$/,
-                      "",
-                    ),
-                  })
-                }
+                onBlur={(event) => {
+                  const next = (event.currentTarget as HTMLElement).innerText.replace(
+                    /\n$/,
+                    "",
+                  );
+                  if (next !== (item.body ?? "")) patchItem(item.id, { body: next });
+                }}
                 style={{
                   whiteSpace: "pre-wrap",
                   ...(feature.bodyFontSize ? { fontSize: feature.bodyFontSize } : {}),
@@ -16747,10 +17763,31 @@ function CreditFeature({
     <div className="credit-feature">
       {editableText("title", "editable-title")}
       {editableText("body", "editable-body")}
-      <div className="credit-meta" style={giftCardStyle(feature)}>
+      <div
+        className="credit-meta"
+        style={{
+          ...giftCardStyle(feature),
+          ...(feature.creditFontSize ? { fontSize: feature.creditFontSize } : {}),
+        }}
+      >
         {feature.creditSongTitle && (
-          <span className="credit-song">
-            <Disc3 size={14} className={playing ? "spinning" : ""} />{" "}
+          <span
+            className="credit-song"
+            style={
+              feature.creditMusicColor
+                ? { color: feature.creditMusicColor, opacity: 1 }
+                : undefined
+            }
+          >
+            {feature.creditMusicIcon === "none" ? null : feature.creditMusicIcon ===
+              "note" ? (
+              <Music2 size={feature.creditMusicIconSize || 14} />
+            ) : (
+              <Disc3
+                size={feature.creditMusicIconSize || 14}
+                className={playing ? "spinning" : ""}
+              />
+            )}{" "}
             {feature.creditSongTitle}
           </span>
         )}
@@ -16760,11 +17797,30 @@ function CreditFeature({
             className="credit-audio-toggle"
             onClick={toggleAudio}
             title={playing ? "Hentikan backsound" : "Putar backsound"}
+            style={
+              {
+                ...(feature.creditMusicColor
+                  ? { color: feature.creditMusicColor }
+                  : {}),
+                ...(feature.creditMusicIconSize
+                  ? {
+                      width: feature.creditMusicIconSize + 12,
+                      height: feature.creditMusicIconSize + 12,
+                    }
+                  : {}),
+              } as React.CSSProperties
+            }
           >
-            {playing ? <VolumeX size={14} /> : <Volume2 size={14} />}
+            {playing ? (
+              <VolumeX size={feature.creditMusicIconSize || 14} />
+            ) : (
+              <Volume2 size={feature.creditMusicIconSize || 14} />
+            )}
           </button>
         )}
-        <span className="credit-created">
+        <span
+          className={`credit-created text-${feature.creditTextStyle || "normal"}`}
+        >
           {feature.creditLink ? (
             <a href={feature.creditLink} target="_blank" rel="noreferrer">
               {feature.creditText || "Created by ikrarku"}
@@ -17021,12 +18077,29 @@ function CountdownFeature({ feature }: { feature: Feature }) {
   );
 }
 
-function LocationFeature({ feature }: { feature: Feature }) {
-  const mapUrl = feature.mapUrl || "https://maps.google.com";
-  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=210x210&margin=8&data=${encodeURIComponent(mapUrl)}`;
-  // QA TC-124: warna dan bentuk button "Buka Google Maps" dapat dikustomisasi.
+/**
+ * Gaya tombol lokasi (QA TC-124). Dipakai fitur Lokasi DAN Event: tombol
+ * "Lihat Lokasi" pada Event dulu tidak bisa diatur warna, bentuk, maupun
+ * ikonnya (QA 15 Okt), padahal fitur Lokasi sudah bisa.
+ *
+ * `customized` false berarti Web Designer belum menyentuh pengaturan apa pun:
+ * tombol Event lama tetap memakai gaya CSS bawaannya, tidak berubah tampilan.
+ */
+function mapButtonStyle(feature: Feature): {
+  shape: NonNullable<Feature["mapButtonShape"]>;
+  style: React.CSSProperties;
+  customized: boolean;
+} {
   const shape = feature.mapButtonShape || "rounded";
-  const buttonStyle: React.CSSProperties = {
+  const customized = Boolean(
+    feature.mapButtonShape ||
+      feature.mapButtonBackground ||
+      feature.mapButtonTextColor ||
+      feature.mapButtonRadius !== undefined ||
+      feature.mapButtonBorderWidth !== undefined ||
+      feature.mapButtonFontSize !== undefined,
+  );
+  const style: React.CSSProperties = {
     background:
       shape === "outline"
         ? "transparent"
@@ -17044,7 +18117,35 @@ function LocationFeature({ feature }: { feature: Feature }) {
       feature.mapButtonBorderColor ||
       feature.mapButtonBackground ||
       "var(--accent, #125946)",
+    ...(feature.mapButtonFontSize
+      ? {
+          fontSize: feature.mapButtonFontSize,
+          padding: `${Math.round(feature.mapButtonFontSize * 0.75)}px ${Math.round(feature.mapButtonFontSize * 1.5)}px`,
+        }
+      : {}),
   };
+  return { shape, style, customized };
+}
+
+function MapButtonIcon({ feature, size }: { feature: Feature; size: number }) {
+  switch (feature.mapButtonIcon) {
+    case "none":
+      return null;
+    case "navigation":
+      return <Navigation size={size} />;
+    case "map":
+      return <MapIcon size={size} />;
+    case "external":
+      return <ExternalLink size={size} />;
+    default:
+      return <MapPin size={size} />;
+  }
+}
+
+function LocationFeature({ feature }: { feature: Feature }) {
+  const mapUrl = feature.mapUrl || "https://maps.google.com";
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=210x210&margin=8&data=${encodeURIComponent(mapUrl)}`;
+  const { shape, style: buttonStyle } = mapButtonStyle(feature);
   // QA TC-132: QR diberi container sendiri agar tidak terpotong di mobile.
   // QR bersifat opsional karena fungsinya sama dengan tombol Buka Google Maps —
   // default-nya peta embed, QR dinyalakan hanya bila memang dibutuhkan.
@@ -17071,7 +18172,8 @@ function LocationFeature({ feature }: { feature: Feature }) {
           target="_blank"
           rel="noreferrer"
         >
-          <MapPin size={15} /> {feature.mapButtonLabel || "Buka Google Maps"}
+          <MapButtonIcon feature={feature} size={feature.mapButtonIconSize || 15} />{" "}
+          {feature.mapButtonLabel || "Buka Google Maps"}
         </a>
       </div>
       {showEmbed && (
@@ -17106,6 +18208,18 @@ function LocationFeature({ feature }: { feature: Feature }) {
       )}
     </div>
   );
+}
+
+/** Gaya satu gambar galeri: mode potong/utuh dan titik fokus per gambar. */
+function galleryImageStyle(
+  feature: Feature,
+  index: number,
+): React.CSSProperties {
+  const offset = feature.galleryOffsets?.[index];
+  return {
+    objectFit: feature.galleryFit === "contain" ? "contain" : "cover",
+    objectPosition: `${offset?.x ?? 50}% ${offset?.y ?? 50}%`,
+  };
 }
 
 function GalleryFeature({ feature }: { feature: Feature }) {
@@ -17157,7 +18271,11 @@ function GalleryFeature({ feature }: { feature: Feature }) {
         >
           {images.map((url, index) => (
             <div className="gallery-carousel-slide" key={`${url}-${index}`}>
-              <img src={url} alt={`Gallery ${index + 1}`} />
+              <img
+                src={url}
+                alt={`Gallery ${index + 1}`}
+                style={galleryImageStyle(feature, index)}
+              />
             </div>
           ))}
         </div>
@@ -17201,7 +18319,12 @@ function GalleryFeature({ feature }: { feature: Feature }) {
         className={`gallery-filmstrip ${feature.galleryFullWidth ? "full-width" : ""}`}
       >
         {images.map((url, index) => (
-          <img src={url} alt={`Gallery ${index + 1}`} key={`${url}-${index}`} />
+          <img
+            src={url}
+            alt={`Gallery ${index + 1}`}
+            key={`${url}-${index}`}
+            style={galleryImageStyle(feature, index)}
+          />
         ))}
       </div>
     );
@@ -17215,7 +18338,12 @@ function GalleryFeature({ feature }: { feature: Feature }) {
       className={`gallery-grid layout-${feature.galleryLayoutTemplate || "even"} ${feature.galleryFullWidth ? "full-width" : ""}`}
     >
       {images.map((url, index) => (
-        <img src={url} alt={`Gallery ${index + 1}`} key={`${url}-${index}`} />
+        <img
+          src={url}
+          alt={`Gallery ${index + 1}`}
+          key={`${url}-${index}`}
+          style={galleryImageStyle(feature, index)}
+        />
       ))}
     </div>
   );
@@ -17258,7 +18386,10 @@ function GallerySlideshow({
           src={url}
           alt={`Gallery ${position + 1}`}
           className={position === index ? "active" : ""}
-          style={{ transitionDuration: `${feature.galleryTransitionMs || 850}ms` }}
+          style={{
+            ...galleryImageStyle(feature, position),
+            transitionDuration: `${feature.galleryTransitionMs || 850}ms`,
+          }}
         />
       ))}
       {images.length > 1 && (
@@ -17733,8 +18864,24 @@ function PreviewModal({
   onClose: () => void;
 }) {
   const [page, setPage] = useState<PageKey>("pages");
-  const [mode, setMode] = useState<"desktop" | "mobile">("desktop");
+  // TC-217 — Preview dibuka pada mode yang sedang diedit. Dulu selalu
+  // Desktop, sehingga Web Designer yang mengedit Mobile melihat ornamen &
+  // layer versi Desktop dan mengira preview tidak sesuai canvas.
+  const [mode, setMode] = useState<"desktop" | "mobile">(() =>
+    document.querySelector(".canvas-frame.mobile") ? "mobile" : "desktop",
+  );
   const stageRef = useRef<HTMLDivElement | null>(null);
+  // TC-216 — preview Desktop dulu selebar jendela (mis. 1530 px) sementara
+  // desainnya ditata di area kerja editor (mis. 859 px). Posisi bebas, crop
+  // background `cover`, dan tinggi section berpiksel bergeser semua, sehingga
+  // hasilnya "kepotong & acak-acakan". Preview kini selebar canvas yang
+  // terakhir dilihat Web Designer; sisa layar menjadi ruang kosong.
+  const [designWidth] = useState(() => {
+    const frame = document.querySelector(".canvas-frame.desktop");
+    const measured = frame ? Math.round(frame.getBoundingClientRect().width) : 0;
+    // Dibuka dari mode Mobile: pakai lebar Desktop terakhir yang terukur.
+    return measured || lastDesktopCanvasWidth || DESKTOP_DESIGN_WIDTH;
+  });
   // Preview selalu dibuka dari section pembuka, termasuk saat berpindah
   // tab Pages/RSVP atau mengganti mode Desktop/Mobile.
   useScrollResetOnOpen(stageRef, true, page, mode);
@@ -17744,7 +18891,11 @@ function PreviewModal({
         <header>
           <div>
             <strong>Live Preview</strong>
-            <span>Full width website preview</span>
+            <span>
+              {mode === "desktop"
+                ? `Selebar canvas editor · ${designWidth} px`
+                : `Mobile · ${MOBILE_PREVIEW_WIDTH} px`}
+            </span>
           </div>
           <div className="preview-page-tabs">
             <button
@@ -17780,7 +18931,11 @@ function PreviewModal({
         </header>
         <DeviceContext value={mode}>
         <PreviewSurfaceContext value={true}>
-        <div ref={stageRef} className={`preview-full-stage ${mode}`}>
+        <div
+          ref={stageRef}
+          className={`preview-full-stage ${mode}`}
+          style={{ "--design-width": `${designWidth}px` } as React.CSSProperties}
+        >
           <div className="preview-content">
             <WeddingCanvas
               page={page}
@@ -18378,6 +19533,7 @@ function ArticleEditorPage({
             ref={imageRef}
             hidden
             type="file"
+            onClick={resetFileInput}
             accept="image/*"
             onChange={(event) => void insertImage(event.target.files?.[0])}
           />
@@ -18450,6 +19606,7 @@ function ArticleEditorPage({
               ref={coverRef}
               hidden
               type="file"
+              onClick={resetFileInput}
               accept="image/*"
               onChange={(event) => void uploadCover(event.target.files?.[0])}
             />
@@ -18918,6 +20075,28 @@ function OrdersAnalyticsPage({
 }) {
   const [retrying, setRetrying] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // MoM A6 — hasil "Buat akun customer": tautan buat-password untuk dikirim
+  // ulang lewat WhatsApp bila perlu (sudah otomatis masuk chat & email).
+  const [accountBusy, setAccountBusy] = useState<string | null>(null);
+  const [accountResult, setAccountResult] = useState<
+    Record<string, { setupUrl: string; existing: boolean }>
+  >({});
+  const createAccount = async (id: string) => {
+    setAccountBusy(id);
+    setError("");
+    try {
+      const result = await api.createOrderCustomerAccount(id);
+      setAccountResult((previous) => ({
+        ...previous,
+        [id]: { setupUrl: result.setupUrl, existing: result.existing },
+      }));
+      await onRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Gagal membuat akun customer.");
+    } finally {
+      setAccountBusy(null);
+    }
+  };
   const retry = async (id: string) => {
     setRetrying(id);
     setError("");
@@ -19030,6 +20209,37 @@ function OrdersAnalyticsPage({
                         <br />
                         {row.phone}
                       </span>
+                      {row.payment_status === "Paid" &&
+                        !row.user_id &&
+                        !accountResult[row.id] && (
+                          <button
+                            className="order-account-btn"
+                            disabled={accountBusy !== null}
+                            title="Buat akun dari data order, lalu kirim tautan buat password lewat chat & email"
+                            onClick={() => void createAccount(row.id)}
+                          >
+                            {accountBusy === row.id
+                              ? "Membuat akun…"
+                              : "Buat akun customer"}
+                          </button>
+                        )}
+                      {accountResult[row.id] && (
+                        <small className="order-account-done">
+                          {accountResult[row.id].existing
+                            ? "Akun lama terhubung."
+                            : "Akun dibuat."}{" "}
+                          Tautan buat password terkirim ke chat & email.{" "}
+                          <button
+                            onClick={() =>
+                              void navigator.clipboard?.writeText(
+                                accountResult[row.id].setupUrl,
+                              )
+                            }
+                          >
+                            Salin tautan
+                          </button>
+                        </small>
+                      )}
                     </td>
                     <td>{row.template_name}</td>
                     <td>{formatRupiah(Number(row.amount) || 0)}</td>
@@ -19974,6 +21184,7 @@ function SoundLibrary({
           <input
             ref={fileRef}
             type="file"
+            onClick={resetFileInput}
             accept="audio/*,video/mp4,.mp3,.m4a,.wav,.ogg,.aac,.mp4"
             onChange={(event) => setFile(event.target.files?.[0] || null)}
           />
@@ -20414,7 +21625,12 @@ function createAudioPreset(feature: Feature, loop = false) {
     window.AudioContext ||
     (window as typeof window & { webkitAudioContext?: typeof AudioContext })
       .webkitAudioContext;
-  if (!AudioContextClass) return { stop: () => undefined };
+  if (!AudioContextClass)
+    return {
+      stop: () => undefined,
+      pause: () => undefined,
+      resume: () => undefined,
+    };
   const context = new AudioContextClass();
   const presets: Record<string, number[]> = {
     "romantic-piano": [261.63, 329.63, 392, 523.25, 392, 329.63],
@@ -20426,8 +21642,11 @@ function createAudioPreset(feature: Feature, loop = false) {
     presets[feature.soundPreset || "romantic-piano"] ||
     presets["romantic-piano"];
   let stopped = false;
+  // Saat tab disembunyikan, interval di bawah tetap berdetak dan dulu memanggil
+  // context.resume() — menghidupkan lagi suara yang baru saja dijeda.
+  let paused = false;
   const playSequence = async () => {
-    if (stopped) return;
+    if (stopped || paused) return;
     if (context.state === "suspended") await context.resume();
     notes.forEach((frequency, index) => {
       const oscillator = context.createOscillator();
@@ -20463,23 +21682,85 @@ function createAudioPreset(feature: Feature, loop = false) {
       if (timer) window.clearInterval(timer);
       void context.close();
     },
+    pause: () => {
+      paused = true;
+      if (context.state === "running") void context.suspend();
+    },
+    resume: () => {
+      if (stopped) return;
+      paused = false;
+      void context.resume();
+    },
   };
 }
 
+type SoundHandle = { stop: () => void; pause: () => void; resume: () => void };
+
+/**
+ * A4 (MoM 13 Okt) & QA — musik tetap berbunyi saat tamu pindah ke tab lain.
+ *
+ * Semua pemutaran (live, preview, preview landing, editor) lewat
+ * createSoundPlayback, jadi aturannya dipasang sekali di sini: saat halaman
+ * tersembunyi semua pemutar aktif dijeda, dan saat kembali hanya yang tadi
+ * memang sedang berbunyi yang dilanjutkan. Musik yang dimatikan tamu tidak
+ * ikut hidup lagi.
+ */
+const activeSounds = new Set<SoundHandle>();
+const pausedByVisibility = new Set<SoundHandle>();
+if (typeof document !== "undefined") {
+  const pauseAll = () => {
+    for (const sound of activeSounds) {
+      sound.pause();
+      pausedByVisibility.add(sound);
+    }
+  };
+  const resumeAll = () => {
+    for (const sound of pausedByVisibility)
+      if (activeSounds.has(sound)) sound.resume();
+    pausedByVisibility.clear();
+  };
+  document.addEventListener("visibilitychange", () =>
+    document.hidden ? pauseAll() : resumeAll(),
+  );
+  // Safari iOS tidak selalu mengirim visibilitychange saat tab ditutup atau
+  // aplikasi dipindah; pagehide menutup celah itu.
+  window.addEventListener("pagehide", pauseAll);
+  window.addEventListener("pageshow", resumeAll);
+}
+
 function createSoundPlayback(feature: Feature, loop = true) {
+  let inner: SoundHandle;
   if (feature.mediaUrl) {
     const audio = new Audio(assetUrl(feature.mediaUrl));
     audio.loop = loop;
     audio.volume = 0.72;
-    void audio.play().catch(() => undefined);
-    return {
+    // Tab yang dibuka di latar belakang tidak boleh mulai bersuara.
+    if (!(typeof document !== "undefined" && document.hidden))
+      void audio.play().catch(() => undefined);
+    inner = {
       stop: () => {
         audio.pause();
         audio.currentTime = 0;
       },
+      pause: () => audio.pause(),
+      resume: () => void audio.play().catch(() => undefined),
     };
+  } else inner = createAudioPreset(feature, loop);
+  const handle: SoundHandle = {
+    stop: () => {
+      activeSounds.delete(handle);
+      pausedByVisibility.delete(handle);
+      inner.stop();
+    },
+    pause: () => inner.pause(),
+    resume: () => inner.resume(),
+  };
+  activeSounds.add(handle);
+  if (typeof document !== "undefined" && document.hidden) {
+    inner.pause();
+    pausedByVisibility.add(handle);
   }
-  return createAudioPreset(feature, loop);
+  return handle;
 }
 
 function SoundFeature({ feature }: { feature: Feature }) {
@@ -20570,7 +21851,9 @@ function ConfirmModal({
 function TemplateCreatorModal({
   onClose,
   onCreate,
+  canSetPrice = false,
 }: {
+  canSetPrice?: boolean;
   onClose: () => void;
   onCreate: (
     name: string,
@@ -20583,7 +21866,8 @@ function TemplateCreatorModal({
   const [name, setName] = useState("New Signature Theme");
   const [category, setCategory] = useState("Elegant");
   const [accent, setAccent] = useState("#125946");
-  const [price, setPrice] = useState(499000);
+  // MoM A7 — harga ditetapkan Administrator; pengajuan Web Designer tanpa harga.
+  const [price, setPrice] = useState(canSetPrice ? 499000 : 0);
   const [description, setDescription] = useState(
     "Template wedding website dengan visual storytelling, motion, RSVP, gallery, dan onboarding project.",
   );
@@ -20600,8 +21884,9 @@ function TemplateCreatorModal({
           </button>
         </header>
         <p>
-          Web Designer dapat menentukan harga dan deskripsi. Template berstatus
-          Pending sampai disetujui Administrator.
+          {canSetPrice
+            ? "Template buatan Administrator langsung publish dengan harga yang Anda tetapkan."
+            : "Template berstatus Pending sampai disetujui Administrator. Harga ditetapkan Administrator saat review."}
         </p>
         <label>
           Template name
@@ -20632,16 +21917,23 @@ function TemplateCreatorModal({
           />
         </label>
         <div className="two-cols">
-          <label>
-            Harga (IDR)
-            <input
-              type="number"
-              min="0"
-              step="50000"
-              value={price}
-              onChange={(event) => setPrice(Number(event.target.value))}
-            />
-          </label>
+          {canSetPrice ? (
+            <label>
+              Harga (IDR)
+              <input
+                type="number"
+                min="0"
+                step="50000"
+                value={price}
+                onChange={(event) => setPrice(Number(event.target.value))}
+              />
+            </label>
+          ) : (
+            <label>
+              Harga
+              <input value="Ditetapkan Administrator" disabled readOnly />
+            </label>
+          )}
           <label>
             Accent color
             <input
@@ -20659,7 +21951,7 @@ function TemplateCreatorModal({
           {/* QA TC-128: preview memakai nama template, tanpa nama default. */}
           <strong>{name || "Nama template"}</strong>
           <span>{description || "Deskripsi template"}</span>
-          <em>{formatRupiah(price)}</em>
+          <em>{price ? formatRupiah(price) : "Harga menyusul"}</em>
         </div>
         <footer>
           <button className="secondary-btn" onClick={onClose}>
@@ -20702,6 +21994,55 @@ function LoadingScreen() {
       </div>
     </div>
   );
+}
+
+/** TC-218 — foto ponsel umumnya 2–6 MB, jauh di atas batas upload gambar.
+ *  Dulu ditolak; kini diperkecil otomatis di browser (sisi terpanjang
+ *  maks 2000 px, JPEG/WebP) sampai di bawah batas. GIF tidak disentuh
+ *  karena animasinya akan hilang. */
+async function shrinkImageToLimit(file: File, maxBytes: number): Promise<File> {
+  if (
+    file.size <= maxBytes ||
+    !file.type.startsWith("image/") ||
+    file.type === "image/gif" ||
+    file.type === "image/svg+xml"
+  )
+    return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    const keepAlpha = file.type === "image/png" || file.type === "image/webp";
+    const outType = keepAlpha ? "image/webp" : "image/jpeg";
+    let side = 2000;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+      canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+      canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+      const quality = Math.max(0.55, 0.86 - attempt * 0.08);
+      const blob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, outType, quality),
+      );
+      if (blob && blob.size <= maxBytes) {
+        const name = file.name.replace(/\.[^.]+$/, "") + (keepAlpha ? ".webp" : ".jpg");
+        return new File([blob], name, { type: outType });
+      }
+      side = Math.round(side * 0.8);
+    }
+  } catch {
+    /* format tidak bisa dibaca browser: biarkan validasi lama menolak */
+  }
+  return file;
+}
+
+/** TC-218 — browser tidak memicu onChange bila berkas yang dipilih sama
+ *  dengan pilihan sebelumnya. Setelah satu upload ditolak (mis. terlalu
+ *  besar), memilih berkas itu lagi — atau versi yang sudah dikompres dengan
+ *  nama sama — tidak melakukan apa pun tanpa pesan, sehingga upload terasa
+ *  "tiba-tiba tidak bisa". Mengosongkan nilai input setiap kali dialog dibuka
+ *  menjamin setiap pilihan diproses. */
+function resetFileInput(event: React.MouseEvent<HTMLInputElement>) {
+  event.currentTarget.value = "";
 }
 
 function Toast({ message }: { message: string }) {
@@ -20921,14 +22262,13 @@ function ExtraTextBlocks({
           document.execCommand("insertLineBreak");
         }
       }}
-      onBlur={(event) =>
-        patchItem(item.id, {
-          text: (event.currentTarget as HTMLElement).innerText.replace(
-            /\n$/,
-            "",
-          ),
-        })
-      }
+      onBlur={(event) => {
+        const next = (event.currentTarget as HTMLElement).innerText.replace(
+          /\n$/,
+          "",
+        );
+        if (next !== (item.text ?? "")) patchItem(item.id, { text: next });
+      }}
       style={{
         fontSize: item.fontSize,
         textAlign: item.align,
@@ -21277,6 +22617,20 @@ function submitButtonStyle(feature: Feature): React.CSSProperties {
     borderColor: feature.buttonBorderColor || undefined,
   };
 }
+function bankLogoStyle(feature: Feature): React.CSSProperties {
+  const shape = feature.bankLogoShape || "pill";
+  return {
+    ...(feature.bankLogoSize ? { fontSize: feature.bankLogoSize } : {}),
+    ...(shape === "plain"
+      ? { background: "transparent", padding: 0 }
+      : feature.bankLogoBackground
+        ? { background: feature.bankLogoBackground }
+        : {}),
+    ...(feature.bankLogoTextColor ? { color: feature.bankLogoTextColor } : {}),
+    ...(shape === "square" ? { borderRadius: 4 } : {}),
+    alignSelf: feature.bankLogoAlign || undefined,
+  };
+}
 function GiftAccountsBlock({ feature }: { feature: Feature }) {
   const accounts = feature.giftAccounts || [];
   const [copied, setCopied] = useState("");
@@ -21290,7 +22644,8 @@ function GiftAccountsBlock({ feature }: { feature: Feature }) {
           style={giftCardStyle(feature)}
         >
           <span
-            className={`bank-logo bank-${account.bank.toLowerCase().replace(/[^a-z0-9]/g, "")}`}
+            className={`bank-logo bank-${account.bank.toLowerCase().replace(/[^a-z0-9]/g, "")} shape-${feature.bankLogoShape || "pill"}`}
+            style={bankLogoStyle(feature)}
           >
             {account.bank}
           </span>
@@ -21776,6 +23131,88 @@ function GiftAccountEditor({
     );
   return (
     <div className="gift-account-editor">
+      {/* TC-212 — logo bank bisa disesuaikan dengan tema. */}
+      <div className="bank-logo-style">
+        <strong>Tampilan logo bank</strong>
+        <label>
+          Bentuk
+          <select
+            value={feature.bankLogoShape || "pill"}
+            onChange={(event) =>
+              update({
+                bankLogoShape: event.target.value as Feature["bankLogoShape"],
+              })
+            }
+          >
+            <option value="pill">Kapsul</option>
+            <option value="square">Kotak</option>
+            <option value="plain">Teks saja (tanpa latar)</option>
+          </select>
+        </label>
+        <label>
+          Ukuran: {feature.bankLogoSize || 8}px
+          <input
+            type="range"
+            min={6}
+            max={24}
+            value={feature.bankLogoSize || 8}
+            onChange={(event) =>
+              update({ bankLogoSize: Number(event.target.value) })
+            }
+          />
+        </label>
+        <label>
+          Posisi
+          <select
+            value={feature.bankLogoAlign || "center"}
+            onChange={(event) =>
+              update({
+                bankLogoAlign: event.target.value as Feature["bankLogoAlign"],
+              })
+            }
+          >
+            <option value="flex-start">Kiri</option>
+            <option value="center">Tengah</option>
+            <option value="flex-end">Kanan</option>
+          </select>
+        </label>
+        <div className="two-cols">
+          <label>
+            Warna latar
+            <input
+              type="color"
+              value={feature.bankLogoBackground || "#123f33"}
+              onChange={(event) =>
+                update({ bankLogoBackground: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Warna teks
+            <input
+              type="color"
+              value={feature.bankLogoTextColor || "#ffffff"}
+              onChange={(event) =>
+                update({ bankLogoTextColor: event.target.value })
+              }
+            />
+          </label>
+        </div>
+        <button
+          className="text-button"
+          onClick={() =>
+            update({
+              bankLogoSize: undefined,
+              bankLogoShape: undefined,
+              bankLogoBackground: undefined,
+              bankLogoTextColor: undefined,
+              bankLogoAlign: undefined,
+            })
+          }
+        >
+          Kembalikan bawaan
+        </button>
+      </div>
       <div className="group-heading">
         <strong>Rekening / E-wallet</strong>
         <button
@@ -22839,23 +24276,79 @@ function GallerySlideshowEditor({
 function MapButtonEditor({
   feature,
   update,
+  variant = "location",
 }: {
   feature: Feature;
   update: (patch: Partial<Feature>) => void;
+  /** "event": tombol "Lihat Lokasi" pada fitur Event — tanpa peta & QR. */
+  variant?: "location" | "event";
 }) {
+  const isEvent = variant === "event";
   return (
     <div className="map-button-editor">
       <div className="group-heading">
-        <strong>Button Buka Google Maps</strong>
+        <strong>{isEvent ? "Tombol lokasi acara" : "Button Buka Google Maps"}</strong>
       </div>
       <label>
         Label button
         <input
-          value={feature.mapButtonLabel || ""}
-          onChange={(event) => update({ mapButtonLabel: event.target.value })}
-          placeholder="Buka Google Maps"
+          value={
+            (isEvent ? feature.eventButtonLabel : feature.mapButtonLabel) || ""
+          }
+          onChange={(event) =>
+            update(
+              isEvent
+                ? { eventButtonLabel: event.target.value }
+                : { mapButtonLabel: event.target.value },
+            )
+          }
+          placeholder={isEvent ? "Lihat Lokasi" : "Buka Google Maps"}
         />
       </label>
+      <label>
+        Ikon
+        <select
+          value={feature.mapButtonIcon || "map-pin"}
+          onChange={(event) =>
+            update({
+              mapButtonIcon: event.target.value as Feature["mapButtonIcon"],
+            })
+          }
+        >
+          <option value="map-pin">Pin lokasi</option>
+          <option value="navigation">Navigasi</option>
+          <option value="map">Peta</option>
+          <option value="external">Tautan keluar</option>
+          <option value="none">Tanpa ikon</option>
+        </select>
+      </label>
+      {/* TC-208 — ukuran tombol & ikon. */}
+      <label>
+        Ukuran tombol <span>{feature.mapButtonFontSize || "bawaan"}{feature.mapButtonFontSize ? "px" : ""}</span>
+        <input
+          type="range"
+          min={8}
+          max={24}
+          value={feature.mapButtonFontSize || 12}
+          onChange={(event) =>
+            update({ mapButtonFontSize: Number(event.target.value) })
+          }
+        />
+      </label>
+      {feature.mapButtonIcon !== "none" && (
+        <label>
+          Ukuran ikon <span>{feature.mapButtonIconSize || 14}px</span>
+          <input
+            type="range"
+            min={10}
+            max={32}
+            value={feature.mapButtonIconSize || 14}
+            onChange={(event) =>
+              update({ mapButtonIconSize: Number(event.target.value) })
+            }
+          />
+        </label>
+      )}
       <label>
         Bentuk
         <select
@@ -22916,6 +24409,9 @@ function MapButtonEditor({
           />
         </label>
       </div>
+      {/* Peta embed & QR khusus fitur Lokasi; Event hanya punya tombolnya. */}
+      {!isEvent && (
+      <>
       <div className="setting-row compact">
         <div>
           <MapPin size={16} />
@@ -22966,6 +24462,8 @@ function MapButtonEditor({
           <i />
         </button>
       </div>
+      </>
+      )}
     </div>
   );
 }
@@ -23102,6 +24600,126 @@ function CreditEditor({
           placeholder="https://ikrarku.id"
         />
       </label>
+      {/* QA 15 Okt — kotak "Created by" dulu terkunci 8 px dan warnanya hanya
+          bisa diatur lewat editor kartu Gift, yang tidak muncul di Credit. */}
+      <label className="range-field">
+        <span className="range-head">
+          Ukuran teks credit<b>{feature.creditFontSize ?? 8}px</b>
+        </span>
+        <input
+          type="range"
+          min="7"
+          max="20"
+          value={feature.creditFontSize ?? 8}
+          onChange={(event) =>
+            update({ creditFontSize: Number(event.target.value) })
+          }
+        />
+      </label>
+      <div className="two-inputs">
+        <label>
+          Warna teks & ikon
+          <input
+            type="color"
+            value={feature.cardTextColor || "#154f40"}
+            onChange={(event) => update({ cardTextColor: event.target.value })}
+          />
+        </label>
+        <label>
+          Warna kotak
+          <input
+            type="color"
+            value={
+              feature.cardBackground?.startsWith("#")
+                ? feature.cardBackground
+                : "#ffffff"
+            }
+            onChange={(event) => update({ cardBackground: event.target.value })}
+          />
+        </label>
+      </div>
+      <label>
+        Warna garis
+        <input
+          type="color"
+          value={
+            feature.cardBorderColor?.startsWith("#")
+              ? feature.cardBorderColor
+              : "#d5ddd9"
+          }
+          onChange={(event) => update({ cardBorderColor: event.target.value })}
+        />
+      </label>
+      <label>
+        Gaya teks credit
+        <select
+          value={feature.creditTextStyle || "normal"}
+          onChange={(event) =>
+            update({
+              creditTextStyle: event.target.value as Feature["creditTextStyle"],
+            })
+          }
+        >
+          <option value="normal">Normal</option>
+          <option value="italic">Miring</option>
+          <option value="bold">Tebal</option>
+          <option value="uppercase">Huruf kapital</option>
+        </select>
+      </label>
+      {/* TC-213 — elemen musik ikut tema. */}
+      <strong className="credit-subhead">Elemen musik</strong>
+      <label>
+        Ikon judul lagu
+        <select
+          value={feature.creditMusicIcon || "disc"}
+          onChange={(event) =>
+            update({
+              creditMusicIcon: event.target.value as Feature["creditMusicIcon"],
+            })
+          }
+        >
+          <option value="disc">Piringan (berputar saat diputar)</option>
+          <option value="note">Not musik</option>
+          <option value="none">Tanpa ikon</option>
+        </select>
+      </label>
+      <label>
+        Ukuran ikon musik<b>{feature.creditMusicIconSize || 14}px</b>
+        <input
+          type="range"
+          min={10}
+          max={32}
+          value={feature.creditMusicIconSize || 14}
+          onChange={(event) =>
+            update({ creditMusicIconSize: Number(event.target.value) })
+          }
+        />
+      </label>
+      <label>
+        Warna elemen musik
+        <input
+          type="color"
+          value={feature.creditMusicColor || "#125946"}
+          onChange={(event) => update({ creditMusicColor: event.target.value })}
+        />
+      </label>
+      <button
+        className="secondary-btn"
+        onClick={() =>
+          update({
+            creditFontSize: undefined,
+            cardTextColor: undefined,
+            cardBackground: undefined,
+            cardBorderColor: undefined,
+            creditMusicColor: undefined,
+            creditMusicIcon: undefined,
+            creditMusicIconSize: undefined,
+            creditTextStyle: undefined,
+          })
+        }
+      >
+        Kembalikan gaya credit bawaan
+      </button>
     </div>
   );
 }
@@ -23768,6 +25386,66 @@ function CommissionPanel({
   );
 }
 
+function TemplatePriceControl({
+  price,
+  onSave,
+}: {
+  price: number;
+  onSave: (price: number) => Promise<void>;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(String(price));
+  const [busy, setBusy] = useState(false);
+  if (!editing)
+    return (
+      <button
+        className="template-price-edit"
+        onClick={() => {
+          setValue(String(price));
+          setEditing(true);
+        }}
+      >
+        <PenLine size={12} /> {price ? "Ubah harga" : "Tetapkan harga"}
+      </button>
+    );
+  const save = async () => {
+    setBusy(true);
+    try {
+      await onSave(Number(value) || 0);
+      setEditing(false);
+    } catch {
+      /* pesan sudah ditampilkan */
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <form
+      className="template-price-form"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+    >
+      <input
+        type="number"
+        min={0}
+        step={1000}
+        autoFocus
+        aria-label="Harga template (IDR)"
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+      />
+      <button type="submit" disabled={busy}>
+        Simpan
+      </button>
+      <button type="button" onClick={() => setEditing(false)}>
+        Batal
+      </button>
+    </form>
+  );
+}
+
 function TemplateApprovalManager({
   templates,
   currentAccountId,
@@ -23779,6 +25457,7 @@ function TemplateApprovalManager({
   onCaptureSample,
   onEditTemplate,
   onToggleRecommended,
+  onSetPrice,
 }: {
   templates: Template[];
   currentAccountId?: string;
@@ -23790,6 +25469,7 @@ function TemplateApprovalManager({
   onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
   onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
+  onSetPrice?: (templateId: string, price: number) => Promise<void>;
 }) {
   const [takedownTarget, setTakedownTarget] = useState<Template | null>(null);
   const [reason, setReason] = useState("");
@@ -23808,7 +25488,7 @@ function TemplateApprovalManager({
   // Satu input file dipakai bergantian; "kind" menentukan field mana yang ditulis.
   const [uploadKind, setUploadKind] = useState<"sample" | "thumbnail">("sample");
   const fileRef = useRef<HTMLInputElement>(null);
-  const visible = canApprove
+  const owned = canApprove
     ? templates
     : templates.filter((item) => item.createdBy === currentAccountId);
   const statusLabel = (status?: string) =>
@@ -23817,6 +25497,38 @@ function TemplateApprovalManager({
       : status === "Unpublished"
         ? "Takedown"
         : status || "Draft";
+  // VN 6 (15 Okt) — daftar dulu memuat semua template sekaligus, termasuk
+  // yang sudah ditolak & di-takedown, sehingga halaman memanjang dan terasa
+  // dobel dengan katalog di bawahnya. Bawaan kini hanya Published & Pending;
+  // yang ditolak/di-takedown hilang dari tampilan bawaan tetapi tetap ada
+  // sebagai riwayat lewat filter. Pembuat template melihat filter yang sama,
+  // jadi ia tahu templatenya ditolak dan bisa mengajukan ulang dari sana.
+  type FilterKey = "active" | "rejected" | "takedown" | "draft" | "all";
+  const filters: [FilterKey, string, string[] | null][] = [
+    ["active", "Published & Pending", ["Published", "Pending"]],
+    ["rejected", "Ditolak", ["Rejected"]],
+    ["takedown", "Takedown", ["Takedown"]],
+    ["draft", "Draft", ["Draft"]],
+    ["all", "Semua (riwayat)", null],
+  ];
+  const [filter, setFilter] = useState<FilterKey>("active");
+  const countFor = (labels: string[] | null) =>
+    labels
+      ? owned.filter((item) => labels.includes(statusLabel(item.status))).length
+      : owned.length;
+  const activeLabels = filters.find(([key]) => key === filter)?.[2] ?? null;
+  const visible = activeLabels
+    ? owned.filter((item) => activeLabels.includes(statusLabel(item.status)))
+    : owned;
+  // 8 per halaman = dua baris empat kolom (VN 6).
+  const PAGE_SIZE = 8;
+  const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const [page, setPage] = useState(0);
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageItems = visible.slice(
+    currentPage * PAGE_SIZE,
+    currentPage * PAGE_SIZE + PAGE_SIZE,
+  );
   return (
     <section className="template-approval-manager">
       <div className="section-heading">
@@ -23829,7 +25541,25 @@ function TemplateApprovalManager({
               : "Template yang Anda buat beserta status approval. Anda dapat mengedit ulang, mengganti gambar sample, atau menarik template dari publikasi."}
           </p>
         </div>
-        <strong>{visible.length} template</strong>
+        <strong>{owned.length} template</strong>
+      </div>
+      <div className="template-status-filters" role="tablist" aria-label="Filter status template">
+        {filters
+          .filter(([key, , labels]) => key !== "draft" || countFor(labels) > 0)
+          .map(([key, label, labels]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={filter === key}
+              className={filter === key ? "active" : ""}
+              onClick={() => {
+                setFilter(key);
+                setPage(0);
+              }}
+            >
+              {label} <b>{countFor(labels)}</b>
+            </button>
+          ))}
       </div>
       <input
         ref={fileRef}
@@ -23849,12 +25579,21 @@ function TemplateApprovalManager({
       {!visible.length && (
         <div className="empty-state">
           <Palette size={30} />
-          <h2>Belum ada template</h2>
-          <p>Buat template baru melalui tombol Create Template.</p>
+          {owned.length ? (
+            <>
+              <h2>Tidak ada template di filter ini</h2>
+              <p>Pilih filter lain untuk melihat template yang ada.</p>
+            </>
+          ) : (
+            <>
+              <h2>Belum ada template</h2>
+              <p>Buat template baru melalui tombol Create Template.</p>
+            </>
+          )}
         </div>
       )}
       <div className="template-status-grid">
-        {visible.map((template) => (
+        {pageItems.map((template) => (
           <article
             key={template.id}
             className={`template-status-card status-${statusLabel(template.status).toLowerCase()}`}
@@ -23880,8 +25619,26 @@ function TemplateApprovalManager({
               <div>
                 <strong>{template.name}</strong>
                 <span>
-                  {template.category} · {formatRupiah(template.price || 0)}
+                  {template.category} ·{" "}
+                  {template.price
+                    ? formatRupiah(template.price)
+                    : "Harga belum ditetapkan"}
                 </span>
+                {/* MoM A7 — harga ditetapkan & diubah cepat oleh Administrator. */}
+                {onSetPrice && (
+                  <TemplatePriceControl
+                    price={template.price || 0}
+                    onSave={(price) => onSetPrice(template.id, price)}
+                  />
+                )}
+                {/* VN 6 — admin perlu tahu siapa yang mengajukan. Pembuat
+                    sendiri tidak perlu diberi tahu namanya sendiri. */}
+                {canApprove && (template.createdByName || template.createdBy) && (
+                  <span className="template-status-creator">
+                    Diajukan oleh{" "}
+                    <b>{template.createdByName || template.createdBy}</b>
+                  </span>
+                )}
               </div>
               <em
                 className={`status-chip ${statusLabel(template.status).toLowerCase()}`}
@@ -23994,6 +25751,39 @@ function TemplateApprovalManager({
           </article>
         ))}
       </div>
+      {pageCount > 1 && (
+        <nav className="template-status-pager" aria-label="Halaman template">
+          <button
+            disabled={currentPage === 0}
+            onClick={() => setPage(currentPage - 1)}
+            aria-label="Halaman sebelumnya"
+          >
+            <ChevronLeft size={15} />
+          </button>
+          {Array.from({ length: pageCount }, (_, index) => (
+            <button
+              key={index}
+              className={index === currentPage ? "active" : ""}
+              aria-current={index === currentPage ? "page" : undefined}
+              onClick={() => setPage(index)}
+            >
+              {index + 1}
+            </button>
+          ))}
+          <button
+            disabled={currentPage === pageCount - 1}
+            onClick={() => setPage(currentPage + 1)}
+            aria-label="Halaman berikutnya"
+          >
+            <ChevronRight size={15} />
+          </button>
+          <span>
+            {currentPage * PAGE_SIZE + 1}–
+            {Math.min(visible.length, (currentPage + 1) * PAGE_SIZE)} dari{" "}
+            {visible.length}
+          </span>
+        </nav>
+      )}
       {takedownTarget && (
         <div className="dialog-overlay" onClick={() => setTakedownTarget(null)}>
           <div
@@ -24075,23 +25865,7 @@ function TemplateApprovalManager({
               ref={previewStageRef}
               className={`template-dialog-actual-preview live device-${previewDevice}`}
             >
-              {preview.canvasSections?.length ? (
-                <WeddingCanvas
-                  page="pages"
-                  sections={hydrateSections(preview.canvasSections)}
-                  selectedTemplate={preview}
-                  greetings={[]}
-                  addGreeting={() => undefined}
-                  guests={[]}
-                  addGuest={() => undefined}
-                />
-              ) : (
-                <WebsiteTemplatePreview
-                  template={preview}
-                  title={preview.name}
-                  sections={preview.canvasSections || []}
-                />
-              )}
+              <TemplateLivePreview template={preview} />
             </div>
             </PreviewSurfaceContext>
             </DeviceContext>

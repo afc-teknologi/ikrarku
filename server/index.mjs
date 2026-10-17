@@ -331,6 +331,13 @@ function initDb() {
   ensureColumn("templates", "recommended", "INTEGER NOT NULL DEFAULT 0");
   // Share fee per Template Creator; NULL = ikut rate default platform.
   ensureColumn("users", "commission_rate", "REAL");
+  // MoM A8 — urutan round-robin Web Designer memakai waktu penugasan, bukan
+  // waktu task dibuat (task antrean ditugaskan belakangan).
+  ensureColumn("tasks", "assigned_at", "TEXT");
+  // MoM A9 — kapan customer terakhir diberi tahu bahwa tim mengedit websitenya.
+  ensureColumn("sites", "team_notice_at", "TEXT");
+  ensureColumn("sites", "team_editor_name", "TEXT");
+  ensureColumn("sites", "team_edited_at", "TEXT");
   // Web Designer perlu canvas.manage.own agar bisa menyimpan websitenya sendiri.
   try {
     const editorRole = db
@@ -1679,6 +1686,12 @@ app.post("/api/templates", auth, permit("templates.create"), (req, res) => {
     return res.status(400).json({ error: "Nama template wajib diisi" });
   const templateId = id("tpl");
   const status = req.user.permissions.includes("*") ? "Published" : "Pending";
+  // MoM A7 — harga ditetapkan Administrator. Pengajuan Web Designer masuk
+  // tanpa harga (0 = "belum ditetapkan"); Administrator mengisinya saat
+  // review lewat PATCH /api/templates/:id/price.
+  const initialPrice = req.user.permissions.includes("*")
+    ? Math.max(0, Math.round(Number(price) || 0))
+    : 0;
   const sample = sampleImage || preview || null;
   db.prepare(
     `INSERT INTO templates(id,name,category,description,price,currency,status,preview_url,sample_image_url,header_image_url,accent,background,premium,preset,created_by,approved_by,canvas_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
@@ -1687,7 +1700,7 @@ app.post("/api/templates", auth, permit("templates.create"), (req, res) => {
     name,
     category,
     description,
-    Number(price) || 0,
+    initialPrice,
     "IDR",
     status,
     sample,
@@ -1709,7 +1722,7 @@ app.post("/api/templates", auth, permit("templates.create"), (req, res) => {
     ).run(
       id("task"),
       `Approval template: ${name}`,
-      `Review harga, deskripsi, dan kelayakan template ${name}.`,
+      `Tetapkan harga, review deskripsi, dan kelayakan template ${name}.`,
       "Open",
       "High",
       "role_admin",
@@ -1780,7 +1793,8 @@ app.patch("/api/templates/:id", auth, (req, res) => {
       name: next.name,
       category: next.category,
       description: next.description,
-      price: Number(next.price) || 0,
+      // MoM A7: harga bukan bagian revisi Web Designer (tidak disimpan di
+      // draft, sehingga approve revisi tidak bisa mengembalikan harga lama).
       preview_url: nextSample,
       sample_image_url: nextSample,
       header_image_url: nextHeader,
@@ -1829,7 +1843,7 @@ app.patch("/api/templates/:id", auth, (req, res) => {
     next.name,
     next.category,
     next.description,
-    Number(next.price) || 0,
+    canAll ? Math.max(0, Math.round(Number(next.price) || 0)) : row.price,
     status,
     nextSample ?? next.preview_url,
     nextSample,
@@ -1993,6 +2007,45 @@ app.post("/api/templates/:id/recommend", auth, permit("*"), (req, res) => {
   );
 });
 
+// MoM A7 — Administrator menetapkan & mengubah harga dengan cepat, tanpa
+// membuka editor dan tanpa alur approval. Berlaku untuk order berikutnya;
+// order yang sudah dibuat menyimpan nominalnya sendiri (orders.amount).
+app.patch("/api/templates/:id/price", auth, (req, res) => {
+  if (!hasPermission(req.user, "templates.approve"))
+    return res.status(403).json({ error: "Permission denied" });
+  const row = db
+    .prepare("SELECT * FROM templates WHERE id=?")
+    .get(req.params.id);
+  if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
+  const price = Number(req.body?.price);
+  if (!Number.isFinite(price) || price < 0 || price > 100_000_000)
+    return res
+      .status(400)
+      .json({ error: "Harga harus angka 0 – 100.000.000" });
+  const next = Math.round(price);
+  db.prepare(
+    "UPDATE templates SET price=?,premium=?,updated_at=? WHERE id=?",
+  ).run(next, next > 0 ? 1 : 0, now(), row.id);
+  // Revisi yang menunggu approval tidak boleh mengembalikan harga lama.
+  const pending = db
+    .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
+    .get(row.id);
+  if (pending) {
+    const changes = parseJson(pending.changes_json, {});
+    delete changes.price;
+    db.prepare(
+      "UPDATE template_drafts SET changes_json=? WHERE template_id=?",
+    ).run(JSON.stringify(changes), row.id);
+  }
+  auditLog(req.user.id, "template.price", "template", row.id, {
+    from: row.price,
+    to: next,
+  });
+  res.json(
+    mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
+  );
+});
+
 app.post("/api/templates/:id/republish", auth, (req, res) => {
   const row = db
     .prepare("SELECT * FROM templates WHERE id=?")
@@ -2055,6 +2108,27 @@ app.post("/api/templates/:id/review", auth, (req, res) => {
   const status = ["approved", "published"].includes(decision)
     ? "Published"
     : "Rejected";
+  // MoM A7 — harga ditetapkan Administrator. Pengajuan Web Designer masuk
+  // tanpa harga, jadi approve wajib disertai harga (boleh lewat field price
+  // pada request ini) agar template tidak terbit gratis tanpa sengaja.
+  if (req.body.price !== undefined && status === "Published") {
+    const price = Number(req.body.price);
+    if (!Number.isFinite(price) || price <= 0 || price > 100_000_000)
+      return res.status(400).json({ error: "Harga harus 1 – 100.000.000" });
+    db.prepare("UPDATE templates SET price=?,premium=1 WHERE id=?").run(
+      Math.round(price),
+      row.id,
+    );
+    row.price = Math.round(price);
+  }
+  if (
+    status === "Published" &&
+    !(Number(row.price) > 0) &&
+    !policy.templateAuthorIsAdmin(row)
+  )
+    return res.status(400).json({
+      error: "Tetapkan harga template sebelum approve.",
+    });
   const feedback = String(req.body.feedback || "");
   const pending = db
     .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
@@ -2065,7 +2139,6 @@ app.post("/api/templates/:id/review", auth, (req, res) => {
       "name",
       "category",
       "description",
-      "price",
       "preview_url",
       "sample_image_url",
       "header_image_url",
@@ -2778,6 +2851,7 @@ app.put("/api/clients/:id/site", auth, permit("users.view"), (req, res) => {
       now(),
     );
   db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.params.id);
+  if (req.user.id !== req.params.id) notifyTeamEdit(req.params.id, req.user);
   auditLog(req.user.id, "client-site.save", "site", existing?.id || "", {
     customerUserId: req.params.id,
     slug: payload.slug,
@@ -3066,6 +3140,10 @@ app.get("/api/site", auth, permit("canvas.manage.own"), (req, res) => {
           sections: parseJson(row.canvas_json, []),
           status: row.status,
           updatedAt: row.updated_at,
+          // MoM A9 — customer melihat bahwa tim sedang membantu mengedit.
+          teamEdit: row.team_edited_at
+            ? { name: row.team_editor_name || "Tim ikrarku", at: row.team_edited_at }
+            : null,
         }
       : null,
   );
@@ -3335,6 +3413,80 @@ function chooseAssignee(roleId) {
       .get(roleId)?.id || null
   );
 }
+// MoM A8 — order dibagi bergiliran (round-robin) ke Web Designer aktif, dan
+// satu Web Designer maksimal memegang EDITOR_ACTIVE_ORDER_LIMIT order aktif.
+// Order aktif = order yang task "Build website"-nya belum Done/Cancelled.
+// Bila semua penuh, order masuk antrean dan ditugaskan otomatis begitu ada
+// yang selesai (drainEditorQueue).
+const EDITOR_ACTIVE_ORDER_LIMIT = Math.max(
+  1,
+  Number(process.env.EDITOR_ACTIVE_ORDER_LIMIT || 5),
+);
+function chooseOrderEditor(preferredId = null) {
+  const rows = db
+    .prepare(
+      `SELECT u.id,
+        (SELECT COUNT(DISTINCT t.order_id) FROM tasks t
+          WHERE t.assigned_user_id=u.id AND t.assigned_role_id='role_editor'
+            AND t.order_id IS NOT NULL AND t.status NOT IN ('Done','Cancelled')) active,
+        (SELECT MAX(COALESCE(t.assigned_at,t.created_at)) FROM tasks t
+          WHERE t.assigned_user_id=u.id AND t.assigned_role_id='role_editor'
+            AND t.order_id IS NOT NULL) last_at
+       FROM users u WHERE u.role_id='role_editor' AND u.active=1
+       ORDER BY last_at IS NOT NULL, last_at ASC, u.created_at ASC`,
+    )
+    .all();
+  // Customer yang sudah punya Web Designer tetap ke orang yang sama selama
+  // kuotanya belum penuh; selain itu bergiliran.
+  const preferred = preferredId && rows.find((row) => row.id === preferredId);
+  if (preferred && preferred.active < EDITOR_ACTIVE_ORDER_LIMIT)
+    return preferred.id;
+  return rows.find((row) => row.active < EDITOR_ACTIVE_ORDER_LIMIT)?.id || null;
+}
+function existingSiteEditor(order) {
+  const ownerId =
+    order?.user_id ||
+    db.prepare("SELECT id FROM users WHERE lower(email)=lower(?)").get(order?.email || "")?.id;
+  if (!ownerId) return null;
+  return (
+    db.prepare("SELECT editor_id FROM site_assignments WHERE user_id=?").get(ownerId)
+      ?.editor_id || null
+  );
+}
+function assignQueuedOrder(task, editorId) {
+  const stamp = now();
+  db.prepare(
+    "UPDATE tasks SET assigned_user_id=?,assigned_at=?,updated_at=? WHERE id=?",
+  ).run(editorId, stamp, stamp, task.id);
+  db.prepare(
+    "UPDATE orders SET assigned_editor_id=?,order_status='Paid - Onboarding' WHERE id=?",
+  ).run(editorId, task.order_id);
+  const order = db.prepare("SELECT * FROM orders WHERE id=?").get(task.order_id);
+  const ownerId =
+    order?.user_id ||
+    db.prepare("SELECT id FROM users WHERE lower(email)=lower(?)").get(order?.email || "")?.id;
+  if (order && ownerId) policy.assignPaidSite(order, ownerId);
+}
+function drainEditorQueue() {
+  try {
+    const queued = db
+      .prepare(
+        `SELECT t.* FROM tasks t JOIN orders o ON o.id=t.order_id
+         WHERE t.assigned_role_id='role_editor' AND t.assigned_user_id IS NULL
+           AND t.status NOT IN ('Done','Cancelled') AND o.payment_status='Paid'
+         ORDER BY t.created_at ASC`,
+      )
+      .all();
+    for (const task of queued) {
+      const order = db.prepare("SELECT * FROM orders WHERE id=?").get(task.order_id);
+      const editorId = chooseOrderEditor(existingSiteEditor(order));
+      if (!editorId) break;
+      assignQueuedOrder(task, editorId);
+    }
+  } catch (error) {
+    console.error("[editor-queue] gagal membagi antrean:", error.message);
+  }
+}
 async function createReceipt(order, template) {
   const receiptNo = `RCPT-${new Date().getFullYear()}-${order.order_no.split("-").at(-1)}`;
   const filename = `${receiptNo}.pdf`;
@@ -3597,23 +3749,19 @@ async function fulfillPaidOrder(order, methodCode) {
     const template = db
       .prepare("SELECT * FROM templates WHERE id=?")
       .get(fresh.template_id);
-    const templateOwner = db
-      .prepare(
-        "SELECT id FROM users WHERE id=? AND active=1 AND role_id='role_editor'",
-      )
-      .get(template.created_by);
+    // MoM A8 — bergiliran, maksimal 5 order aktif per Web Designer. Dulu
+    // pembuat template selalu didahulukan sehingga satu orang bisa menumpuk
+    // order; null = semua penuh, order menunggu di antrean.
     const editorId =
-      fresh.assigned_editor_id ||
-      templateOwner?.id ||
-      chooseAssignee("role_editor");
+      fresh.assigned_editor_id || chooseOrderEditor(existingSiteEditor(fresh));
     // Record confirmed payment separately; fulfillment can be safely retried after any failure.
     db.prepare(
       "UPDATE orders SET payment_status='Paid',payment_method=?,paid_at=COALESCE(paid_at,?),fulfillment_status='Pending' WHERE id=?",
     ).run(methodCode, now(), fresh.id);
     try {
-      if (!csId || !editorId)
+      if (!csId)
         throw Object.assign(
-          new Error("Tambahkan CS dan Web Designer aktif sebelum onboarding."),
+          new Error("Tambahkan CS aktif sebelum onboarding."),
           { status: 409 },
         );
       const paidOrder = db
@@ -3624,11 +3772,18 @@ async function fulfillPaidOrder(order, methodCode) {
         outboxId = id("mail");
       policy.transaction(() => {
         db.prepare(
-          "UPDATE orders SET assigned_cs_id=?,assigned_editor_id=?,receipt_no=?,receipt_path=?,order_status='Paid - Onboarding',fulfillment_status='Complete',fulfillment_error=NULL WHERE id=?",
-        ).run(csId, editorId, receipt.receiptNo, receipt.filepath, fresh.id);
+          "UPDATE orders SET assigned_cs_id=?,assigned_editor_id=?,receipt_no=?,receipt_path=?,order_status=?,fulfillment_status='Complete',fulfillment_error=NULL WHERE id=?",
+        ).run(
+          csId,
+          editorId,
+          receipt.receiptNo,
+          receipt.filepath,
+          editorId ? "Paid - Onboarding" : "Paid - Antre Web Designer",
+          fresh.id,
+        );
       recordTemplateCommission(fresh, template);
         const taskInsert = db.prepare(
-          `INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at,assigned_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
         );
         taskInsert.run(
           id("task"),
@@ -3639,6 +3794,7 @@ async function fulfillPaidOrder(order, methodCode) {
           "High",
           csId,
           "role_cs",
+          now(),
           now(),
           now(),
         );
@@ -3653,6 +3809,7 @@ async function fulfillPaidOrder(order, methodCode) {
           "role_editor",
           now(),
           now(),
+          editorId ? now() : null,
         );
         db.prepare(
           `INSERT INTO conversations(id,order_id,customer_name,customer_email,customer_phone,status,assigned_cs_id,channel,created_at,updated_at,public_token) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
@@ -3758,6 +3915,194 @@ app.post(
     } catch (e) {
       res.status(e.status || 500).json({ error: e.message });
     }
+  },
+);
+
+// MoM A9 — setiap kali Web Designer/CS menyimpan website customer, customer
+// diberi tahu bahwa tim sedang membantu mengedit: penanda di dashboard
+// (selalu diperbarui) dan pesan chat (paling banyak sekali per 6 jam, supaya
+// simpan berulang tidak membanjiri chat).
+const TEAM_NOTICE_INTERVAL_MS = 6 * 3600_000;
+function notifyTeamEdit(customerUserId, staff) {
+  try {
+    const customer = db
+      .prepare("SELECT * FROM users WHERE id=?")
+      .get(customerUserId);
+    const site = db
+      .prepare("SELECT * FROM sites WHERE user_id=?")
+      .get(customerUserId);
+    if (!customer || !site) return;
+    const role =
+      staff.roleId === "role_editor"
+        ? "Web Designer"
+        : staff.roleId === "role_cs"
+          ? "Customer Service"
+          : "Tim ikrarku";
+    const staffName =
+      [staff.firstName, staff.lastName].filter(Boolean).join(" ") ||
+      staff.name ||
+      "Tim ikrarku";
+    const label = `${staffName} (${role})`;
+    const stamp = now();
+    db.prepare(
+      "UPDATE sites SET team_editor_name=?,team_edited_at=? WHERE user_id=?",
+    ).run(label, stamp, customerUserId);
+    const last = site.team_notice_at ? Date.parse(site.team_notice_at) : 0;
+    if (last && Date.now() - last < TEAM_NOTICE_INTERVAL_MS) return;
+    const conversation = createOrFindConversation({
+      customerName:
+        [customer.first_name, customer.last_name].filter(Boolean).join(" ") ||
+        "Customer",
+      customerEmail: customer.email,
+      trusted: true,
+    });
+    if (!conversation) return;
+    db.prepare(
+      `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`,
+    ).run(
+      id("msg"),
+      conversation.id,
+      "support",
+      staff.id,
+      `${label} sedang membantu mengedit undangan Anda. Perubahan terbaru sudah tersimpan — cek di dashboard, dan balas pesan ini bila ada yang ingin diubah.`,
+      stamp,
+    );
+    db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+      stamp,
+      conversation.id,
+    );
+    db.prepare("UPDATE sites SET team_notice_at=? WHERE user_id=?").run(
+      stamp,
+      customerUserId,
+    );
+  } catch (error) {
+    console.error("[team-edit] gagal memberi tahu customer:", error.message);
+  }
+}
+
+// MoM A6 — customer cukup order (tanpa daftar akun). Setelah bayar, CS atau
+// Administrator membuatkan akunnya dari halaman Orders, lalu mengirim tautan
+// "buat password" lewat chat. Password tidak pernah dibuat/dilihat staff:
+// yang dikirim hanya tautan reset sekali pakai yang berlaku 72 jam.
+const ACCOUNT_SETUP_HOURS = 72;
+app.post(
+  "/api/orders/:id/customer-account",
+  auth,
+  permit("orders.view"),
+  (req, res) => {
+    const order = db
+      .prepare("SELECT * FROM orders WHERE id=? AND payment_status='Paid'")
+      .get(req.params.id);
+    if (!order)
+      return res.status(404).json({ error: "Order lunas tidak ditemukan" });
+    let user = db
+      .prepare("SELECT * FROM users WHERE lower(email)=lower(?)")
+      .get(order.email);
+    const existing = Boolean(user);
+    if (user && user.role_id !== "role_user")
+      return res.status(409).json({
+        error: "Email order dipakai akun staff. Hubungi Administrator.",
+      });
+    if (!user) {
+      const [firstName, ...rest] = String(order.customer_name || "Customer")
+        .trim()
+        .split(/\s+/);
+      const base =
+        String(order.email)
+          .split("@")[0]
+          .toLowerCase()
+          .replace(/[^a-z0-9._-]/g, "")
+          .slice(0, 24) || "customer";
+      let username = base;
+      for (let n = 2; db.prepare("SELECT 1 FROM users WHERE username=?").get(username); n++)
+        username = `${base}${n}`;
+      const userId = id("usr");
+      db.prepare(
+        `INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        userId,
+        firstName || "Customer",
+        rest.join(" "),
+        String(order.email).toLowerCase(),
+        username,
+        // Tidak bisa dipakai login sampai customer membuat password sendiri.
+        bcrypt.hashSync(crypto.randomBytes(24).toString("hex"), 10),
+        "role_user",
+        1,
+        1,
+        now(),
+        now(),
+      );
+      user = db.prepare("SELECT * FROM users WHERE id=?").get(userId);
+    }
+    db.prepare(
+      "UPDATE orders SET user_id=? WHERE user_id IS NULL AND lower(email)=lower(?)",
+    ).run(user.id, order.email);
+    const linked = db.prepare("SELECT * FROM orders WHERE id=?").get(order.id);
+    const template = db
+      .prepare("SELECT * FROM templates WHERE id=?")
+      .get(linked.template_id);
+    policy.assignPaidSite(linked, user.id);
+    seedCustomerSiteFromTemplate(user.id, linked, template);
+    const token = crypto.randomBytes(32).toString("hex");
+    db.prepare(
+      "UPDATE users SET reset_token=?,reset_expires=?,updated_at=? WHERE id=?",
+    ).run(
+      token,
+      new Date(Date.now() + ACCOUNT_SETUP_HOURS * 3600_000).toISOString(),
+      now(),
+      user.id,
+    );
+    const setupUrl = `${CLIENT_ORIGIN.replace(/\/$/, "")}/reset-password?token=${token}`;
+    const body = existing
+      ? `Akun ikrarku untuk ${order.email} sudah terhubung dengan order ${order.order_no}. Atur ulang password Anda lewat tautan ini (berlaku ${ACCOUNT_SETUP_HOURS} jam): ${setupUrl}`
+      : `Akun ikrarku Anda sudah kami buatkan (email: ${order.email}). Buat password lewat tautan ini (berlaku ${ACCOUNT_SETUP_HOURS} jam), lalu login untuk melihat progres undangan: ${setupUrl}`;
+    const conversation = createOrFindConversation({
+      customerName: order.customer_name || "Customer",
+      customerEmail: order.email,
+      customerPhone: order.phone || "",
+      orderId: order.id,
+      channel: "Web",
+      trusted: true,
+    });
+    if (conversation) {
+      db.prepare(
+        `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,created_at) VALUES(?,?,?,?,?,?)`,
+      ).run(id("msg"), conversation.id, "support", req.user.id, body, now());
+      db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+        now(),
+        conversation.id,
+      );
+    }
+    queueEmail(
+      order.email,
+      "Akun ikrarku Anda sudah siap",
+      brandedEmail({
+        preheader: "Buat password untuk mulai memakai akun Anda.",
+        heading: "Akun Anda sudah siap",
+        intro:
+          "Halo " +
+          escapeHtml(order.customer_name || "Customer") +
+          ", akun untuk order " +
+          escapeHtml(order.order_no) +
+          " sudah dibuat oleh tim kami. Buat password untuk mulai memakai akun.",
+        ctaLabel: "Buat password",
+        ctaUrl: setupUrl,
+        footnote: `Tautan berlaku ${ACCOUNT_SETUP_HOURS} jam.`,
+      }),
+    );
+    auditLog(req.user.id, "order.customer_account", "user", user.id, {
+      orderId: order.id,
+      existing,
+    });
+    res.json({
+      ok: true,
+      existing,
+      userId: user.id,
+      username: user.username,
+      setupUrl,
+      conversationId: conversation?.id || null,
+    });
   },
 );
 
@@ -4095,7 +4440,7 @@ app.get("/api/orders/analytics", auth, permit("orders.view"), (_req, res) => {
     .get();
   const rows = db
     .prepare(
-      `SELECT o.id,o.fulfillment_status,o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`,
+      `SELECT o.id,o.user_id,o.fulfillment_status,o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`,
     )
     .all();
   res.json({ summary, rows });
@@ -4327,11 +4672,13 @@ app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
     .get(req.params.id);
   const nextStatus = req.body.status || "Open";
   db.prepare(
-    "UPDATE tasks SET status=?,priority=?,assigned_user_id=COALESCE(?,assigned_user_id),updated_at=? WHERE id=?",
+    "UPDATE tasks SET status=?,priority=?,assigned_user_id=COALESCE(?,assigned_user_id),assigned_at=CASE WHEN ? IS NULL THEN assigned_at ELSE ? END,updated_at=? WHERE id=?",
   ).run(
     nextStatus,
     req.body.priority || "Normal",
     req.body.assignedUserId || null,
+    req.body.assignedUserId || null,
+    now(),
     now(),
     req.params.id,
   );
@@ -4339,6 +4686,8 @@ app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
   // prioritas tidak membanjiri live chat customer dengan pesan yang sama.
   if (before && before.status !== nextStatus)
     notifyTaskStatusChange(before, nextStatus, req.user.id);
+  // MoM A8 — order selesai/batal membebaskan slot; antrean langsung dibagi.
+  if (["Done", "Cancelled"].includes(nextStatus)) drainEditorQueue();
   res.json({ ok: true });
 });
 
@@ -4958,6 +5307,7 @@ app.use((err, _req, res, _next) => {
     .status(err.status || 500)
     .json({ error: err.status ? err.message : "Server error" });
 });
+drainEditorQueue();
 app.listen(PORT, () =>
   console.log(`ikrarku v0.15 API listening on http://localhost:${PORT}`),
 );
