@@ -257,6 +257,10 @@ type GiftAccount = {
   accountNumber: string;
   accountName: string;
   note?: string;
+  // Logo bank/e-wallet hasil upload (opsional). Tanpa ini nama bank tampil
+  // sebagai label teks.
+  logoUrl?: string;
+  logoKey?: string;
 };
 type IconItem = {
   id: string;
@@ -541,6 +545,7 @@ type Feature = DesignerLayout & {
   bankLogoBackground?: string;
   bankLogoTextColor?: string;
   bankLogoAlign?: "flex-start" | "center" | "flex-end";
+  bankLogoImageHeight?: number; // tinggi logo gambar (px)
   mapButtonBackground?: string; // TC-124 button Buka Google Maps
   mapButtonTextColor?: string;
   mapButtonRadius?: number;
@@ -11003,6 +11008,29 @@ function Editor({
   };
 
   // Revisi: gambar untuk layer background diunggah dari komputer.
+  // Logo bank/e-wallet pada Wedding Gift — gambar kecil, dikompres bila perlu.
+  const uploadGiftLogo = async (file: File | undefined) => {
+    if (!file) return null;
+    // SVG sengaja ditolak: berkas SVG bisa memuat skrip yang ikut berjalan
+    // bila URL /uploads-nya dibuka langsung.
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      flash("Logo harus berupa gambar PNG, JPG, atau WebP.");
+      return null;
+    }
+    file = await shrinkImageToLimit(file, 1024 * 1024);
+    if (file.size > 1024 * 1024) {
+      flash("Logo maksimal 1 MB.");
+      return null;
+    }
+    try {
+      const saved = await uploadToServer(file, "gift-logo");
+      flash("Logo bank berhasil diunggah.");
+      return { url: saved.url, key: saved.key };
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Upload logo gagal.");
+      return null;
+    }
+  };
   const uploadLayerImage = async (file: File | undefined) => {
     if (!file) return null;
     if (!file.type.startsWith("image/")) {
@@ -11693,6 +11721,7 @@ function Editor({
                   uploadFeatureBackground={uploadFeatureBackground}
                   uploadSoundMedia={uploadSoundMedia}
                   uploadGallery={uploadGallery}
+                  uploadGiftLogo={uploadGiftLogo}
                   replay={() => setAnimationNonce((previous) => previous + 1)}
                   soundCatalog={soundCatalog}
                 />
@@ -11897,6 +11926,7 @@ function FeatureInspector({
   uploadFeatureBackground,
   uploadSoundMedia,
   uploadGallery,
+  uploadGiftLogo,
   replay,
   soundCatalog,
 }: {
@@ -11917,6 +11947,9 @@ function FeatureInspector({
   uploadFeatureBackground: (file: File | undefined) => Promise<void>;
   uploadSoundMedia: (file: File | undefined) => Promise<void>;
   uploadGallery: (files: FileList | null) => Promise<void>;
+  uploadGiftLogo?: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
   replay: () => void;
   soundCatalog: SoundCatalogItem[];
 }) {
@@ -12770,7 +12803,11 @@ function FeatureInspector({
           </>
         )}
         {feature.type === "gift" && (
-          <GiftAccountEditor feature={feature} update={update} />
+          <GiftAccountEditor
+            feature={feature}
+            update={update}
+            uploadLogo={uploadGiftLogo}
+          />
         )}
         {feature.type === "icon" && (
           <IconListEditor feature={feature} update={update} />
@@ -22643,12 +22680,24 @@ function GiftAccountsBlock({ feature }: { feature: Feature }) {
           key={account.id}
           style={giftCardStyle(feature)}
         >
-          <span
-            className={`bank-logo bank-${account.bank.toLowerCase().replace(/[^a-z0-9]/g, "")} shape-${feature.bankLogoShape || "pill"}`}
-            style={bankLogoStyle(feature)}
-          >
-            {account.bank}
-          </span>
+          {account.logoUrl ? (
+            <img
+              className="bank-logo-img"
+              src={assetUrl(account.logoUrl)}
+              alt={account.bank}
+              style={{
+                height: feature.bankLogoImageHeight || 28,
+                alignSelf: feature.bankLogoAlign || undefined,
+              }}
+            />
+          ) : (
+            <span
+              className={`bank-logo bank-${account.bank.toLowerCase().replace(/[^a-z0-9]/g, "")} shape-${feature.bankLogoShape || "pill"}`}
+              style={bankLogoStyle(feature)}
+            >
+              {account.bank}
+            </span>
+          )}
           <strong>{account.accountNumber}</strong>
           <small>a.n. {account.accountName}</small>
           {account.note && <em>{account.note}</em>}
@@ -23119,10 +23168,15 @@ function FormFieldEditor({
 function GiftAccountEditor({
   feature,
   update,
+  uploadLogo,
 }: {
   feature: Feature;
   update: (patch: Partial<Feature>) => void;
+  uploadLogo?: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
 }) {
+  const [uploadingLogo, setUploadingLogo] = useState("");
   const accounts = feature.giftAccounts || [];
   const commit = (next: GiftAccount[]) => update({ giftAccounts: next });
   const patch = (id: string, next: Partial<GiftAccount>) =>
@@ -23150,7 +23204,22 @@ function GiftAccountEditor({
           </select>
         </label>
         <label>
-          Ukuran: {feature.bankLogoSize || 8}px
+          Ukuran logo gambar: {feature.bankLogoImageHeight || 28}px
+          <input
+            type="range"
+            min={16}
+            max={96}
+            value={feature.bankLogoImageHeight || 28}
+            onChange={(event) =>
+              update({ bankLogoImageHeight: Number(event.target.value) })
+            }
+          />
+          <small className="field-hint">
+            Untuk rekening yang memakai logo hasil upload.
+          </small>
+        </label>
+        <label>
+          Ukuran teks logo: {feature.bankLogoSize || 8}px
           <input
             type="range"
             min={6}
@@ -23207,6 +23276,7 @@ function GiftAccountEditor({
               bankLogoBackground: undefined,
               bankLogoTextColor: undefined,
               bankLogoAlign: undefined,
+              bankLogoImageHeight: undefined,
             })
           }
         >
@@ -23265,6 +23335,48 @@ function GiftAccountEditor({
               ))}
             </select>
           </label>
+          {uploadLogo && (
+            <div className="gift-logo-upload">
+              <span>Logo {account.bank} (opsional)</span>
+              {account.logoUrl && (
+                <img src={assetUrl(account.logoUrl)} alt={`Logo ${account.bank}`} />
+              )}
+              <label className="secondary-btn gift-logo-pick">
+                <Upload size={13} />{" "}
+                {uploadingLogo === account.id
+                  ? "Mengunggah…"
+                  : account.logoUrl
+                    ? "Ganti logo"
+                    : "Upload logo"}
+                <input
+                  hidden
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onClick={resetFileInput}
+                  onChange={async (event) => {
+                    const file = event.target.files?.[0];
+                    if (!file) return;
+                    setUploadingLogo(account.id);
+                    const saved = await uploadLogo(file);
+                    setUploadingLogo("");
+                    if (saved)
+                      patch(account.id, { logoUrl: saved.url, logoKey: saved.key });
+                  }}
+                />
+              </label>
+              {account.logoUrl && (
+                <button
+                  type="button"
+                  className="text-button"
+                  onClick={() =>
+                    patch(account.id, { logoUrl: undefined, logoKey: undefined })
+                  }
+                >
+                  Pakai label teks
+                </button>
+              )}
+            </div>
+          )}
           <label>
             Nomor rekening / nomor akun
             <input

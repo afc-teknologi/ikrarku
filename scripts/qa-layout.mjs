@@ -1007,3 +1007,13 @@ test("QA 17 Okt TC-218/219: upload tidak macet; undo dari state terbaru, batas j
   assert.match(appTsx, /historyRef\.current\.push\(structuredClone\(previous\)\);/);
   assert.match(appTsx, /className="history-count"/);
 });
+
+test("Wedding Gift: logo bank bisa diupload per rekening dan diatur ukurannya", () => {
+  assert.match(appTsx, /logoUrl\?: string;\n\s*logoKey\?: string;/);
+  assert.match(appTsx, /bankLogoImageHeight\?: number;/);
+  assert.match(appTsx, /className="bank-logo-img"/);
+  assert.match(appTsx, /height: feature\.bankLogoImageHeight \|\| 28,/);
+  assert.match(appTsx, /uploadLogo=\{uploadGiftLogo\}/);
+  // SVG ditolak (bisa memuat skrip saat URL-nya dibuka langsung).
+  assert.match(appTsx, /\["image\/png", "image\/jpeg", "image\/webp"\]\.includes\(file\.type\)/);
+});
