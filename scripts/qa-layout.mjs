@@ -214,7 +214,10 @@ test("Catatan internal memakai bubble kontras, bukan hijau tua", () => {
 
 test("Canvas Editor tidak memuat Live Chat maupun disc backsound", () => {
   assert.match(appTsx, /soundFeature && !editable \?/);
-  assert.match(appTsx, /Canvas Editor sengaja tidak memuat ChatWidget/);
+  // TC-223 — tidak ada tombol melayang; panel chat hanya saat customer
+  // menekan "Hubungi Support".
+  assert.match(appTsx, /Canvas Editor sengaja tidak memuat tombol Live Chat yang melayang/);
+  assert.match(appTsx, /\{role === "User" && chatWidgetOpen && \(\n\s*<ChatWidget/);
 });
 
 // ---------------------------------------------------------------------------
@@ -845,7 +848,7 @@ test("TC-197: Background tetap memakai satu lapisan sticky, bukan attachment:fix
   // hidden backdrop tergulir -440 px; dengan clip menempel di 0 px.
   assert.match(appCss, /\.wedding-site\.has-fixed-backdrop\{overflow:visible;overflow:clip\}/);
   // Pengukuran tinggi diulang setelah cover dibuka (root baru terpasang).
-  assert.match(appTsx, /\}, \[fixedBackdrop, opened\]\);/);
+  assert.match(appTsx, /\}, \[fixedBackdrop, opened, previewZoom\]\);/);
   assert.match(appTsx, /<strong>Background tetap<\/strong>/);
 });
 
@@ -1016,4 +1019,120 @@ test("Wedding Gift: logo bank bisa diupload per rekening dan diatur ukurannya", 
   assert.match(appTsx, /uploadLogo=\{uploadGiftLogo\}/);
   // SVG ditolak (bisa memuat skrip saat URL-nya dibuka langsung).
   assert.match(appTsx, /\["image\/png", "image\/jpeg", "image\/webp"\]\.includes\(file\.type\)/);
+});
+
+// ---------------------------------------------------------------------------
+// QA UPDATE_QA_IKRARKU.ID_10 — TC-212..TC-246 (21 Okt).
+// ---------------------------------------------------------------------------
+
+test("QA10 TC-232: semua ucapan tampil (scroll/halaman), tidak dipotong", () => {
+  assert.match(appTsx, /greetingsDisplay\?: "scroll" \| "paged";/);
+  assert.match(appTsx, /className="greeting-pages"/);
+  assert.doesNotMatch(appTsx, /greetings\.slice\(0, compact \? 3 : 8\)/);
+  assert.match(serverMjs, /LIMIT 1000/);
+});
+
+test("QA10 TC-245: checkout tanpa daftar, login pertama wajib ganti password", () => {
+  assert.match(serverMjs, /ensureColumn\("users", ?"must_change_password"/);
+  assert.match(serverMjs, /"\/api\/auth\/first-password"/);
+  assert.match(serverMjs, /function createCustomerUser\(order, tempPassword = null\)/);
+  assert.match(apiTs, /firstPassword: \(password: string, passwordConfirm: string\)/);
+  assert.match(appTsx, /function FirstPasswordDialog\(/);
+});
+
+test("QA10 TC-222/223/224: billing vertikal, Hubungi Support di editor, upsell template", () => {
+  assert.match(appTsx, /<dl className="billing-list">/);
+  assert.match(appTsx, /onContactSupport\?: \(\) => void;/);
+  assert.match(appTsx, /className="support-help-card"/);
+  assert.match(appTsx, /className="upsell-catalog"/);
+});
+
+test("QA10 TC-228..TC-238: countdown, kalender, galeri, transparansi, font, credit, icon", () => {
+  assert.match(appTsx, /"--cd-scale"/);
+  assert.match(appTsx, /function CalendarButtons\(/);
+  assert.match(appTsx, /ctz=Asia\/Jakarta/);
+  assert.match(appTsx, /function galleryBoxProps\(/);
+  assert.match(appTsx, /function withAlpha\(/);
+  assert.match(appTsx, /boxOpacity\?: number;/);
+  assert.match(appTsx, /function FontSelect\(/);
+  assert.match(appTsx, /className="site-credit-footer"/);
+  assert.match(appTsx, /iconTextPosition\?:/);
+});
+
+test("QA10 TC-235/237/240/241: live streaming, button slide, alamat kado, gift ringkas", () => {
+  assert.match(appTsx, /\| "live-stream";/);
+  assert.match(appTsx, /type: "live-stream",\n\s*label: "Live Streaming"/);
+  assert.match(appTsx, /function liveStreamInfo\(/);
+  assert.match(appTsx, /https:\/\/www\.youtube\.com\/embed\//);
+  assert.match(appTsx, /coverButtonMode\?: "click" \| "slide";/);
+  assert.match(appTsx, /active\.coverButtonMode === "slide" \? \(\n\s*<SlideToOpen/);
+  assert.match(appTsx, /function GiftAddressCard\(/);
+  assert.match(appTsx, /<GiftReveal feature=\{feature\} editable=\{editable\} \/>/);
+  assert.match(appTsx, /feature\.giftRevealLabel \|\| "Lihat Rekening"/);
+});
+
+test("QA10 TC-239/242/243/244: live motion elemen, 70/30, video layer 1, preview skala", () => {
+  assert.match(appTsx, /elementMotion\?: Partial<Record<ElementMotionTarget, LoopEffect>>;/);
+  assert.match(appTsx, /<ElementMotionControls feature=\{feature\} update=\{update\} \/>/);
+  assert.match(appCss, /\.feature-block\.lm-title-float \.editable-title\{animation:loopFloat/);
+  assert.match(appTsx, /desktopColumnRatio\?: "fixed" \| "70-30";/);
+  assert.match(appTsx, /<DesktopSidePanel first=\{first\} \/>/);
+  assert.match(appTsx, /Upload Video Layer 1/);
+  // Revisi 21 Okt: selebar layar — Kolom/70-30 tanpa skala, desain penuh diskalakan.
+  assert.match(appTsx, /const columnLayout = usesDesktopColumn\(sections\);/);
+  assert.match(appTsx, /mode === "desktop" && !columnLayout,/);
+  assert.match(appTsx, /Math\.min\(4, Math\.max\(0\.35, available \/ designWidth\)\)/);
+  assert.match(appCss, /\.preview-full-stage\.desktop\.full-bleed \.preview-content\{width:100%!important;zoom:1/);
+  // Pita putih Mobile: kontainer gulir tanpa padding vertikal.
+  assert.match(appCss, /\.preview-full-stage\.mobile\{padding:0 22px\}/);
+  assert.match(appCss, /zoom:var\(--preview-zoom,1\)/);
+});
+
+test("QA10 TC-226/246: nama pengirim catatan internal, landing ID/EN", () => {
+  assert.match(serverMjs, /sender_name, r\.name sender_role FROM messages m/);
+  assert.match(appTsx, /className="cs-message-sender"/);
+  assert.match(landingTsx, /className="ikr-lang" role="group"/);
+  assert.match(landingTsx, /heroLines: \["A promise\.", "A story\.", "An invitation\."\]/);
+});
+
+test("Revisi 21 Okt: tombol Simpan Tanggal tidak ikut grid kotak hitung mundur", () => {
+  assert.match(appCss, /\.countdown-feature>\.calendar-buttons\{display:flex;grid-template-columns:none;/);
+  assert.match(appCss, /\.calendar-button\{white-space:nowrap;flex:0 0 auto\}/);
+});
+
+test("Revisi 21 Okt: kartu ucapan rata kiri; email password sementara rapi", () => {
+  assert.match(appCss, /\.greeting-list article>div:last-child\{flex:1;text-align:left\}/);
+  assert.match(appCss, /\.greetings-widget\.align-center \.greeting-list article>div:last-child\{text-align:center\}/);
+  assert.match(serverMjs, /<code style="font-size:16px;background:#eef4f1;/);
+});
+
+test("Revisi 22 Okt: color picker Tidak ada warna + Reset di semua tempat", () => {
+  assert.match(appTsx, /function ColorInput\(/);
+  // Hanya ColorInput yang memakai input warna native.
+  assert.equal((appTsx.match(/type="color"/g) || []).length, 1);
+  assert.match(appTsx, /aria-label="Reset warna"/);
+  assert.match(appTsx, /"Tidak ada warna"/);
+  assert.match(appCss, /\.color-none-mark\{/);
+});
+
+test("Revisi 22 Okt: 70/30 tanpa posisi Tengah; Isi sisi visual hanya untuk 70/30", () => {
+  assert.match(appTsx, /\{first\.desktopColumnRatio !== "70-30" && \(\n\s*<option value="center">Tengah<\/option>/);
+  assert.match(appTsx, /\{first\.desktopColumnRatio === "70-30" && \(\n\s*<DesktopSideEditor/);
+  assert.match(appTsx, /update\(\{ desktopSideSlides: next, desktopBackdropColor: undefined \}\)/);
+});
+
+test("Revisi 22 Okt: bottom navigation bar per column dengan 6 style", () => {
+  assert.match(appTsx, /function BottomNavBar\(/);
+  assert.match(appTsx, /function BottomNavPanel\(/);
+  for (const style of ["classic", "floating-pill", "center-raised", "notch-dot", "active-square", "icon-only"])
+    assert.match(appCss, new RegExp(`\\.bottom-nav\\.style-${style}\\{`));
+  assert.match(appTsx, /<BottomNavBar config=\{bottomNav\} rootRef=\{revealRootRef\} \/>/);
+});
+
+test("Revisi 22 Okt: ikon bottom navigation bisa diupload per menu", () => {
+  assert.match(appTsx, /iconUrl\?: string;\n\s*iconKey\?: string;\n\};/);
+  assert.match(appTsx, /const uploadNavIcon = async \(file: File \| undefined\)/);
+  assert.match(appTsx, /uploadToServer\(file, "nav-icon"\)/);
+  assert.match(appTsx, /className="bottom-nav-img"/);
+  assert.match(appTsx, /uploadIcon=\{uploadNavIcon\}/);
 });

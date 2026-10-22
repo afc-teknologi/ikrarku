@@ -336,6 +336,9 @@ function initDb() {
   ensureColumn("tasks", "assigned_at", "TEXT");
   // MoM A9 — kapan customer terakhir diberi tahu bahwa tim mengedit websitenya.
   ensureColumn("sites", "team_notice_at", "TEXT");
+  // TC-245 — akun yang dibuat otomatis setelah bayar memakai password
+  // sementara; login pertama wajib membuat password baru.
+  ensureColumn("users", "must_change_password", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn("sites", "team_editor_name", "TEXT");
   ensureColumn("sites", "team_edited_at", "TEXT");
   // Web Designer perlu canvas.manage.own agar bisa menyimpan websitenya sendiri.
@@ -699,6 +702,7 @@ function userPayload(user) {
     permissions: parseJson(user.permissions_json, []),
     emailVerified: Boolean(user.email_verified),
     settings: parseJson(user.settings_json, {}),
+    mustChangePassword: Boolean(user.must_change_password),
   };
 }
 // QA TC-101: sesi otomatis berakhir setelah idle (default 120 menit, 0 = nonaktif).
@@ -1354,7 +1358,7 @@ app.post(
         error: "Token reset sudah kedaluwarsa. Silakan minta tautan baru.",
       });
     db.prepare(
-      "UPDATE users SET password_hash=?,reset_token=NULL,reset_expires=NULL,updated_at=? WHERE id=?",
+      "UPDATE users SET password_hash=?,reset_token=NULL,reset_expires=NULL,must_change_password=0,updated_at=? WHERE id=?",
     ).run(bcrypt.hashSync(String(password), 10), now(), row.id);
     db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
     auditLog(row.id, "account.reset_password", "user", row.id, {});
@@ -1421,13 +1425,14 @@ app.patch("/api/me", auth, (req, res) => {
     ...(settings || {}),
   };
   db.prepare(
-    `UPDATE users SET first_name=?,last_name=?,email=?,password_hash=?,settings_json=?,updated_at=? WHERE id=?`,
+    `UPDATE users SET first_name=?,last_name=?,email=?,password_hash=?,settings_json=?,must_change_password=CASE WHEN ? THEN 0 ELSE must_change_password END,updated_at=? WHERE id=?`,
   ).run(
     firstName ?? current.first_name,
     lastName ?? current.last_name,
     current.email,
     hash,
     JSON.stringify(nextSettings),
+    password ? 1 : 0,
     now(),
     req.user.id,
   );
@@ -1448,6 +1453,27 @@ app.patch("/api/me", auth, (req, res) => {
       ? { devVerificationUrl: pendingEmailUrl }
       : {}),
   });
+});
+// TC-245 — login pertama akun otomatis: buat password baru tanpa perlu
+// mengetik ulang password sementara (sudah dibuktikan saat login).
+app.post("/api/auth/first-password", auth, (req, res) => {
+  const row = db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id);
+  if (!row?.must_change_password)
+    return res.status(409).json({ error: "Password sudah pernah diganti." });
+  const { password, passwordConfirm } = req.body || {};
+  if (String(password || "").length < 8)
+    return res.status(400).json({ error: "Password minimal 8 karakter" });
+  if (password !== passwordConfirm)
+    return res.status(400).json({ error: "Konfirmasi password tidak sama" });
+  if (bcrypt.compareSync(String(password), row.password_hash))
+    return res
+      .status(400)
+      .json({ error: "Gunakan password baru, bukan password sementara." });
+  db.prepare(
+    "UPDATE users SET password_hash=?,must_change_password=0,updated_at=? WHERE id=?",
+  ).run(bcrypt.hashSync(String(password), 10), now(), row.id);
+  auditLog(row.id, "account.first_password", "user", row.id, {});
+  res.json({ ok: true });
 });
 app.post("/api/auth/logout", auth, (req, res) => {
   db.prepare("DELETE FROM sessions WHERE token=?").run(req.token);
@@ -3321,7 +3347,7 @@ app.get(
     res.json(
       db
         .prepare(
-          "SELECT id,canvas_id canvasId,guest_name name,message,created_at date FROM greetings WHERE site_id=? ORDER BY created_at DESC LIMIT 200",
+          "SELECT id,canvas_id canvasId,guest_name name,message,created_at date FROM greetings WHERE site_id=? ORDER BY created_at DESC LIMIT 1000",
         )
         .all(site.id),
     );
@@ -3770,6 +3796,7 @@ async function fulfillPaidOrder(order, methodCode) {
       const receipt = await createReceipt(paidOrder, template);
       const conversationId = id("conv"),
         outboxId = id("mail");
+      let autoAccount = null;
       policy.transaction(() => {
         db.prepare(
           "UPDATE orders SET assigned_cs_id=?,assigned_editor_id=?,receipt_no=?,receipt_path=?,order_status=?,fulfillment_status='Complete',fulfillment_error=NULL WHERE id=?",
@@ -3831,15 +3858,25 @@ async function fulfillPaidOrder(order, methodCode) {
           .get(fresh.id);
         // Order guest belum punya user_id saat dibayar; coba cocokkan lewat email
         // supaya penugasan Web Designer tidak tertunda sampai customer login.
-        const ownerId =
+        let ownerId =
           linked.user_id ||
           db
             .prepare("SELECT id FROM users WHERE lower(email)=lower(?)")
             .get(linked.email)?.id;
-        if (ownerId) {
-          policy.assignPaidSite(linked, ownerId);
-          seedCustomerSiteFromTemplate(ownerId, fresh, template);
+        // TC-245 — customer tidak perlu daftar sebelum bayar. Setelah lunas,
+        // akun dibuat otomatis dan info login dikirim ke email order; login
+        // pertama wajib membuat password baru.
+        if (!ownerId) {
+          const tempPassword = temporaryPassword();
+          const created = createCustomerUser(linked, tempPassword);
+          ownerId = created.id;
+          autoAccount = { user: created, tempPassword };
         }
+        db.prepare(
+          "UPDATE orders SET user_id=? WHERE user_id IS NULL AND lower(email)=lower(?)",
+        ).run(ownerId, linked.email);
+        policy.assignPaidSite(linked, ownerId);
+        seedCustomerSiteFromTemplate(ownerId, fresh, template);
         db.prepare(
           `INSERT INTO email_outbox(id,to_email,subject,html,status,attachment_path,created_at) VALUES(?,?,?,?,?,?,?)`,
         ).run(
@@ -3853,6 +3890,32 @@ async function fulfillPaidOrder(order, methodCode) {
         );
       });
       void deliverEmail(outboxId);
+      if (autoAccount) {
+        const loginUrl = `${CLIENT_ORIGIN.replace(/\/$/, "")}/login`;
+        queueEmail(
+          autoAccount.user.email,
+          "Akun ikrarku Anda sudah siap",
+          brandedEmail({
+            preheader: "Info login akun ikrarku untuk mengelola undangan Anda.",
+            heading: "Akun Anda sudah dibuat",
+            intro:
+              "Halo " +
+              escapeHtml(fresh.customer_name || "Customer") +
+              ", pembayaran order " +
+              escapeHtml(fresh.order_no) +
+              " sudah kami terima dan akun ikrarku Anda dibuat otomatis.",
+            bodyHtml:
+              `<p style="margin:0 0 14px;font-size:15px;line-height:1.8;color:#163a30;"><strong>Email:</strong> ${escapeHtml(autoAccount.user.email)}<br>` +
+              `<strong>Username:</strong> ${escapeHtml(autoAccount.user.username)}<br>` +
+              `<strong>Password sementara:</strong> <code style="font-size:16px;background:#eef4f1;padding:2px 8px;border-radius:6px;letter-spacing:1px;">${escapeHtml(autoAccount.tempPassword)}</code></p>` +
+              '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#4d6159;">Saat login pertama, Anda akan diminta membuat password baru.</p>',
+            ctaLabel: "Login sekarang",
+            ctaUrl: loginUrl,
+            footnote:
+              "Jangan bagikan email ini. Bila Anda tidak merasa memesan, abaikan email ini.",
+          }),
+        );
+      }
       return {
         receiptUrl: receiptUrl(
           db.prepare("SELECT * FROM orders WHERE id=?").get(fresh.id),
@@ -3980,6 +4043,59 @@ function notifyTeamEdit(customerUserId, staff) {
   }
 }
 
+/** Akun customer dari data order. Username mengikuti aturan signup
+ *  (huruf kecil, angka, tanda hubung; 3–50). Tanpa `tempPassword`, akun
+ *  memakai password acak yang tidak diketahui siapa pun (alur CS: customer
+ *  membuat password lewat tautan). Dengan `tempPassword` (TC-245), akun
+ *  wajib membuat password baru saat login pertama. */
+function createCustomerUser(order, tempPassword = null) {
+  const [firstName, ...rest] = String(order.customer_name || "Customer")
+    .trim()
+    .split(/\s+/);
+  let base =
+    String(order.email)
+      .split("@")[0]
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "")
+      .slice(0, 40) || "customer";
+  if (base.length < 3) base = `${base}-tamu`;
+  let username = base;
+  for (
+    let n = 2;
+    db.prepare("SELECT 1 FROM users WHERE username=?").get(username) ||
+    db.prepare("SELECT 1 FROM sites WHERE slug=?").get(username);
+    n++
+  )
+    username = `${base}-${n}`;
+  const userId = id("usr");
+  db.prepare(
+    `INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,must_change_password,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,
+  ).run(
+    userId,
+    firstName || "Customer",
+    rest.join(" "),
+    String(order.email).toLowerCase(),
+    username,
+    bcrypt.hashSync(tempPassword || crypto.randomBytes(24).toString("hex"), 10),
+    "role_user",
+    1,
+    1,
+    tempPassword ? 1 : 0,
+    now(),
+    now(),
+  );
+  return db.prepare("SELECT * FROM users WHERE id=?").get(userId);
+}
+/** Password sementara yang mudah diketik dari email: 10 karakter tanpa huruf
+ *  yang mirip (0/O, 1/l/I). */
+function temporaryPassword() {
+  const alphabet = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const bytes = crypto.randomBytes(10);
+  return Array.from(bytes, (b) => alphabet[b % alphabet.length]).join("");
+}
+
 // MoM A6 — customer cukup order (tanpa daftar akun). Setelah bayar, CS atau
 // Administrator membuatkan akunnya dari halaman Orders, lalu mengirim tautan
 // "buat password" lewat chat. Password tidak pernah dibuat/dilihat staff:
@@ -4003,38 +4119,7 @@ app.post(
       return res.status(409).json({
         error: "Email order dipakai akun staff. Hubungi Administrator.",
       });
-    if (!user) {
-      const [firstName, ...rest] = String(order.customer_name || "Customer")
-        .trim()
-        .split(/\s+/);
-      const base =
-        String(order.email)
-          .split("@")[0]
-          .toLowerCase()
-          .replace(/[^a-z0-9._-]/g, "")
-          .slice(0, 24) || "customer";
-      let username = base;
-      for (let n = 2; db.prepare("SELECT 1 FROM users WHERE username=?").get(username); n++)
-        username = `${base}${n}`;
-      const userId = id("usr");
-      db.prepare(
-        `INSERT INTO users(id,first_name,last_name,email,username,password_hash,role_id,active,email_verified,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
-      ).run(
-        userId,
-        firstName || "Customer",
-        rest.join(" "),
-        String(order.email).toLowerCase(),
-        username,
-        // Tidak bisa dipakai login sampai customer membuat password sendiri.
-        bcrypt.hashSync(crypto.randomBytes(24).toString("hex"), 10),
-        "role_user",
-        1,
-        1,
-        now(),
-        now(),
-      );
-      user = db.prepare("SELECT * FROM users WHERE id=?").get(userId);
-    }
+    if (!user) user = createCustomerUser(order);
     db.prepare(
       "UPDATE orders SET user_id=? WHERE user_id IS NULL AND lower(email)=lower(?)",
     ).run(user.id, order.email);
@@ -4714,9 +4799,11 @@ app.get(
         )
         .all(req.user.id);
     const result = rows.map((c) => {
+      // TC-226 — nama & role pengirim ikut dikirim agar catatan internal
+      // (dan balasan staff) jelas ditulis oleh siapa.
       const messages = db
         .prepare(
-          "SELECT * FROM messages WHERE conversation_id=? ORDER BY created_at",
+          `SELECT m.*, trim(coalesce(u.first_name,'')||' '||coalesce(u.last_name,'')) sender_name, r.name sender_role FROM messages m LEFT JOIN users u ON u.id=m.sender_user_id LEFT JOIN roles r ON r.id=u.role_id WHERE m.conversation_id=? ORDER BY m.created_at`,
         )
         .all(c.id);
       const read = db

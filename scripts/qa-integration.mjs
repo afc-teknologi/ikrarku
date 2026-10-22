@@ -329,6 +329,18 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
         ),
         "staff harus tetap melihat catatan internal",
       );
+      // TC-226 — catatan internal membawa nama & role pengirim.
+      const note = (thread?.messages || []).find(
+        (message) => message.visibility === "internal",
+      );
+      const csUser = db
+        .prepare(
+          "SELECT trim(first_name||' '||last_name) name FROM users u JOIN messages m ON m.sender_user_id=u.id WHERE m.id=?",
+        )
+        .get(note.id);
+      assert.ok(note.sender_name, "nama pengirim catatan internal wajib ada");
+      assert.equal(note.sender_name, csUser.name);
+      assert.ok(note.sender_role, "role pengirim catatan internal wajib ada");
 
       // Balasan publik tetap berperilaku seperti semula.
       assert.equal(
@@ -1198,6 +1210,22 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       const r = await call("GET", "/public/sites/customer/greetings");
       assert.equal(r.status, 200);
       assert.equal(r.data[0].message, "Congratulations");
+      // TC-232 — ucapan ke-2 dst. tidak menimpa yang lama: semuanya tersimpan
+      // dan dikembalikan (dulu UI hanya menampilkan beberapa terbaru).
+      for (let index = 1; index <= 11; index += 1)
+        assert.equal(
+          (
+            await call("POST", "/public/sites/customer/greetings", {
+              name: `Tamu ${index}`,
+              message: `Ucapan ${index}`,
+            })
+          ).status,
+          201,
+        );
+      const all = await call("GET", "/public/sites/customer/greetings");
+      assert.equal(all.data.length, 12);
+      assert.ok(all.data.some((item) => item.message === "Congratulations"));
+      assert.equal(new Set(all.data.map((item) => item.id)).size, 12);
     },
   );
   await t.test(
@@ -1228,10 +1256,10 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
     );
   });
   await t.test(
-    "Paid guest checkout is claimed only after email verification and creates site assignment",
+    "TC-245 checkout tanpa daftar: akun otomatis setelah bayar, login pertama wajib password baru",
     async () => {
       const guest = await call("POST", "/orders", {
-        customerName: "Guest",
+        customerName: "Guest Paid",
         email: "guestpaid@example.test",
         phone: "08123456789",
         templateId: template.id,
@@ -1257,42 +1285,66 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
           .get(guest.data.id).n,
         2,
       );
-      const signup = await call("POST", "/auth/signup", {
-        firstName: "Guest",
-        lastName: "Paid",
-        username: "guestpaid",
-        email: "guestpaid@example.test",
-        password: "Audit-fixture-123",
-        passwordConfirm: "Audit-fixture-123",
-      });
-      assert.equal(signup.status, 201);
-      assert.equal(
-        db.prepare("SELECT user_id FROM orders WHERE id=?").get(guest.data.id)
-          .user_id,
-        null,
-      );
-      const user = db
-        .prepare("SELECT * FROM users WHERE username='guestpaid'")
-        .get();
-      assert.equal(
-        (
-          await call("POST", "/auth/verify-email", {
-            token: user.verification_token,
-          })
-        ).status,
-        200,
-      );
-      const paid = db
-        .prepare("SELECT * FROM orders WHERE id=?")
-        .get(guest.data.id);
+      // Akun dibuat tepat satu kali walau webhook datang dua kali.
+      const users = db
+        .prepare("SELECT * FROM users WHERE lower(email)='guestpaid@example.test'")
+        .all();
+      assert.equal(users.length, 1);
+      const user = users[0];
+      assert.equal(user.role_id, "role_user");
+      assert.equal(user.must_change_password, 1);
+      assert.match(user.username, /^[a-z0-9][a-z0-9-]{2,49}$/);
+      const paid = db.prepare("SELECT * FROM orders WHERE id=?").get(guest.data.id);
       assert.equal(paid.user_id, user.id);
       const assignment = db
         .prepare("SELECT editor_id FROM site_assignments WHERE user_id=?")
         .get(user.id);
       assert.equal(assignment.editor_id, paid.assigned_editor_id);
-      const owner = await login("guestpaid");
+      // Info login terkirim ke email order.
+      const mail = db
+        .prepare(
+          "SELECT html FROM email_outbox WHERE to_email=? AND subject='Akun ikrarku Anda sudah siap'",
+        )
+        .all("guestpaid@example.test");
+      assert.equal(mail.length, 1);
+      const temp = mail[0].html.match(/Password sementara:<\/strong> <code[^>]*>([^<]+)<\/code>/)[1];
+      const first = await call("POST", "/auth/login", {
+        username: "guestpaid@example.test",
+        password: temp,
+      });
+      assert.equal(first.status, 200, JSON.stringify(first.data));
+      assert.equal(first.data.user.mustChangePassword, true);
+      // Password sementara tidak boleh dipakai lagi sebagai password baru.
       assert.equal(
-        (await call("GET", "/me/orders", undefined, owner.token)).data.length,
+        (
+          await call(
+            "POST",
+            "/auth/first-password",
+            { password: temp, passwordConfirm: temp },
+            first.data.token,
+          )
+        ).status,
+        400,
+      );
+      assert.equal(
+        (
+          await call(
+            "POST",
+            "/auth/first-password",
+            { password: "Password-baru-123", passwordConfirm: "Password-baru-123" },
+            first.data.token,
+          )
+        ).status,
+        200,
+      );
+      const again = await call("POST", "/auth/login", {
+        username: "guestpaid@example.test",
+        password: "Password-baru-123",
+      });
+      assert.equal(again.status, 200);
+      assert.equal(again.data.user.mustChangePassword, false);
+      assert.equal(
+        (await call("GET", "/me/orders", undefined, again.data.token)).data.length,
         1,
       );
     },
@@ -1406,14 +1458,16 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
     "MoM A6 CS membuatkan akun customer dari order guest; link buat password terkirim via chat",
     async () => {
       const guest = await paidGuestOrder("guest");
-      assert.equal(guest.user_id, null);
+      // Sejak TC-245 akun sudah dibuat otomatis saat bayar; tombol CS dipakai
+      // untuk mengirim ulang tautan buat password (mis. email info login hilang).
+      assert.ok(guest.user_id);
       assert.equal(
         (await call("POST", `/orders/${guest.id}/customer-account`, {}, customer.token)).status,
         403,
       );
       const created = await call("POST", `/orders/${guest.id}/customer-account`, {}, cs.token);
       assert.equal(created.status, 200, JSON.stringify(created.data));
-      assert.equal(created.data.existing, false);
+      assert.equal(created.data.existing, true);
       const user = db.prepare("SELECT * FROM users WHERE lower(email)=lower(?)").get(guest.email);
       assert.equal(user.role_id, "role_user");
       assert.equal(db.prepare("SELECT user_id FROM orders WHERE id=?").get(guest.id).user_id, user.id);

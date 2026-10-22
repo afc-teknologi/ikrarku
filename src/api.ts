@@ -13,6 +13,7 @@ export type ApiUser = {
   permissions: string[];
   emailVerified?: boolean;
   settings?: Record<string, unknown>;
+  mustChangePassword?: boolean;
 };
 
 function token() {
@@ -181,6 +182,12 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   me: () => request<{ user: ApiUser }>("/me"),
+  // TC-245 — password baru wajib pada login pertama akun otomatis.
+  firstPassword: (password: string, passwordConfirm: string) =>
+    request<{ ok: boolean }>("/auth/first-password", {
+      method: "POST",
+      body: JSON.stringify({ password, passwordConfirm }),
+    }),
   updateMe: (payload: any) =>
     request<{ emailVerificationRequired?: boolean }>("/me", {
       method: "PATCH",

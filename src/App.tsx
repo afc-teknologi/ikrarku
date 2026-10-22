@@ -23,6 +23,7 @@ import {
   Bold,
   BookOpen,
   BadgeCheck,
+  Radio,
   Wallet,
   Anchor,
   CalendarDays,
@@ -68,6 +69,11 @@ import {
   Lock,
   Star,
   Ban,
+  RotateCcw,
+  House,
+  Gift,
+  Camera,
+  Clock,
   Move,
   Smartphone,
   Sparkles,
@@ -117,6 +123,8 @@ import {
   ReceiptText,
   CheckCircle,
   KeyRound,
+  Headphones,
+  CalendarPlus,
   UserRoundCog,
   PackageCheck,
   History as HistoryIcon,
@@ -205,7 +213,8 @@ type FeatureType =
   | "sound"
   | "icon"
   | "love-story"
-  | "credit";
+  | "credit"
+  | "live-stream";
 type ColumnCount = 1 | 2 | 3 | 4;
 type BackgroundEffect =
   | "none"
@@ -267,6 +276,8 @@ type IconItem = {
   name: SocialIconName;
   label: string;
   url: string;
+  // TC-238 — teks pendamping, mis. username "@dimasadttyaa". Kosong = label.
+  text?: string;
 };
 type SocialIconName =
   | "instagram"
@@ -409,7 +420,7 @@ type Feature = DesignerLayout & {
   underline: boolean;
   align: Alignment;
   lineHeight: number;
-  textColor: string;
+  textColor?: string; // kosong = ikut warna tema (revisi 21 Okt)
   backgroundColor: string;
   borderRadius: number;
   padding: number;
@@ -428,6 +439,13 @@ type Feature = DesignerLayout & {
   formFields?: string[];
   buttonLabel?: string;
   eventDate?: string;
+  // TC-228 — skala box waktu Save The Date (%), supaya tidak terpotong saat
+  // padding diperkecil atau canvas sempit.
+  countdownScale?: number;
+  // TC-236 — tombol Simpan Tanggal / Save to Calendar (Save The Date & Event).
+  calendarButton?: boolean;
+  calendarLabel?: string;
+  calendarDurationHours?: number;
   mapUrl?: string;
   locationName?: string;
   locationAddress?: string;
@@ -456,6 +474,8 @@ type Feature = DesignerLayout & {
   coverIconSize?: number;
   coverIconPosition?: "top" | "left" | "right";
   coverButtonRadius?: number;
+  /** TC-237 — "slide" = geser untuk membuka (fitur template premium/custom). */
+  coverButtonMode?: "click" | "slide";
   coverButtonBorderWidth?: number;
   coverButtonBorderColor?: string;
   coverButtonBackground?: string;
@@ -494,6 +514,9 @@ type Feature = DesignerLayout & {
   videoMuted?: boolean; // TC-083
   galleryLayoutTemplate?: GalleryLayoutTemplate; // TC-084
   greetingsLayout?: "split" | "column"; // TC-085
+  // TC-232 — cara menampilkan SEMUA ucapan: daftar bergulir atau per halaman.
+  greetingsDisplay?: "scroll" | "paged";
+  greetingsPerPage?: number;
   eventMapUrl?: string; // TC-086
   eventButtonLabel?: string; // TC-086
   giftAccounts?: GiftAccount[]; // TC-088
@@ -502,6 +525,8 @@ type Feature = DesignerLayout & {
   iconSize?: number; // TC-095
   iconColor?: string; // TC-095
   iconStyle?: "plain" | "circle" | "outline"; // TC-095
+  iconTextPosition?: "below" | "right" | "none"; // TC-238
+  iconTextSize?: number;
   animateOnScroll?: boolean; // TC-091
   freePosition?: boolean; // TC-103
   posX?: number; // TC-103 (persen dari lebar column)
@@ -546,6 +571,14 @@ type Feature = DesignerLayout & {
   bankLogoTextColor?: string;
   bankLogoAlign?: "flex-start" | "center" | "flex-end";
   bankLogoImageHeight?: number; // tinggi logo gambar (px)
+  /** TC-240 — box alamat pengiriman kado (opsional). */
+  giftAddressEnabled?: boolean;
+  giftAddressName?: string;
+  giftAddressText?: string;
+  giftAddressPhone?: string;
+  /** TC-241 — "compact" = header, teks, tombol Lihat Rekening. */
+  giftDisplay?: "full" | "compact";
+  giftRevealLabel?: string;
   mapButtonBackground?: string; // TC-124 button Buka Google Maps
   mapButtonTextColor?: string;
   mapButtonRadius?: number;
@@ -560,6 +593,20 @@ type Feature = DesignerLayout & {
   mapButtonIconSize?: number;
   // QA 15 Okt — ukuran teks kotak "Created by" pada Credit (dulu 8 px tetap).
   creditFontSize?: number;
+  // TC-234 — Credit menempel di paling bawah undangan (tanpa ruang kosong).
+  creditPinBottom?: boolean;
+  /** TC-235 — Live Streaming: tautan siaran (YouTube/Instagram/Zoom/Meet/dll),
+   *  jadwal, label tombol, dan opsi embed (khusus YouTube). */
+  liveUrl?: string;
+  liveSchedule?: string;
+  liveButtonLabel?: string;
+  liveEmbed?: boolean;
+  // TC-231 — transparansi background fitur & kotak/kolom putih di dalamnya.
+  backgroundOpacity?: number;
+  boxOpacity?: number;
+  // TC-233 — font heading & teks terpisah dari font utama.
+  titleFontFamily?: string;
+  bodyFontFamily?: string;
   // TC-213 — elemen musik & gaya teks credit.
   creditMusicColor?: string;
   creditMusicIcon?: "disc" | "note" | "none";
@@ -570,6 +617,11 @@ type Feature = DesignerLayout & {
   // galleryUrls (persen, seperti imageOffsetX/Y pada fitur gambar), dan
   // `galleryFit: "contain"` menampilkan gambar utuh tanpa dipotong.
   galleryFit?: "cover" | "contain";
+  // TC-229 — ruang foto: tinggi kotak otomatis mengikuti foto (tanpa ruang
+  // kosong) atau tetap (px), dan jarak antar foto.
+  galleryHeightMode?: "fixed" | "auto";
+  galleryImageHeight?: number;
+  galleryGap?: number;
   galleryOffsets?: { x: number; y: number }[];
   showLocationQr?: boolean; // TC-132
   showMapEmbed?: boolean; // Preview peta Google Maps langsung di section
@@ -595,7 +647,11 @@ type Feature = DesignerLayout & {
     | "underline"; // TC-141
   loopEffect?: LoopEffect; // Efek berulang pada feature
   loopSpeed?: number; // detik per siklus
+  /** TC-239 — live motion per elemen di layer 2 (di atas background). */
+  elementMotion?: Partial<Record<ElementMotionTarget, LoopEffect>>;
+  elementMotionSpeed?: number;
 };
+type ElementMotionTarget = "image" | "box" | "title" | "body";
 
 type AuthAccount = {
   id: string;
@@ -616,6 +672,56 @@ type AuthAccount = {
 };
 
 type CanvasColumn = { id: string; features: Feature[] };
+type BottomNavStyle =
+  | "classic"
+  | "floating-pill"
+  | "center-raised"
+  | "notch-dot"
+  | "active-square"
+  | "icon-only";
+type BottomNavIcon =
+  | "home"
+  | "heart"
+  | "calendar"
+  | "clock"
+  | "map"
+  | "image"
+  | "camera"
+  | "message"
+  | "gift"
+  | "book"
+  | "users"
+  | "music"
+  | "mail"
+  | "live"
+  | "sparkles";
+type BottomNavItem = {
+  id: string;
+  /** Column tujuan. */
+  columnId: string;
+  /** Opsional: feature tertentu di dalam column (untuk column berisi banyak feature). */
+  featureId?: string;
+  label: string;
+  icon: BottomNavIcon;
+  /** Revisi 22 Okt — ikon hasil upload (menggantikan ikon bawaan). */
+  iconUrl?: string;
+  iconKey?: string;
+};
+const bottomNavKey = (item: { columnId: string; featureId?: string }) =>
+  item.featureId || item.columnId;
+const bottomNavSelector = (item: { columnId: string; featureId?: string }) =>
+  item.featureId
+    ? `[id="feature-${CSS.escape(item.featureId)}"]`
+    : `[data-column-id="${CSS.escape(item.columnId)}"]`;
+type BottomNavConfig = {
+  enabled: boolean;
+  style: BottomNavStyle;
+  show: "mobile" | "all";
+  items: BottomNavItem[];
+  background?: string;
+  color?: string;
+  activeColor?: string;
+};
 
 type CanvasSection = {
   id: string;
@@ -658,6 +764,8 @@ type CanvasSection = {
   columnWidths?: number[]; // TC-114 lebar kolom hasil drag grid line
   showGuides?: boolean; // TC-113 garis guide/margin
   backgroundGlobal?: boolean; // TC-146 satu background untuk semua canvas
+  backgroundOpacity?: number; // TC-231
+  backgroundImageOpacity?: number; // TC-231
   /** Tata letak desktop (disimpan di Canvas 1, berlaku untuk seluruh
    *  undangan). "column" = ala wevitation serein: di desktop isi undangan
    *  tampil dalam versi Mobile di kolom sempit, background Canvas 1 versi
@@ -668,6 +776,18 @@ type CanvasSection = {
   desktopBackdropUrl?: string; // background luar kolom (opsional)
   desktopBackdropKey?: string;
   desktopBackdropColor?: string;
+  /** TC-242 — rasio 70/30: kolom isi 30%, sisi 70% berisi background polos,
+   *  header & supporting text, slideshow otomatis, atau video. */
+  desktopColumnRatio?: "fixed" | "70-30";
+  desktopSideTitle?: string;
+  desktopSideBody?: string;
+  desktopSideTextColor?: string;
+  desktopSideSlides?: { url: string; key?: string }[];
+  desktopSideSlideSeconds?: number;
+  desktopSideVideoUrl?: string;
+  desktopSideVideoKey?: string;
+  /** Revisi 21 Okt — bottom navigation bar undangan (disimpan di Canvas 1). */
+  bottomNav?: BottomNavConfig;
   backgroundGlobalMode?: "image" | "color"; // sumber background global
   backgroundScrollType?: "section" | "parallax"; // cara background bergerak
   loopEffect?: LoopEffect; // Efek berulang pada seluruh section
@@ -685,7 +805,13 @@ type Guest = {
   time: string;
   canvasId: string;
 };
-type Greeting = { name: string; message: string; date: string };
+type Greeting = {
+  id?: string;
+  name: string;
+  message: string;
+  date: string;
+  canvasId?: string;
+};
 type ChatMessage = {
   id: string;
   sender: "user" | "support";
@@ -973,6 +1099,178 @@ function getBackgroundFilter(effect: BackgroundEffect = "none") {
   return "none";
 }
 
+/** TC-233 — katalog font undangan. `google` = dimuat dari Google Fonts saat
+ *  dipakai (tidak membebani halaman yang tidak memakainya). */
+const FONT_OPTIONS: { name: string; group: string; google?: string }[] = [
+  { name: "Playfair Display", group: "Serif elegan", google: "Playfair+Display:ital,wght@0,400;0,600;1,400" },
+  { name: "Cormorant Garamond", group: "Serif elegan", google: "Cormorant+Garamond:ital,wght@0,400;0,600;1,400" },
+  { name: "Cinzel", group: "Serif elegan", google: "Cinzel:wght@400;600" },
+  { name: "Lora", group: "Serif elegan", google: "Lora:ital,wght@0,400;0,600;1,400" },
+  { name: "Libre Baskerville", group: "Serif elegan", google: "Libre+Baskerville:ital,wght@0,400;1,400" },
+  { name: "Great Vibes", group: "Script / kaligrafi", google: "Great+Vibes" },
+  { name: "Parisienne", group: "Script / kaligrafi", google: "Parisienne" },
+  { name: "Alex Brush", group: "Script / kaligrafi", google: "Alex+Brush" },
+  { name: "Dancing Script", group: "Script / kaligrafi", google: "Dancing+Script:wght@400;600" },
+  { name: "Allura", group: "Script / kaligrafi", google: "Allura" },
+  { name: "DM Sans", group: "Sans modern", google: "DM+Sans:wght@400;500;700" },
+  { name: "Montserrat", group: "Sans modern", google: "Montserrat:wght@400;500;700" },
+  { name: "Poppins", group: "Sans modern", google: "Poppins:wght@400;500;600" },
+  { name: "Josefin Sans", group: "Sans modern", google: "Josefin+Sans:wght@400;600" },
+  { name: "Georgia", group: "Font sistem" },
+  { name: "Times New Roman", group: "Font sistem" },
+  { name: "Arial", group: "Font sistem" },
+  { name: "Verdana", group: "Font sistem" },
+  { name: "Courier New", group: "Font sistem" },
+];
+const loadedFonts = new Set<string>();
+function ensureFont(name?: string) {
+  if (!name || loadedFonts.has(name) || typeof document === "undefined") return;
+  const option = FONT_OPTIONS.find((item) => item.name === name);
+  loadedFonts.add(name);
+  if (!option?.google) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = `https://fonts.googleapis.com/css2?family=${option.google}&display=swap`;
+  document.head.appendChild(link);
+}
+/** Revisi 21 Okt — semua color picker: bisa "Tidak ada warna" dan Reset.
+ *  - value kosong (undefined)  → mengikuti bawaan tema, swatch kotak-kotak.
+ *  - noneValue (mis. "transparent") → benar-benar tanpa warna; hanya untuk
+ *    warna isian/latar. Untuk warna teks, "tanpa warna" = ikut bawaan.
+ *  Picker native selalu butuh nilai, jadi saat kosong ditampilkan `fallback`
+ *  di bawah lapisan kotak-kotak dan nilainya tidak pernah disimpan. */
+const isPaintColor = (value?: string) =>
+  Boolean(value) && value !== "transparent" && value !== "none";
+const toPickerHex = (value?: string) => {
+  if (!value) return null;
+  if (/^#[0-9a-f]{6}$/i.test(value)) return value;
+  const short = value.match(/^#([0-9a-f])([0-9a-f])([0-9a-f])$/i);
+  if (short) return `#${short[1]}${short[1]}${short[2]}${short[2]}${short[3]}${short[3]}`;
+  const rgb = value.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (rgb)
+    return (
+      "#" +
+      rgb
+        .slice(1, 4)
+        .map((part) => Number(part).toString(16).padStart(2, "0"))
+        .join("")
+    );
+  return null;
+};
+function ColorInput({
+  value,
+  onChange,
+  fallback = "#ffffff",
+  noneValue,
+  label,
+}: {
+  value?: string;
+  onChange: (next: string | undefined) => void;
+  fallback?: string;
+  /** Nilai "tanpa warna" untuk warna isian (mis. "transparent"). */
+  noneValue?: string;
+  label?: string;
+}) {
+  const painted = isPaintColor(value);
+  const hex = (painted && toPickerHex(value)) || fallback;
+  const explicitNone = Boolean(noneValue) && value === noneValue;
+  return (
+    <span className={`color-input ${painted ? "" : "is-none"}`}>
+      <span className="color-swatch">
+        <input
+          type="color"
+          value={hex}
+          aria-label={label || "Pilih warna"}
+          onChange={(event) => onChange(event.target.value)}
+        />
+        {!painted && <i className="color-none-mark" aria-hidden />}
+      </span>
+      <span className="color-value">
+        {painted
+          ? (toPickerHex(value) || value || "").toUpperCase()
+          : explicitNone
+            ? "Tanpa warna"
+            : "Tidak ada warna"}
+      </span>
+      {noneValue && !explicitNone && (
+        <button
+          type="button"
+          className="color-action"
+          title="Tanpa warna (transparan)"
+          aria-label="Tanpa warna"
+          onClick={() => onChange(noneValue)}
+        >
+          <Ban size={12} />
+        </button>
+      )}
+      {(painted || explicitNone) && (
+        <button
+          type="button"
+          className="color-action"
+          title="Reset — kembali ke tidak ada warna"
+          aria-label="Reset warna"
+          onClick={() => onChange(undefined)}
+        >
+          <RotateCcw size={12} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+function FontSelect({
+  value,
+  onChange,
+  allowInherit = false,
+}: {
+  value?: string;
+  onChange: (value: string) => void;
+  allowInherit?: boolean;
+}) {
+  const groups = [...new Set(FONT_OPTIONS.map((item) => item.group))];
+  // Nilai lama di luar katalog tetap bisa tampil dan dipilih ulang.
+  const known = !value || FONT_OPTIONS.some((item) => item.name === value);
+  return (
+    <select
+      value={value || ""}
+      onChange={(event) => {
+        ensureFont(event.target.value);
+        onChange(event.target.value);
+      }}
+    >
+      {allowInherit && <option value="">Ikuti font utama</option>}
+      {!known && <option value={value}>{value}</option>}
+      {groups.map((group) => (
+        <optgroup key={group} label={group}>
+          {FONT_OPTIONS.filter((item) => item.group === group).map((item) => (
+            <option key={item.name} value={item.name} style={{ fontFamily: item.name }}>
+              {item.name}
+            </option>
+          ))}
+        </optgroup>
+      ))}
+    </select>
+  );
+}
+
+/** TC-231 — warna dengan alpha (hex/rgb/rgba). Warna lain dikembalikan apa
+ *  adanya. `alpha` 0–1; undefined berarti tidak diubah. */
+function withAlpha(color: string | undefined, alpha: number | undefined) {
+  if (!color || alpha === undefined || alpha >= 1) return color;
+  const hex = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    const h = hex[1].length === 3 ? hex[1].replace(/./g, "$&$&") : hex[1];
+    const n = parseInt(h, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${alpha})`;
+  }
+  const rgb = color.match(/^rgba?\(([^)]+)\)$/i);
+  if (rgb) {
+    const [r, g, b, a = "1"] = rgb[1].split(",").map((part) => part.trim());
+    return `rgba(${r},${g},${b},${Number(a) * alpha})`;
+  }
+  return color;
+}
+
 function getGradientBackground(
   enabled: boolean | undefined,
   from: string | undefined,
@@ -1181,6 +1479,10 @@ function makeFeature(
     icon: ["Follow Our Journey", "Sosial media & icon dekoratif"],
     "love-story": ["Our Love Story", "Perjalanan kami dari awal hingga hari ini"],
     credit: ["Terima kasih", "Undangan ini dibuat dengan penuh cinta"],
+    "live-stream": [
+      "Live Streaming",
+      "Saksikan momen bahagia kami secara langsung dari mana saja",
+    ],
   };
   const [defaultTitle, defaultBody] = copy[type];
   return {
@@ -1207,7 +1509,9 @@ function makeFeature(
     galleryFullWidth: type === "gallery" ? false : undefined,
     galleryTransitionMs: type === "gallery" ? 850 : undefined,
     textColor:
-      type === "invitation-cover" ? "#ffffff" : defaultFeatureStyle.textColor,
+      // Revisi 21 Okt — warna teks bawaan tidak disimpan: picker tampil
+      // "Tidak ada warna", render tetap memakai defaultFeatureStyle.textColor.
+      type === "invitation-cover" ? "#ffffff" : undefined,
     objectAlign:
       type === "invitation-cover" ? "center" : defaultFeatureStyle.objectAlign,
     objectWidth:
@@ -1700,6 +2004,12 @@ const widgetLibrary: {
     description: "Instagram, Threads, FB, YouTube, dan icon dekoratif",
     icon: Heart,
   },
+  {
+    type: "live-stream",
+    label: "Live Streaming",
+    description: "Tautan/embed siaran langsung YouTube, IG, Zoom, Meet",
+    icon: Radio,
+  },
 ];
 
 // QA TC-095: katalog icon yang dapat ditempatkan pada section manapun.
@@ -1950,7 +2260,11 @@ function hydrateSections(raw: CanvasSection[]): CanvasSection[] {
           feature.type === "invitation-cover" &&
           (!feature.textColor || feature.textColor.toLowerCase() === "#154f40")
             ? "#ffffff"
-            : feature.textColor || defaultFeatureStyle.textColor,
+            : feature.textColor &&
+                feature.textColor.toLowerCase() !==
+                  defaultFeatureStyle.textColor.toLowerCase()
+              ? feature.textColor
+              : undefined,
         objectAlign:
           feature.objectAlign ||
           (feature.type === "invitation-cover" ? "center" : "stretch"),
@@ -2496,6 +2810,8 @@ function App() {
   const [articleSlug, setArticleSlug] = useState<string | null>(null);
   const [activeManagedUserId, setActiveManagedUserId] = useState("");
   const [siteOwnerUserId, setSiteOwnerUserId] = useState("");
+  // TC-245 — akun otomatis setelah bayar wajib membuat password baru.
+  const [mustChangePassword, setMustChangePassword] = useState(false);
   // MoM A9 — siapa dari tim yang terakhir membantu mengedit website customer.
   const [teamEdit, setTeamEdit] = useState<{ name: string; at: string } | null>(
     null,
@@ -2658,6 +2974,7 @@ function App() {
           try {
             const me = await api.me();
             const user = me.user;
+            setMustChangePassword(Boolean(user.mustChangePassword));
             const mappedRole = (
               user.role === "Customer Service" ? "Customer Service" : user.role
             ) as Role;
@@ -3592,6 +3909,7 @@ function App() {
       setApiToken(result.token);
       localStorage.setItem("ikrarku-last-activity", String(Date.now()));
       const user = result.user;
+      setMustChangePassword(Boolean(user.mustChangePassword));
       const mappedRole = user.role as Role;
       const account: AuthAccount = {
         id: user.id,
@@ -4822,10 +5140,6 @@ function App() {
           sessionStorage.setItem("ikrarku-checkout-return", "true");
           setView("login");
         }}
-        onRegister={() => {
-          sessionStorage.setItem("ikrarku-checkout-return", "true");
-          setView("signup");
-        }}
         account={currentAccount}
       />
     );
@@ -4891,6 +5205,9 @@ function App() {
         <Editor
           managingCustomer={Boolean(siteOwnerUserId)}
           editorName={currentAccount?.name || displayRole(role)}
+          onContactSupport={
+            role === "User" ? () => setChatWidgetOpen(true) : undefined
+          }
           sections={sections}
           setSections={setSections}
           slug={slug}
@@ -4949,9 +5266,22 @@ function App() {
                 : api.siteRevisions()
           }
         />
-        {/* Canvas Editor sengaja tidak memuat ChatWidget: tombol Live Chat
-            melayang di pojok kanan bawah dan menutupi panel Style/Advanced.
-            Web Designer tetap bisa membuka chat dari Topbar di luar editor. */}
+        {/* Canvas Editor sengaja tidak memuat tombol Live Chat yang melayang:
+            ia menutupi panel Style/Advanced (TC-188). TC-223 — customer
+            membuka chat lewat tombol Hubungi Support di editor; panelnya
+            hanya dirender selama terbuka, jadi tidak ada tombol melayang. */}
+        {role === "User" && chatWidgetOpen && (
+          <ChatWidget
+            messages={chatMessages.filter(
+              (message) =>
+                (message.conversationId || currentAccountId) ===
+                currentAccountId,
+            )}
+            sendChat={(text) => sendChat("user", text)}
+            open={chatWidgetOpen}
+            onOpenChange={setChatWidgetOpen}
+          />
+        )}
         {previewOpen && (
           <PreviewModal
             sections={sections}
@@ -4961,6 +5291,14 @@ function App() {
             guests={guests}
             addGuest={addGuest}
             onClose={() => setPreviewOpen(false)}
+          />
+        )}
+        {mustChangePassword && currentAccountId && (
+          <FirstPasswordDialog
+            onDone={() => {
+              setMustChangePassword(false);
+              flash("Password baru tersimpan. Gunakan password ini untuk login berikutnya.");
+            }}
           />
         )}
         {toast && <Toast message={toast} />}
@@ -5072,6 +5410,11 @@ function App() {
             // Dari halaman Templates canvas dimuat tanpa pindah ke editor,
             // supaya hasilnya muncul dulu sebagai card Website Design.
             onOpenCanvasOrder={(option) => void openCanvasOrder(option, false)}
+            publicTemplates={publicTemplates}
+            onContactSupport={
+              role === "User" ? () => setChatWidgetOpen(true) : undefined
+            }
+            onOpenTemplate={openTemplateJourney}
           />
         )}
         {needsCanvasOrderPick && (
@@ -5386,6 +5729,14 @@ function App() {
           onClose={() => setTemplateCreatorOpen(false)}
           onCreate={createTemplate}
           canSetPrice={hasPermission("*")}
+        />
+      )}
+      {mustChangePassword && currentAccountId && (
+        <FirstPasswordDialog
+          onDone={() => {
+            setMustChangePassword(false);
+            flash("Password baru tersimpan. Gunakan password ini untuk login berikutnya.");
+          }}
         />
       )}
       {toast && <Toast message={toast} />}
@@ -6610,7 +6961,6 @@ function CheckoutPage({
   createOrder,
   payOrder,
   onSignIn,
-  onRegister,
   account,
 }: {
   template: Template;
@@ -6624,7 +6974,6 @@ function CheckoutPage({
   ) => Promise<OrderResult | null>;
   payOrder: (method: string) => Promise<boolean>;
   onSignIn: () => void;
-  onRegister: () => void;
   account?: AuthAccount;
 }) {
   const draft = useMemo(() => {
@@ -6709,9 +7058,10 @@ function CheckoutPage({
               ) : (
                 <div className="checkout-auth-options">
                   <button onClick={onSignIn}>Sudah punya akun? Sign In</button>
-                  <button onClick={onRegister}>
-                    Belum punya akun? Register
-                  </button>
+                  <span className="checkout-no-account">
+                    Belum punya akun? Tidak perlu daftar — akun dibuat otomatis
+                    setelah pembayaran.
+                  </span>
                 </div>
               )}
               <label>
@@ -6766,15 +7116,12 @@ function CheckoutPage({
                 <div className="checkout-account-banner new">
                   <UserPlus size={17} />
                   <div>
-                    <strong>Email ini belum terdaftar.</strong>
+                    <strong>Email ini belum terdaftar — tidak perlu daftar.</strong>
                     <span>
-                      Daftar dulu agar order tercatat pada akun Anda. Setelah
-                      submit, Anda akan diarahkan kembali ke halaman pemesanan
-                      ini.
+                      Lanjutkan pembayaran. Setelah lunas, akun ikrarku dibuat
+                      otomatis dan info login dikirim ke email ini. Saat login
+                      pertama Anda akan diminta membuat password baru.
                     </span>
-                    <button type="button" onClick={onRegister}>
-                      Daftar akun sekarang
-                    </button>
                   </div>
                 </div>
               )}
@@ -6931,10 +7278,11 @@ function PaymentSuccessPage({
         <article>
           <span>1</span>
           <div>
-            <strong>Email receipt</strong>
+            <strong>Email receipt & akun</strong>
             <p>
-              Receipt PDF dan email konfirmasi akan dikirim ke alamat email
-              pemesan.
+              Receipt PDF dikirim ke email pemesan. Bila email itu belum punya
+              akun, info login akun ikrarku ikut dikirim — login pertama akan
+              meminta Anda membuat password baru.
             </p>
           </div>
         </article>
@@ -8980,6 +9328,38 @@ const ThumbnailContext = createContext(false);
  * ditempel pada kotak preview itu sendiri.
  */
 const PreviewSurfaceContext = createContext(false);
+/** TC-244 — skala preview Desktop. Desain tetap ditata pada lebar canvas
+ *  editor, lalu diperbesar/diperkecil agar pas dengan lebar layar: tidak ada
+ *  ruang abu-abu lebar di layar besar, dan tidak terpotong di layar kecil.
+ *  Pengukuran tinggi viewport di dalamnya dibagi skala ini. */
+const PreviewZoomContext = createContext(1);
+function useFitZoom(
+  ref: React.RefObject<HTMLElement | null>,
+  designWidth: number,
+  enabled: boolean,
+) {
+  const [zoom, setZoom] = useState(1);
+  useEffect(() => {
+    const node = ref.current;
+    if (!enabled || !node) {
+      setZoom(1);
+      return;
+    }
+    const measure = () => {
+      const available = node.clientWidth;
+      if (!available || !designWidth) return;
+      // Selalu tepat selebar layar: diperkecil di layar sempit, diperbesar
+      // di layar lebar — tidak ada ruang abu-abu di kiri-kanan.
+      const next = Math.min(4, Math.max(0.35, available / designWidth));
+      setZoom(Math.round(next * 1000) / 1000);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [ref, designWidth, enabled]);
+  return zoom;
+}
 
 /**
  * Section yang dipakai sebagai gambar pratinjau sebuah design.
@@ -9374,6 +9754,9 @@ function Templates({
   onOpenCanvasOrder,
   canvasOrderBusy = false,
   customerOrders = [],
+  publicTemplates = [],
+  onContactSupport,
+  onOpenTemplate,
 }: {
   role: Role;
   siteTitle: string;
@@ -9405,6 +9788,11 @@ function Templates({
   onOpenCanvasOrder?: (option: CanvasOrderOption) => void;
   canvasOrderBusy?: boolean;
   customerOrders?: any[];
+  publicTemplates?: Template[];
+  /** TC-223 — customer membuka chat support dari kartu templatenya. */
+  onContactSupport?: () => void;
+  /** TC-224 — buka halaman detail template (upselling). */
+  onOpenTemplate?: (template: Template) => void;
 }) {
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
@@ -9587,6 +9975,11 @@ function Templates({
                     >
                       <Trash2 size={15} /> Delete
                     </button>
+                    {onContactSupport && (
+                      <button onClick={onContactSupport}>
+                        <Headphones size={15} /> Hubungi Support
+                      </button>
+                    )}
                   </div>
                 </div>
               </article>
@@ -9595,6 +9988,70 @@ function Templates({
         </div>
       </section>
 
+      {/* TC-224 — upselling: tawarkan template lain di bawah Template &
+          Canvas customer (yang belum dimiliki), urut rekomendasi dulu. */}
+      {role === "User" && onOpenTemplate && (() => {
+        const owned = new Set(
+          customerOrders.map((order: any) => order.template_id),
+        );
+        const offers = publicTemplates
+          .filter((template) => !owned.has(template.id))
+          .sort(
+            (a, b) =>
+              Number(Boolean(b.recommended)) - Number(Boolean(a.recommended)),
+          )
+          .slice(0, 6);
+        if (!offers.length) return null;
+        return (
+          <section className="upsell-catalog">
+            <div className="section-heading">
+              <div>
+                <span>KATALOG</span>
+                <h2>Lengkapi momen Anda dengan desain lain</h2>
+                <p>
+                  Untuk acara lain — lamaran, resepsi kedua, atau ulang tahun
+                  pernikahan. Lihat detail dan pesan langsung dari sini.
+                </p>
+              </div>
+            </div>
+            <div className="upsell-grid">
+              {offers.map((template) => (
+                <article key={template.id} className="upsell-card">
+                  <div
+                    className="upsell-thumb"
+                    style={
+                      template.preview || template.sampleImage
+                        ? {
+                            backgroundImage: `url(${assetUrl(template.preview || template.sampleImage || "")})`,
+                          }
+                        : { background: template.bg }
+                    }
+                  >
+                    {template.recommended && (
+                      <em>
+                        <Star size={11} /> Rekomendasi
+                      </em>
+                    )}
+                  </div>
+                  <div className="upsell-meta">
+                    <strong>{template.name}</strong>
+                    <span>
+                      {template.category} ·{" "}
+                      {template.price ? formatRupiah(template.price) : "Gratis"}
+                    </span>
+                  </div>
+                  <button
+                    className="secondary-btn"
+                    onClick={() => onOpenTemplate(template)}
+                  >
+                    Lihat & pesan <ArrowRight size={14} />
+                  </button>
+                </article>
+              ))}
+            </div>
+          </section>
+        );
+      })()}
       {(canCreate || canApprove) && (
         <TemplateApprovalManager
           templates={managedTemplates}
@@ -9888,6 +10345,8 @@ type EditorProps = {
   /** Nama akun yang sedang mengedit (MoM A3: tampilkan data orangnya,
    *  bukan label generik "workspace"). */
   editorName?: string;
+  /** TC-223 — hanya untuk customer: buka chat support dari editor. */
+  onContactSupport?: () => void;
   saved: boolean;
   setView: (view: View) => void;
   setPreviewOpen: (value: boolean) => void;
@@ -9924,6 +10383,7 @@ function Editor({
   editorMode,
   managingCustomer = false,
   editorName = "",
+  onContactSupport,
   saved,
   setView,
   setPreviewOpen,
@@ -11031,6 +11491,27 @@ function Editor({
       return null;
     }
   };
+  // Revisi 22 Okt — ikon menu bottom navigation hasil upload.
+  const uploadNavIcon = async (file: File | undefined) => {
+    if (!file) return null;
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type)) {
+      flash("Ikon harus berupa gambar PNG, JPG, atau WebP.");
+      return null;
+    }
+    file = await shrinkImageToLimit(file, 512 * 1024);
+    if (file.size > 512 * 1024) {
+      flash("Ikon maksimal 512 KB.");
+      return null;
+    }
+    try {
+      const saved = await uploadToServer(file, "nav-icon");
+      flash("Ikon menu berhasil diunggah.");
+      return { url: saved.url, key: saved.key };
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Upload ikon gagal.");
+      return null;
+    }
+  };
   const uploadLayerImage = async (file: File | undefined) => {
     if (!file) return null;
     if (!file.type.startsWith("image/")) {
@@ -11269,6 +11750,15 @@ function Editor({
             </button>
           </div>
           <div className="editor-actions">
+            {onContactSupport && (
+              <button
+                className="secondary-btn editor-support-btn"
+                onClick={onContactSupport}
+                title="Chat dengan Customer Service tanpa keluar dari editor"
+              >
+                <Headphones size={16} /> Hubungi Support
+              </button>
+            )}
             <div className="history-actions">
               <button
                 className="icon-btn"
@@ -11572,6 +12062,24 @@ function Editor({
                 uploadToServer={uploadToServer}
               />
             )}
+            {sections[0] && (
+              <BottomNavPanel
+                sections={sections}
+                first={sections[0]}
+                update={(patch) => updateSectionShared(sections[0].id, patch)}
+                uploadIcon={uploadNavIcon}
+              />
+            )}
+{onContactSupport && (
+              <div className="support-help-card">
+                <Headphones size={18} />
+                <div>
+                  <strong>Bingung mengatur undangan?</strong>
+                  <span>Tim kami siap membantu langsung dari sini.</span>
+                </div>
+                <button onClick={onContactSupport}>Hubungi Support</button>
+              </div>
+            )}
             <div className="page-settings">
               <strong>Site Pages</strong>
               <button
@@ -11703,6 +12211,15 @@ function Editor({
                   >
                     Samakan dengan Desktop
                   </button>
+                </div>
+              )}
+              {onContactSupport && selectedSection && !selectedFeature && (
+                <div className="support-help-card compact">
+                  <Headphones size={16} />
+                  <div>
+                    <strong>Perlu bantuan mengatur canvas ini?</strong>
+                  </div>
+                  <button onClick={onContactSupport}>Hubungi Support</button>
                 </div>
               )}
               {selectedFeature ? (
@@ -11978,6 +12495,7 @@ function FeatureInspector({
     "gallery",
     "credit",
     "love-story",
+    "live-stream",
   ];
   const objectAlign =
     feature.objectAlign ||
@@ -12265,6 +12783,50 @@ function FeatureInspector({
                 <i />
               </button>
             </div>
+            {/* TC-229 — kotak foto mengikuti ukuran foto agar tidak ada ruang
+                kosong besar, atau tinggi tetap yang bisa diatur. */}
+            <label>
+              Tinggi kotak foto
+              <select
+                value={feature.galleryHeightMode || "fixed"}
+                onChange={(event) =>
+                  update({
+                    galleryHeightMode: event.target.value as "fixed" | "auto",
+                  })
+                }
+              >
+                <option value="fixed">Tetap (atur di bawah)</option>
+                <option value="auto">Otomatis ikut ukuran foto (tanpa ruang kosong)</option>
+              </select>
+            </label>
+            {feature.galleryHeightMode !== "auto" && (
+              <label>
+                Tinggi foto: {feature.galleryImageHeight || "bawaan"}
+                {feature.galleryImageHeight ? "px" : ""}
+                <input
+                  type="range"
+                  min={100}
+                  max={720}
+                  step={10}
+                  value={feature.galleryImageHeight || 300}
+                  onChange={(event) =>
+                    update({ galleryImageHeight: Number(event.target.value) })
+                  }
+                />
+              </label>
+            )}
+            <label>
+              Jarak antar foto: {feature.galleryGap ?? 9}px
+              <input
+                type="range"
+                min={0}
+                max={40}
+                value={feature.galleryGap ?? 9}
+                onChange={(event) =>
+                  update({ galleryGap: Number(event.target.value) })
+                }
+              />
+            </label>
             <div className="gallery-media-manager">
               {(feature.galleryUrls || []).map((url, index) => {
                 const offset = feature.galleryOffsets?.[index] || {
@@ -12529,14 +13091,30 @@ function FeatureInspector({
           </>
         )}
         {feature.type === "countdown" && (
-          <label>
-            Tanggal & waktu acara
-            <input
-              type="datetime-local"
-              value={feature.eventDate || ""}
-              onChange={(event) => update({ eventDate: event.target.value })}
-            />
-          </label>
+          <>
+            <label>
+              Tanggal & waktu acara
+              <input
+                type="datetime-local"
+                value={feature.eventDate || ""}
+                onChange={(event) => update({ eventDate: event.target.value })}
+              />
+            </label>
+            <label>
+              Ukuran box waktu: {feature.countdownScale ?? 100}%
+              <input
+                type="range"
+                min={50}
+                max={130}
+                step={5}
+                value={feature.countdownScale ?? 100}
+                onChange={(event) =>
+                  update({ countdownScale: Number(event.target.value) })
+                }
+              />
+            </label>
+            <CalendarButtonEditor feature={feature} update={update} />
+          </>
         )}
         {feature.type === "location" && (
           <>
@@ -12800,6 +13378,15 @@ function FeatureInspector({
                 placeholder="https://maps.google.com/..."
               />
             </label>
+            <label>
+              Tanggal & waktu acara (untuk Simpan Tanggal)
+              <input
+                type="datetime-local"
+                value={feature.eventDate || ""}
+                onChange={(event) => update({ eventDate: event.target.value })}
+              />
+            </label>
+            <CalendarButtonEditor feature={feature} update={update} />
           </>
         )}
         {feature.type === "gift" && (
@@ -12811,6 +13398,38 @@ function FeatureInspector({
         )}
         {feature.type === "icon" && (
           <IconListEditor feature={feature} update={update} />
+        )}
+        {feature.type === "greetings" && (
+          <>
+          <label>
+            Tampilan daftar ucapan
+            <select
+              value={feature.greetingsDisplay || "scroll"}
+              onChange={(event) =>
+                update({
+                  greetingsDisplay: event.target.value as "scroll" | "paged",
+                })
+              }
+            >
+              <option value="scroll">Scroll ke bawah (semua ucapan)</option>
+              <option value="paged">Nomor halaman</option>
+            </select>
+          </label>
+          {feature.greetingsDisplay === "paged" && (
+            <label>
+              Ucapan per halaman: {feature.greetingsPerPage || 5}
+              <input
+                type="range"
+                min={3}
+                max={20}
+                value={feature.greetingsPerPage || 5}
+                onChange={(event) =>
+                  update({ greetingsPerPage: Number(event.target.value) })
+                }
+              />
+            </label>
+          )}
+          </>
         )}
         {feature.type === "greetings" && (
           <label>
@@ -12833,6 +13452,9 @@ function FeatureInspector({
         )}
         {feature.type === "credit" && (
           <CreditEditor feature={feature} update={update} />
+        )}
+        {feature.type === "live-stream" && (
+          <LiveStreamEditor feature={feature} update={update} />
         )}
         {feature.type === "image" && (
           <ImageLayoutEditor feature={feature} update={update} />
@@ -12876,24 +13498,70 @@ function FeatureInspector({
           hasImage={
             feature.type === "invitation-cover" && Boolean(feature.mediaUrl)
           }
+          showImageOpacity={Boolean(feature.backgroundImageUrl)}
         />
+        {/* TC-231 — kotak/kolom putih di dalam fitur (kartu rekening, ucapan,
+            kolom form, kartu lokasi, Love Story, kotak waktu, Credit). */}
+        {[
+          "gift",
+          "greetings",
+          "form",
+          "location",
+          "love-story",
+          "credit",
+          "countdown",
+          "event",
+        ].includes(feature.type) && (
+          <label className="range-field">
+            <span className="range-head">
+              Transparansi kotak/kolom putih
+              <b>{feature.boxOpacity ?? "bawaan"}{feature.boxOpacity !== undefined ? "%" : ""}</b>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              value={feature.boxOpacity ?? 82}
+              onChange={(event) =>
+                update({ boxOpacity: Number(event.target.value) })
+              }
+              onDoubleClick={() => update({ boxOpacity: undefined })}
+            />
+          </label>
+        )}
         {typographyTypes.includes(feature.type) && (
           <>
             <label>
-              Font family
-              <select
+              Font utama
+              <FontSelect
                 value={feature.fontFamily}
-                onChange={(event) => update({ fontFamily: event.target.value })}
-              >
-                <option>Playfair Display</option>
-                <option>DM Sans</option>
-                <option>Georgia</option>
-                <option>Arial</option>
-                <option>Times New Roman</option>
-                <option>Verdana</option>
-                <option>Courier New</option>
-              </select>
+                onChange={(fontFamily) => update({ fontFamily })}
+              />
             </label>
+            {/* TC-233 — style font header dan teks dipilih terpisah, di
+                seluruh fitur. Kosong = ikut Font utama. */}
+            <div className="two-inputs">
+              <label>
+                Font heading
+                <FontSelect
+                  value={feature.titleFontFamily}
+                  onChange={(titleFontFamily) =>
+                    update({ titleFontFamily: titleFontFamily || undefined })
+                  }
+                  allowInherit
+                />
+              </label>
+              <label>
+                Font teks
+                <FontSelect
+                  value={feature.bodyFontFamily}
+                  onChange={(bodyFontFamily) =>
+                    update({ bodyFontFamily: bodyFontFamily || undefined })
+                  }
+                  allowInherit
+                />
+              </label>
+            </div>
             <div className="toolbar-row">
               <button
                 className={feature.bold ? "active" : ""}
@@ -12977,25 +13645,14 @@ function FeatureInspector({
             <div className="two-inputs">
               <label>
                 Text color
-                <input
-                  type="color"
-                  value={feature.textColor}
-                  onChange={(event) =>
-                    update({ textColor: event.target.value })
-                  }
-                />
+                <ColorInput value={feature.textColor} fallback="#154f40" onChange={(next) => update({ textColor: next })} />
               </label>
               <label>
                 Background
-                <input
-                  type="color"
-                  value={
-                    feature.backgroundColor === "transparent"
-                      ? "#ffffff"
-                      : feature.backgroundColor
-                  }
-                  onChange={(event) =>
-                    update({ backgroundColor: event.target.value })
+                <ColorInput
+                  value={feature.backgroundColor}
+                  onChange={(next) =>
+                    update({ backgroundColor: next ?? "transparent" })
                   }
                 />
               </label>
@@ -13024,6 +13681,29 @@ function FeatureInspector({
                 <option value="bottom">Bottom</option>
               </select>
             </label>
+            <label>
+              Mode button
+              <select
+                value={feature.coverButtonMode || "click"}
+                onChange={(event) =>
+                  update({
+                    coverButtonMode: event.target
+                      .value as Feature["coverButtonMode"],
+                  })
+                }
+              >
+                <option value="click">Klik untuk membuka</option>
+                <option value="slide">
+                  Button slide — geser untuk membuka (Premium & Custom)
+                </option>
+              </select>
+            </label>
+            {feature.coverButtonMode === "slide" && (
+              <small className="field-hint">
+                Tamu menggeser tombol ke kanan untuk membuka undangan. Warna,
+                radius, dan border mengikuti pengaturan button di bawah.
+              </small>
+            )}
             <label>
               Bentuk button
               <select
@@ -13071,34 +13751,16 @@ function FeatureInspector({
             <div className="two-inputs">
               <label>
                 Border color
-                <input
-                  type="color"
-                  value={feature.coverButtonBorderColor || "#ffffff"}
-                  onChange={(event) =>
-                    update({ coverButtonBorderColor: event.target.value })
-                  }
-                />
+                <ColorInput value={feature.coverButtonBorderColor} fallback="#ffffff" noneValue="transparent" onChange={(next) => update({ coverButtonBorderColor: next })} />
               </label>
               <label>
                 Button color
-                <input
-                  type="color"
-                  value={feature.coverButtonBackground || "#102f27"}
-                  onChange={(event) =>
-                    update({ coverButtonBackground: event.target.value })
-                  }
-                />
+                <ColorInput value={feature.coverButtonBackground} fallback="#102f27" noneValue="transparent" onChange={(next) => update({ coverButtonBackground: next })} />
               </label>
             </div>
             <label>
               Button text
-              <input
-                type="color"
-                value={feature.coverButtonTextColor || "#ffffff"}
-                onChange={(event) =>
-                  update({ coverButtonTextColor: event.target.value })
-                }
-              />
+              <ColorInput value={feature.coverButtonTextColor} fallback="#ffffff" onChange={(next) => update({ coverButtonTextColor: next })} />
             </label>
             <label>
               Horizontal padding{" "}
@@ -13351,6 +14013,8 @@ function FeatureInspector({
           </div>
         )}
         {feature.type === "gallery" && (
+          // TC-230 — Carousel & Filmstrip kini juga ada di pilihan Gallery
+          // Layout Style (dulu hanya di panel lain, sehingga tidak ditemukan).
           <LayoutOptionPicker
             legend="Gallery Layout Style"
             options={[
@@ -13359,12 +14023,30 @@ function FeatureInspector({
               { value: "hero-left", label: "Hero Kiri", hint: "Satu besar di kiri" },
               { value: "hero-top", label: "Hero Atas", hint: "Satu besar di atas" },
               { value: "mosaic", label: "Multi-Size", hint: "Mosaic campuran" },
+              { value: "carousel", label: "Carousel", hint: "Satu per satu, geser" },
+              { value: "filmstrip", label: "Filmstrip", hint: "Gulir mendatar" },
             ]}
-            value={feature.galleryLayoutTemplate || "even"}
-            onSelect={(galleryLayoutTemplate: GalleryLayoutTemplate) =>
-              update({ galleryLayoutTemplate })
+            value={
+              feature.galleryStyle === "carousel" ||
+              feature.galleryStyle === "filmstrip"
+                ? feature.galleryStyle
+                : feature.galleryLayoutTemplate || "even"
             }
-            glyph={(value) => <GalleryLayoutGlyph layout={value} />}
+            onSelect={(value: string) =>
+              value === "carousel" || value === "filmstrip"
+                ? update({ galleryStyle: value })
+                : update({
+                    galleryStyle: "grid",
+                    galleryLayoutTemplate: value as GalleryLayoutTemplate,
+                  })
+            }
+            glyph={(value) =>
+              value === "carousel" || value === "filmstrip" ? (
+                <GalleryStyleGlyph style={value as GalleryStyle} />
+              ) : (
+                <GalleryLayoutGlyph layout={value as GalleryLayoutTemplate} />
+              )
+            }
           />
         )}
         <PerElementColorEditor feature={feature} update={update} />
@@ -13544,6 +14226,7 @@ function FeatureInspector({
       </div>
         {/* QA TC-147 & TC-148: animasi dan looping tersedia pada panel Advanced
             untuk setiap feature, bukan hanya di tab Style. */}
+      <ElementMotionControls feature={feature} update={update} />
       <LoopEffectControls
         title="Animasi Berulang (Looping)"
         hint="Menggerakkan elemen dan background feature ini terus-menerus selama undangan dibuka."
@@ -13580,6 +14263,10 @@ function FeatureInspector({
 
 type BackgroundDesignState = {
   backgroundColor: string;
+  // TC-231 — transparansi warna/gradient background dan gambar/video
+  // background (0–100%; kosong = 100).
+  backgroundOpacity?: number;
+  backgroundImageOpacity?: number;
   backgroundGradientEnabled?: boolean;
   backgroundGradientFrom?: string;
   backgroundGradientTo?: string;
@@ -13594,10 +14281,13 @@ function BackgroundDesignControls({
   value,
   update,
   hasImage,
+  showImageOpacity,
 }: {
   value: BackgroundDesignState;
   update: (patch: Partial<BackgroundDesignState>) => void;
   hasImage: boolean;
+  /** Slider transparansi gambar; bawaan mengikuti hasImage. */
+  showImageOpacity?: boolean;
 }) {
   return (
     <div className="background-design-controls">
@@ -13605,6 +14295,41 @@ function BackgroundDesignControls({
         <strong>Background Design</strong>
         <span>{value.backgroundGradientEnabled ? "Gradient" : "Solid"}</span>
       </div>
+      {/* TC-231 — transparansi: satu kontrol bersama untuk canvas & fitur. */}
+      <label className="range-field">
+        <span className="range-head">
+          Transparansi warna background
+          <b>{value.backgroundOpacity ?? 100}%</b>
+        </span>
+        <input
+          type="range"
+          min={0}
+          max={100}
+          value={value.backgroundOpacity ?? 100}
+          onChange={(event) =>
+            update({ backgroundOpacity: Number(event.target.value) })
+          }
+          onDoubleClick={() => update({ backgroundOpacity: undefined })}
+        />
+      </label>
+      {(showImageOpacity ?? hasImage) && (
+        <label className="range-field">
+          <span className="range-head">
+            Transparansi gambar/video background
+            <b>{value.backgroundImageOpacity ?? 100}%</b>
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={100}
+            value={value.backgroundImageOpacity ?? 100}
+            onChange={(event) =>
+              update({ backgroundImageOpacity: Number(event.target.value) })
+            }
+            onDoubleClick={() => update({ backgroundImageOpacity: undefined })}
+          />
+        </label>
+      )}
       <div className="setting-row compact">
         <div>
           <Palette size={16} />
@@ -13629,23 +14354,15 @@ function BackgroundDesignControls({
           <div className="two-inputs">
             <label>
               From
-              <input
-                type="color"
-                value={value.backgroundGradientFrom || value.backgroundColor}
-                onChange={(event) =>
-                  update({ backgroundGradientFrom: event.target.value })
-                }
+              <ColorInput
+                value={value.backgroundGradientFrom}
+                fallback="#154f40"
+                onChange={(next) => update({ backgroundGradientFrom: next })}
               />
             </label>
             <label>
               To
-              <input
-                type="color"
-                value={value.backgroundGradientTo || "#d7b66f"}
-                onChange={(event) =>
-                  update({ backgroundGradientTo: event.target.value })
-                }
-              />
+              <ColorInput value={value.backgroundGradientTo} fallback="#d7b66f" onChange={(next) => update({ backgroundGradientTo: next })} />
             </label>
           </div>
           <label>
@@ -13676,15 +14393,10 @@ function BackgroundDesignControls({
       ) : (
         <label>
           Background color
-          <input
-            type="color"
-            value={
-              value.backgroundColor === "transparent"
-                ? "#ffffff"
-                : value.backgroundColor
-            }
-            onChange={(event) =>
-              update({ backgroundColor: event.target.value })
+          <ColorInput
+            value={value.backgroundColor}
+            onChange={(next) =>
+              update({ backgroundColor: next ?? "transparent" })
             }
           />
         </label>
@@ -14440,6 +15152,92 @@ const loopEffectCatalog: [LoopEffect, string][] = [
   ["drift", "Melayang"],
 ];
 
+/** TC-239 — live motion untuk elemen layer 2: image, box/kolom putih,
+ *  header, dan text masing-masing bisa diberi gerakan berulang sendiri. */
+const elementMotionTargets: [ElementMotionTarget, string][] = [
+  ["image", "Image"],
+  ["box", "Box / kolom putih"],
+  ["title", "Header"],
+  ["body", "Text"],
+];
+function elementMotionClasses(feature: Feature) {
+  const motion = feature.elementMotion || {};
+  return elementMotionTargets
+    .map(([target]) => motion[target])
+    .some((value) => value && value !== "none")
+    ? elementMotionTargets
+        .filter(([target]) => motion[target] && motion[target] !== "none")
+        .map(([target]) => `lm-${target}-${motion[target]}`)
+        .join(" ")
+    : "";
+}
+function ElementMotionControls({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const motion = feature.elementMotion || {};
+  const anyActive = Object.values(motion).some(
+    (value) => value && value !== "none",
+  );
+  return (
+    <div className="loop-effect-controls element-motion-controls">
+      <div className="group-heading">
+        <strong>Live Motion Elemen (Layer 2)</strong>
+      </div>
+      <div className="layout-help">
+        Gerakkan elemen di atas background secara terpisah — gambar,
+        kotak/kolom putih, header, atau teks — tanpa ikut menggerakkan
+        background Layer 1.
+      </div>
+      {elementMotionTargets.map(([target, label]) => (
+        <label key={target}>
+          {label}
+          <select
+            value={motion[target] || "none"}
+            onChange={(event) =>
+              update({
+                elementMotion: {
+                  ...motion,
+                  [target]: event.target.value as LoopEffect,
+                },
+              })
+            }
+          >
+            {loopEffectCatalog.map(([value, text]) => (
+              <option key={value} value={value}>
+                {text}
+              </option>
+            ))}
+          </select>
+        </label>
+      ))}
+      {anyActive && (
+        <label className="range-field">
+          <span className="range-head">
+            Durasi siklus<b>{feature.elementMotionSpeed || 6}s</b>
+          </span>
+          <input
+            type="range"
+            min="2"
+            max="20"
+            value={feature.elementMotionSpeed || 6}
+            onChange={(event) =>
+              update({ elementMotionSpeed: Number(event.target.value) })
+            }
+          />
+          <span className="range-scale">
+            <span>2s · paling cepat</span>
+            <span>20s · paling lambat</span>
+          </span>
+        </label>
+      )}
+    </div>
+  );
+}
+
 // Kontrol efek berulang pada feature.
 function LoopEffectControls({
   loopEffect,
@@ -14704,11 +15502,7 @@ function SectionDecorationEditor({
           <div className="two-inputs">
             <label>
               Warna
-              <input
-                type="color"
-                value={item.color}
-                onChange={(event) => patch(item.id, { color: event.target.value })}
-              />
+              <ColorInput value={item.color} fallback="#ffffff" noneValue="transparent" onChange={(next) => patch(item.id, { color: next })} />
             </label>
             <label>
               Gerak
@@ -15468,6 +16262,7 @@ function SectionInspector({
   backgroundGlobalOn?: boolean;
   isPrimaryCanvas?: boolean;
 }) {
+  const backgroundVideoInput = useRef<HTMLInputElement>(null);
   if (tab === "content")
     return (
       <div className="inspector-group">
@@ -15554,7 +16349,7 @@ function SectionInspector({
         <BackgroundDesignControls
           value={section}
           update={(patch) => update(patch)}
-          hasImage={Boolean(section.backgroundUrl)}
+          hasImage={Boolean(section.backgroundUrl || section.backgroundVideoUrl)}
         />
         {/* Background global aktif: canvas selain Canvas 1 mengikuti background
             Canvas 1, jadi kontrol upload-nya dikunci agar tidak menimbulkan
@@ -15577,14 +16372,30 @@ function SectionInspector({
               ref={backgroundInput}
               hidden
               type="file"
-              /* QA revisi: background mendukung video, jadi picker tidak boleh
-                 dibatasi image saja. */
-              accept="image/*,video/mp4,video/webm"
+              /* TC-243 — video Layer 1 kini punya tombol & picker sendiri. */
+              accept="image/*"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 // TC-194 — tanpa reset, memilih berkas yang SAMA setelah
                 // dihapus tidak memicu onChange sama sekali, sehingga upload
                 // terlihat seperti tidak berfungsi.
+                event.target.value = "";
+                void uploadBackground(file);
+              }}
+            />
+            {/* TC-243 — Layer 1 (default) kini jelas mendukung video: dua
+                tombol terpisah, masing-masing dengan picker yang sesuai. */}
+            <div className="group-heading layer-one-heading">
+              <strong>Layer 1 (default)</strong>
+              <small>Gambar atau video background utama</small>
+            </div>
+            <input
+              ref={backgroundVideoInput}
+              hidden
+              type="file"
+              accept="video/mp4,video/webm"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
                 event.target.value = "";
                 void uploadBackground(file);
               }}
@@ -15595,10 +16406,18 @@ function SectionInspector({
             >
               <Upload size={18} />
               <span>
-                <strong>Upload Background</strong>
-                <small>
-                  Gambar/GIF maksimal 4 MB · Video MP4/WebM maksimal 10 MB
-                </small>
+                <strong>Upload Gambar Layer 1</strong>
+                <small>Gambar/GIF maksimal 4 MB</small>
+              </span>
+            </button>
+            <button
+              className="upload-control layer-one-video"
+              onClick={() => backgroundVideoInput.current?.click()}
+            >
+              <Video size={18} />
+              <span>
+                <strong>Upload Video Layer 1</strong>
+                <small>MP4/WebM maksimal 10 MB · diputar otomatis, tanpa suara</small>
               </span>
             </button>
             {/* TC-194 — dulu tidak ada konfirmasi apa pun setelah upload, jadi
@@ -15887,6 +16706,7 @@ function WeddingCanvas(props: WeddingCanvasProps) {
   const device = useContext(DeviceContext);
   const thumbnail = useContext(ThumbnailContext);
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const previewZoom = useContext(PreviewZoomContext);
   const [viewportHeight, setViewportHeight] = useState(0);
   const column =
     device === "desktop" &&
@@ -15906,21 +16726,22 @@ function WeddingCanvas(props: WeddingCanvasProps) {
     if (!scroller || scroller === document.body) return;
     const target = scroller;
     const observer = new ResizeObserver(() =>
-      setViewportHeight(target.clientHeight),
+      setViewportHeight(Math.round(target.clientHeight / previewZoom)),
     );
     observer.observe(target);
     return () => observer.disconnect();
-  }, [column]);
+  }, [column, previewZoom]);
   if (!column) return <WeddingCanvasBody {...props} />;
   const first = props.sections[0];
   const width = first.desktopColumnWidth || DESKTOP_COLUMN_DEFAULT;
+  const ratio = first.desktopColumnRatio === "70-30";
   return (
     <div
       ref={stageRef}
-      className={`desktop-column-stage align-${first.desktopColumnAlign || "center"}`}
+      className={`desktop-column-stage align-${ratio && (first.desktopColumnAlign || "center") === "center" ? "right" : first.desktopColumnAlign || "center"}${ratio ? " ratio-7030" : ""}`}
       style={
         {
-          "--desktop-column-w": `${width}px`,
+          "--desktop-column-w": ratio ? "max(360px, 30%)" : `${width}px`,
           ...(viewportHeight
             ? { "--site-viewport-h": `${viewportHeight}px` }
             : {}),
@@ -15931,10 +16752,739 @@ function WeddingCanvas(props: WeddingCanvasProps) {
         source={desktopColumnBackdrop(first)}
         viewportHeight={viewportHeight}
       />
+      <DesktopSidePanel first={first} />
       <div className="desktop-column">
         <DeviceContext value="mobile">
           <WeddingCanvasBody {...props} />
         </DeviceContext>
+      </div>
+    </div>
+  );
+}
+
+/** Revisi 21 Okt — bottom navigation bar. Menu dipilih per column; klik
+ *  menggulir ke column itu, item aktif mengikuti posisi scroll. */
+const BOTTOM_NAV_MAX = 5;
+const bottomNavIcons: Record<BottomNavIcon, [typeof Heart, string]> = {
+  home: [House, "Beranda"],
+  heart: [Heart, "Hati"],
+  calendar: [CalendarDays, "Kalender"],
+  clock: [Clock, "Jam"],
+  map: [MapPin, "Lokasi"],
+  image: [ImageIcon, "Galeri"],
+  camera: [Camera, "Kamera"],
+  message: [MessageCircle, "Ucapan"],
+  gift: [Gift, "Hadiah"],
+  book: [BookOpen, "Cerita"],
+  users: [Users, "Tamu"],
+  music: [Music2, "Musik"],
+  mail: [MailOpen, "Undangan"],
+  live: [Radio, "Live"],
+  sparkles: [Sparkles, "Lainnya"],
+};
+const bottomNavStyles: [BottomNavStyle, string][] = [
+  ["classic", "Klasik (ikon + label)"],
+  ["floating-pill", "Kapsul melayang"],
+  ["center-raised", "Tombol tengah menonjol"],
+  ["notch-dot", "Titik aktif"],
+  ["active-square", "Kotak aktif"],
+  ["icon-only", "Ikon saja"],
+];
+function guessNavIcon(column: CanvasColumn, index: number): BottomNavIcon {
+  const type = column.features[0]?.type;
+  const map: Partial<Record<FeatureType, BottomNavIcon>> = {
+    "invitation-cover": "home",
+    countdown: "clock",
+    event: "calendar",
+    location: "map",
+    gallery: "image",
+    image: "camera",
+    video: "camera",
+    greetings: "message",
+    form: "users",
+    gift: "gift",
+    "love-story": "heart",
+    quote: "book",
+    credit: "music",
+    "live-stream": "live",
+  };
+  return (type && map[type]) || (index === 0 ? "home" : "heart");
+}
+function navColumnLabel(section: CanvasSection, column: CanvasColumn) {
+  const titled = column.features.find((feature) => feature.title?.trim());
+  return (titled?.title || section.name || "Menu").replace(/\s+/g, " ").slice(0, 18);
+}
+
+function BottomNavBar({
+  config,
+  rootRef,
+}: {
+  config: BottomNavConfig;
+  rootRef: React.RefObject<HTMLDivElement | null>;
+}) {
+  const items = useMemo(
+    () => config.items.slice(0, BOTTOM_NAV_MAX),
+    [config.items],
+  );
+  const [active, setActive] = useState(items[0]?.id || "");
+  // Setelah menu diklik, item itu tetap aktif selama animasi scroll agar
+  // tidak "melompat" ke target sesudahnya yang ikut melewati garis baca.
+  const lockUntil = useRef(0);
+  useEffect(() => {
+    const root = rootRef.current;
+    if (!root) return;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      if (Date.now() < lockUntil.current) return;
+      const line = window.innerHeight * 0.3;
+      let current = items[0]?.id || "";
+      for (const item of items) {
+        const el = root.querySelector<HTMLElement>(bottomNavSelector(item));
+        if (el && el.getBoundingClientRect().top <= line) current = item.id;
+      }
+      setActive(current);
+    };
+    const onScroll = () => {
+      if (!frame) frame = window.requestAnimationFrame(measure);
+    };
+    measure();
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [rootRef, items]);
+  if (!items.length) return null;
+  const go = (item: BottomNavItem) => {
+    lockUntil.current = Date.now() + 1200;
+    setActive(item.id);
+    rootRef.current
+      ?.querySelector<HTMLElement>(bottomNavSelector(item))
+      ?.scrollIntoView({
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+        block: "start",
+      });
+  };
+  const middle = Math.floor(items.length / 2);
+  return (
+    <div className="bottom-nav-dock">
+      <nav
+        className={`bottom-nav style-${config.style}`}
+        aria-label="Navigasi undangan"
+        style={
+          {
+            ...(isPaintColor(config.background)
+              ? { "--bn-bg": config.background }
+              : {}),
+            ...(isPaintColor(config.color) ? { "--bn-fg": config.color } : {}),
+            ...(isPaintColor(config.activeColor)
+              ? { "--bn-active": config.activeColor }
+              : {}),
+          } as React.CSSProperties
+        }
+      >
+        {items.map((item, index) => {
+          const [Icon] = bottomNavIcons[item.icon] || bottomNavIcons.heart;
+          const isActive = active === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              className={`bottom-nav-item ${isActive ? "is-active" : ""} ${config.style === "center-raised" && index === middle ? "is-center" : ""}`}
+              aria-current={isActive ? "true" : undefined}
+              aria-label={item.label}
+              onClick={(event) => {
+                event.stopPropagation();
+                go(item);
+              }}
+            >
+              <span className="bottom-nav-icon">
+                {item.iconUrl ? (
+                  <img
+                    className="bottom-nav-img"
+                    src={assetUrl(item.iconUrl)}
+                    alt=""
+                  />
+                ) : (
+                  <Icon size={20} />
+                )}
+              </span>
+              {config.style !== "icon-only" && (
+                <span className="bottom-nav-label">{item.label}</span>
+              )}
+            </button>
+          );
+        })}
+      </nav>
+    </div>
+  );
+}
+
+function BottomNavPanel({
+  sections,
+  first,
+  update,
+  uploadIcon,
+}: {
+  sections: CanvasSection[];
+  first: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+  uploadIcon?: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
+}) {
+  const [uploadingIcon, setUploadingIcon] = useState("");
+  const config: BottomNavConfig = first.bottomNav || {
+    enabled: false,
+    style: "floating-pill",
+    show: "mobile",
+    items: [],
+  };
+  const set = (patch: Partial<BottomNavConfig>) =>
+    update({ bottomNav: { ...config, ...patch } });
+  const columns = sections.flatMap((section, sectionIndex) =>
+    section.columns.map((column, columnIndex) => ({
+      section,
+      column,
+      sectionIndex,
+      columnIndex,
+    })),
+  );
+  // Target menu: column, atau feature di dalam column (template yang
+  // menaruh banyak feature dalam satu column tetap bisa punya beberapa menu).
+  // Urutan menu selalu mengikuti urutan di halaman.
+  const targets = columns.flatMap((entry) => [
+    { key: entry.column.id, columnId: entry.column.id, featureId: undefined as string | undefined },
+    ...entry.column.features
+      .filter((feature) => !isPinnedCredit(feature))
+      .map((feature) => ({ key: feature.id, columnId: entry.column.id, featureId: feature.id as string | undefined })),
+  ]);
+  const order = new Map(targets.map((target, index) => [target.key, index]));
+  const byOrder = (a: BottomNavItem, b: BottomNavItem) =>
+    (order.get(bottomNavKey(a)) ?? 0) - (order.get(bottomNavKey(b)) ?? 0);
+  const items = config.items
+    .filter((item) => order.has(bottomNavKey(item)))
+    .sort(byOrder);
+  const toggle = (
+    entry: (typeof columns)[number],
+    feature: Feature | undefined,
+    on: boolean,
+  ) => {
+    const key = feature?.id || entry.column.id;
+    if (on) {
+      if (items.length >= BOTTOM_NAV_MAX) return;
+      const label = feature
+        ? (feature.title || feature.type).replace(/\s+/g, " ").slice(0, 18)
+        : navColumnLabel(entry.section, entry.column);
+      set({
+        items: [
+          ...items,
+          {
+            id: uid("nav"),
+            columnId: entry.column.id,
+            ...(feature ? { featureId: feature.id } : {}),
+            label,
+            icon: feature
+              ? guessNavIcon({ id: entry.column.id, features: [feature] }, 1)
+              : guessNavIcon(entry.column, entry.sectionIndex),
+          },
+        ].sort(byOrder),
+      });
+    } else set({ items: items.filter((item) => bottomNavKey(item) !== key) });
+  };
+  const patchItem = (key: string, patch: Partial<BottomNavItem>) =>
+    set({
+      items: items.map((item) =>
+        bottomNavKey(item) === key ? { ...item, ...patch } : item,
+      ),
+    });
+  const itemEditor = (item: BottomNavItem) => (
+    <div className="bottom-nav-item-edit">
+      <input
+        value={item.label}
+        maxLength={18}
+        aria-label="Label menu"
+        onChange={(event) =>
+          patchItem(bottomNavKey(item), { label: event.target.value })
+        }
+      />
+      <select
+        value={item.icon}
+        aria-label="Ikon menu"
+        onChange={(event) =>
+          patchItem(bottomNavKey(item), {
+            icon: event.target.value as BottomNavIcon,
+          })
+        }
+      >
+        {(Object.keys(bottomNavIcons) as BottomNavIcon[]).map((key) => (
+          <option key={key} value={key}>
+            {bottomNavIcons[key][1]}
+          </option>
+        ))}
+      </select>
+      {/* Revisi 22 Okt — ikon sendiri per menu (PNG/JPG/WebP). */}
+      {uploadIcon && (
+        <div className="bottom-nav-icon-upload">
+          {item.iconUrl ? (
+            <img src={assetUrl(item.iconUrl)} alt={`Ikon ${item.label}`} />
+          ) : (
+            <span className="bottom-nav-icon-preview">
+              {(() => {
+                const [Icon] = bottomNavIcons[item.icon] || bottomNavIcons.heart;
+                return <Icon size={14} />;
+              })()}
+            </span>
+          )}
+          <label className="secondary-btn bottom-nav-icon-pick">
+            <Upload size={12} />
+            {uploadingIcon === bottomNavKey(item)
+              ? "Mengunggah…"
+              : item.iconUrl
+                ? "Ganti ikon"
+                : "Upload ikon"}
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              hidden
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                const key = bottomNavKey(item);
+                setUploadingIcon(key);
+                const saved = await uploadIcon(file);
+                setUploadingIcon("");
+                if (saved)
+                  patchItem(key, { iconUrl: saved.url, iconKey: saved.key });
+              }}
+            />
+          </label>
+          {item.iconUrl && (
+            <button
+              type="button"
+              className="text-button"
+              onClick={() =>
+                patchItem(bottomNavKey(item), {
+                  iconUrl: undefined,
+                  iconKey: undefined,
+                })
+              }
+            >
+              Pakai ikon bawaan
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+  return (
+    <div className="desktop-layout-panel bottom-nav-panel">
+      <div className="setting-row compact">
+        <div>
+          <Navigation size={16} />
+          <span>
+            <strong>Bottom navigation bar</strong>
+            <small>Menu di bawah undangan untuk lompat ke column tertentu.</small>
+          </span>
+        </div>
+        <button
+          className={`toggle ${config.enabled ? "on" : ""}`}
+          aria-pressed={config.enabled}
+          aria-label="Aktifkan bottom navigation bar"
+          onClick={() => set({ enabled: !config.enabled })}
+        >
+          <i />
+        </button>
+      </div>
+      {config.enabled && (
+        <>
+          <div className="bottom-nav-style-grid" role="group" aria-label="Style bottom navigation">
+            {bottomNavStyles.map(([value, labelText]) => (
+              <button
+                key={value}
+                type="button"
+                className={config.style === value ? "active" : ""}
+                aria-pressed={config.style === value}
+                onClick={() => set({ style: value })}
+              >
+                <span className={`bottom-nav-mini style-${value}`} aria-hidden>
+                  {[0, 1, 2, 3].map((dot) => (
+                    <i key={dot} className={dot === 1 ? "on" : ""} />
+                  ))}
+                </span>
+                <small>{labelText}</small>
+              </button>
+            ))}
+          </div>
+          <label>
+            Tampil di
+            <select
+              value={config.show}
+              onChange={(event) =>
+                set({ show: event.target.value as BottomNavConfig["show"] })
+              }
+            >
+              <option value="mobile">Mobile saja</option>
+              <option value="all">Mobile & Desktop</option>
+            </select>
+          </label>
+          <div className="two-inputs">
+            <label>
+              Warna bar
+              <ColorInput
+                value={config.background}
+                noneValue="transparent"
+                onChange={(next) => set({ background: next })}
+              />
+            </label>
+            <label>
+              Warna ikon
+              <ColorInput
+                value={config.color}
+                fallback="#6b7a74"
+                onChange={(next) => set({ color: next })}
+              />
+            </label>
+          </div>
+          <label>
+            Warna aktif
+            <ColorInput
+              value={config.activeColor}
+              fallback="#125946"
+              onChange={(next) => set({ activeColor: next })}
+            />
+          </label>
+          <div className="bottom-nav-items">
+            <strong>
+              Menu per column / feature{" "}
+              <small>
+                {items.length}/{BOTTOM_NAV_MAX} dipilih
+              </small>
+            </strong>
+            {columns.map((entry) => {
+              const item = items.find(
+                (candidate) =>
+                  !candidate.featureId && candidate.columnId === entry.column.id,
+              );
+              const full = items.length >= BOTTOM_NAV_MAX;
+              return (
+                <div
+                  key={entry.column.id}
+                  className={`bottom-nav-row ${item ? "is-on" : ""}`}
+                >
+                  <label className="bottom-nav-check">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(item)}
+                      disabled={!item && full}
+                      onChange={(event) =>
+                        toggle(entry, undefined, event.target.checked)
+                      }
+                    />
+                    <span>
+                      {entry.section.name || `Canvas ${entry.sectionIndex + 1}`}
+                      {` · Column ${entry.columnIndex + 1}`}
+                      <small>Lompat ke awal column</small>
+                    </span>
+                  </label>
+                  {item && itemEditor(item)}
+                  {entry.column.features.filter((feature) => !isPinnedCredit(feature)).length > 1 && (
+                    <div className="bottom-nav-features">
+                      {entry.column.features
+                        .filter((feature) => !isPinnedCredit(feature))
+                        .map((feature) => {
+                          const featureItem = items.find(
+                            (candidate) => candidate.featureId === feature.id,
+                          );
+                          return (
+                            <div
+                              key={feature.id}
+                              className={`bottom-nav-feature ${featureItem ? "is-on" : ""}`}
+                            >
+                              <label className="bottom-nav-check">
+                                <input
+                                  type="checkbox"
+                                  checked={Boolean(featureItem)}
+                                  disabled={!featureItem && full}
+                                  onChange={(event) =>
+                                    toggle(entry, feature, event.target.checked)
+                                  }
+                                />
+                                <span>
+                                  {feature.title || feature.type}
+                                  <small>{feature.type}</small>
+                                </span>
+                              </label>
+                              {featureItem && itemEditor(featureItem)}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            {items.length >= BOTTOM_NAV_MAX && (
+              <small className="field-hint">
+                Maksimal {BOTTOM_NAV_MAX} menu agar tetap nyaman di layar ponsel.
+              </small>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** TC-242 — editor isi sisi visual: header, teks, slideshow, video. */
+function DesktopSideEditor({
+  first,
+  update,
+  flash,
+  uploadToServer,
+}: {
+  first: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+  flash: (message: string) => void;
+  uploadToServer: (
+    file: File,
+    category: string,
+  ) => Promise<{ key: string; url: string }>;
+}) {
+  const slideInput = useRef<HTMLInputElement | null>(null);
+  const videoInput = useRef<HTMLInputElement | null>(null);
+  const [busy, setBusy] = useState("");
+  const slides = first.desktopSideSlides || [];
+  const addSlides = async (files: File[]) => {
+    const next = [...slides];
+    setBusy("slide");
+    try {
+      for (const raw of files) {
+        if (!raw.type.startsWith("image/")) {
+          flash(`${raw.name} bukan gambar.`);
+          continue;
+        }
+        const file = await shrinkImageToLimit(raw, 4 * 1024 * 1024);
+        if (file.size > 4 * 1024 * 1024) {
+          flash(`${raw.name} lebih dari 4 MB.`);
+          continue;
+        }
+        const saved = await uploadToServer(file, "canvas-background");
+        next.push({ url: saved.url, key: saved.key });
+      }
+      // Revisi 21 Okt — sisi visual memakai gambar, jadi warna background
+      // desktop dikosongkan (tidak ada warna yang dipilih).
+      update({ desktopSideSlides: next, desktopBackdropColor: undefined });
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Upload gambar gagal.");
+    } finally {
+      setBusy("");
+    }
+  };
+  const uploadVideo = async (file: File | undefined) => {
+    if (!file) return;
+    if (!/^video\/(mp4|webm)$/.test(file.type)) {
+      flash("Video harus MP4 atau WebM.");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      flash("Video maksimal 10 MB.");
+      return;
+    }
+    setBusy("video");
+    try {
+      const saved = await uploadToServer(file, "canvas-background");
+      update({
+        desktopSideVideoUrl: saved.url,
+        desktopSideVideoKey: saved.key,
+        desktopBackdropColor: undefined,
+      });
+      flash("Video sisi desktop disimpan.");
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Upload video gagal.");
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <div className="desktop-side-editor">
+      <strong>Isi sisi visual</strong>
+      <label>
+        Header
+        <input
+          value={first.desktopSideTitle || ""}
+          placeholder="Aurelia & Reynard"
+          onChange={(event) => update({ desktopSideTitle: event.target.value })}
+        />
+      </label>
+      <label>
+        Supporting text
+        <textarea
+          rows={2}
+          value={first.desktopSideBody || ""}
+          placeholder="We are getting married · 22.06.2026"
+          onChange={(event) => update({ desktopSideBody: event.target.value })}
+        />
+      </label>
+      <label>
+        Warna teks
+        <ColorInput value={first.desktopSideTextColor} fallback="#ffffff" onChange={(next) => update({ desktopSideTextColor: next })} />
+      </label>
+      <input
+        ref={slideInput}
+        hidden
+        multiple
+        type="file"
+        accept="image/*"
+        onChange={(event) => {
+          const files = Array.from(event.target.files || []);
+          event.target.value = "";
+          if (files.length) void addSlides(files);
+        }}
+      />
+      <button
+        className="upload-control"
+        disabled={busy === "slide"}
+        onClick={() => slideInput.current?.click()}
+      >
+        <ImageIcon size={18} />
+        <span>
+          <strong>{busy === "slide" ? "Mengunggah…" : "Upload Our Image (slideshow)"}</strong>
+          <small>Beberapa gambar berganti otomatis · maks 4 MB per gambar</small>
+        </span>
+      </button>
+      {slides.length > 0 && (
+        <>
+          <div className="desktop-side-thumbs">
+            {slides.map((slide, index) => (
+              <span
+                key={`${slide.url}-${index}`}
+                style={{ backgroundImage: `url(${assetUrl(slide.url)})` }}
+              >
+                <button
+                  title="Hapus gambar"
+                  onClick={() =>
+                    update({
+                      desktopSideSlides: slides.filter((_, i) => i !== index),
+                    })
+                  }
+                >
+                  <X size={11} />
+                </button>
+              </span>
+            ))}
+          </div>
+          <label>
+            Ganti gambar tiap: {first.desktopSideSlideSeconds || 5} detik
+            <input
+              type="range"
+              min={2}
+              max={15}
+              value={first.desktopSideSlideSeconds || 5}
+              onChange={(event) =>
+                update({ desktopSideSlideSeconds: Number(event.target.value) })
+              }
+            />
+          </label>
+        </>
+      )}
+      <input
+        ref={videoInput}
+        hidden
+        type="file"
+        accept="video/mp4,video/webm"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          void uploadVideo(file);
+        }}
+      />
+      <button
+        className="upload-control"
+        disabled={busy === "video"}
+        onClick={() => videoInput.current?.click()}
+      >
+        <Video size={18} />
+        <span>
+          <strong>
+            {busy === "video"
+              ? "Mengunggah…"
+              : first.desktopSideVideoUrl
+                ? "Ganti video"
+                : "Upload video"}
+          </strong>
+          <small>MP4/WebM maks 10 MB · diputar otomatis tanpa suara, menggantikan slideshow</small>
+        </span>
+      </button>
+      {first.desktopSideVideoUrl && (
+        <button
+          className="text-button"
+          onClick={() =>
+            update({ desktopSideVideoUrl: undefined, desktopSideVideoKey: undefined })
+          }
+        >
+          Hapus video
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** TC-242 — isi sisi lebar (70%) tata letak kolom desktop. */
+function DesktopSidePanel({ first }: { first: CanvasSection }) {
+  const slides = (first.desktopSideSlides || []).filter((item) => item.url);
+  const [index, setIndex] = useState(0);
+  const seconds = Math.max(2, first.desktopSideSlideSeconds || 5);
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const timer = window.setInterval(
+      () => setIndex((value) => (value + 1) % slides.length),
+      seconds * 1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [slides.length, seconds]);
+  const hasText = Boolean(first.desktopSideTitle || first.desktopSideBody);
+  if (!slides.length && !first.desktopSideVideoUrl && !hasText) return null;
+  return (
+    <div className="desktop-side-panel" aria-hidden={!hasText}>
+      <div className="desktop-side-area">
+        {first.desktopSideVideoUrl ? (
+          <video
+            className="desktop-side-media"
+            src={assetUrl(first.desktopSideVideoUrl)}
+            autoPlay
+            muted
+            loop
+            playsInline
+          />
+        ) : (
+          slides.map((slide, slideIndex) => (
+            <div
+              key={`${slide.url}-${slideIndex}`}
+              className={`desktop-side-media desktop-side-slide ${slideIndex === index % slides.length ? "is-active" : ""}`}
+              style={{ backgroundImage: `url(${assetUrl(slide.url)})` }}
+            />
+          ))
+        )}
+        {hasText && (
+          <div
+            className={`desktop-side-text ${slides.length || first.desktopSideVideoUrl ? "on-media" : ""}`}
+            style={
+              first.desktopSideTextColor
+                ? { color: first.desktopSideTextColor }
+                : undefined
+            }
+          >
+            {first.desktopSideTitle && <h2>{first.desktopSideTitle}</h2>}
+            {first.desktopSideBody && <p>{first.desktopSideBody}</p>}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -16011,6 +17561,26 @@ function DesktopLayoutPanel({
       {column && (
         <div className="desktop-layout-options">
           <label>
+            Rasio
+            <select
+              value={first.desktopColumnRatio || "fixed"}
+              onChange={(event) =>
+                update({
+                  desktopColumnRatio: event.target
+                    .value as CanvasSection["desktopColumnRatio"],
+                  ...(event.target.value === "70-30" &&
+                  (first.desktopColumnAlign || "center") === "center"
+                    ? { desktopColumnAlign: "right" as const }
+                    : {}),
+                })
+              }
+            >
+              <option value="fixed">Kolom lebar tetap (px)</option>
+              <option value="70-30">70/30 — sisi 70% untuk visual</option>
+            </select>
+          </label>
+          {first.desktopColumnRatio !== "70-30" && (
+          <label>
             Lebar kolom: {first.desktopColumnWidth || DESKTOP_COLUMN_DEFAULT}px
             <input
               type="range"
@@ -16023,10 +17593,16 @@ function DesktopLayoutPanel({
               }
             />
           </label>
+          )}
           <label>
             Posisi kolom
             <select
-              value={first.desktopColumnAlign || "center"}
+              value={
+                first.desktopColumnRatio === "70-30" &&
+                (first.desktopColumnAlign || "center") === "center"
+                  ? "right"
+                  : first.desktopColumnAlign || "center"
+              }
               onChange={(event) =>
                 update({
                   desktopColumnAlign: event.target
@@ -16034,26 +17610,22 @@ function DesktopLayoutPanel({
                 })
               }
             >
-              <option value="center">Tengah</option>
+              {/* Revisi 21 Okt — rasio 70/30 hanya kiri/kanan: posisi
+                  tengah tidak menyisakan sisi 70% untuk visual. */}
+              {first.desktopColumnRatio !== "70-30" && (
+                <option value="center">Tengah</option>
+              )}
               <option value="right">Kanan</option>
               <option value="left">Kiri</option>
             </select>
           </label>
           <label>
             Warna background desktop
-            <input
-              type="color"
-              value={
-                first.desktopBackdropColor ||
-                (/^#[0-9a-f]{6}$/i.test(
-                  resolveSection(first, "desktop").backgroundColor || "",
-                )
-                  ? resolveSection(first, "desktop").backgroundColor
-                  : "#0f1f1a")
-              }
-              onChange={(event) =>
-                update({ desktopBackdropColor: event.target.value })
-              }
+            {/* Kosong = mengikuti background Canvas 1 versi Desktop. */}
+            <ColorInput
+              value={first.desktopBackdropColor}
+              fallback="#0f1f1a"
+              onChange={(next) => update({ desktopBackdropColor: next })}
             />
           </label>
           <input
@@ -16094,6 +17666,14 @@ function DesktopLayoutPanel({
             >
               Pakai background Canvas 1
             </button>
+          )}
+          {first.desktopColumnRatio === "70-30" && (
+          <DesktopSideEditor
+            first={first}
+            update={update}
+            flash={flash}
+            uploadToServer={uploadToServer}
+          />
           )}
         </div>
       )}
@@ -16194,6 +17774,7 @@ function WeddingCanvasBody({
   // cara lama karena isinya hanya satu section yang diperkecil.
   const fixedBackdrop = !thumbnail ? globalBackgroundSource : null;
   const [scrollViewportHeight, setScrollViewportHeight] = useState(0);
+  const previewZoom = useContext(PreviewZoomContext);
   const coverEntry = useMemo(() => {
     for (const section of sections)
       for (const column of section.columns)
@@ -16280,6 +17861,14 @@ function WeddingCanvasBody({
 
   // QA TC-091: animasi berjalan saat scroll pada seluruh section, bukan hanya halaman opening.
   const revealRootRef = useRef<HTMLDivElement | null>(null);
+  // Revisi 21 Okt — bottom navigation bar (konfigurasi di Canvas 1).
+  const bottomNav = sections[0]?.bottomNav;
+  const showBottomNav = Boolean(
+    !thumbnail &&
+      bottomNav?.enabled &&
+      bottomNav.items.length &&
+      (bottomNav.show === "all" || device === "mobile"),
+  );
   useEffect(() => {
     if (editable || thumbnail || !opened) return;
     const root = revealRootRef.current;
@@ -16328,13 +17917,13 @@ function WeddingCanvasBody({
     }
     const target = scroller;
     const observer = new ResizeObserver(() =>
-      setScrollViewportHeight(target.clientHeight),
+      setScrollViewportHeight(Math.round(target.clientHeight / previewZoom)),
     );
     observer.observe(target);
     return () => observer.disconnect();
     // `opened`: bila ada cover, root halaman baru terpasang setelah cover
     // dibuka, jadi pengukuran harus diulang saat itu.
-  }, [fixedBackdrop, opened]);
+  }, [fixedBackdrop, opened, previewZoom]);
   if (page === "rsvp-page")
     return <RsvpPage guests={guests} addGuest={addGuest} />;
   if (!editable && coverEntry && !opened) {
@@ -16369,7 +17958,7 @@ function WeddingCanvasBody({
   return (
     <div
       ref={revealRootRef}
-      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} theme-${selectedTemplate.preset || "classic"}`}
+      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${showBottomNav ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}`}
       style={{ "--accent": selectedTemplate.accent } as React.CSSProperties}
     >
       <nav>
@@ -16430,7 +18019,9 @@ function WeddingCanvasBody({
         const hasContentFeatures = section.columns.some((column) =>
           column.features.some(
             (feature) =>
-              feature.type !== "invitation-cover" && feature.type !== "sound",
+              feature.type !== "invitation-cover" &&
+              feature.type !== "sound" &&
+              (editable || !isPinnedCredit(feature)),
           ),
         );
         // TC-204 — section yang hanya berisi cover "Buka Undangan". Background
@@ -16482,13 +18073,21 @@ function WeddingCanvasBody({
             }}
             style={
               {
-                background: getGradientBackground(
-                  section.backgroundGradientEnabled,
-                  section.backgroundGradientFrom,
-                  section.backgroundGradientTo,
-                  section.backgroundGradientAngle,
-                  section.backgroundColor,
-                ),
+                background: (() => {
+                  // TC-231 — transparansi warna/gradient background canvas.
+                  const alpha =
+                    section.backgroundOpacity !== undefined
+                      ? section.backgroundOpacity / 100
+                      : undefined;
+                  return getGradientBackground(
+                    section.backgroundGradientEnabled,
+                    withAlpha(section.backgroundGradientFrom, alpha),
+                    withAlpha(section.backgroundGradientTo || "#d7b66f", alpha),
+                    section.backgroundGradientAngle,
+                    withAlpha(section.backgroundColor, alpha) ||
+                      section.backgroundColor,
+                  );
+                })(),
                 // Mengikuti rasio asli background supaya seluruh desain terlihat
                 // di lebar berapa pun, bukan terpotong atas-bawah oleh `cover`.
                 aspectRatio:
@@ -16533,6 +18132,10 @@ function WeddingCanvasBody({
                       ? "fixed"
                       : "scroll",
                   filter,
+                  // TC-231 — transparansi gambar background canvas.
+                  ...(section.backgroundImageOpacity !== undefined
+                    ? { opacity: section.backgroundImageOpacity / 100 }
+                    : {}),
                   // Slider "Durasi siklus" pada Animasi Layer Background dulu
                   // tidak pernah dipasang ke mana pun, jadi semua efek tetap
                   // memakai durasi bawaan CSS dan slider itu tak berefek.
@@ -16653,7 +18256,12 @@ function WeddingCanvasBody({
                 loop
                 muted
                 playsInline
-                style={{ filter }}
+                style={{
+                  filter,
+                  ...(section.backgroundImageOpacity !== undefined
+                    ? { opacity: section.backgroundImageOpacity / 100 }
+                    : {}),
+                }}
               />
             )}
             {/* QA TC-113: garis guide / margin yang bisa di-drag. */}
@@ -16765,7 +18373,8 @@ function WeddingCanvasBody({
                       (feature) =>
                         (editable ||
                           (feature.type !== "invitation-cover" &&
-                            feature.type !== "sound")) && (
+                            feature.type !== "sound" &&
+                            !isPinnedCredit(feature))) && (
                           <FeatureBlock
                             key={`${feature.id}-${animationNonce}`}
                             feature={feature}
@@ -16830,6 +18439,39 @@ function WeddingCanvasBody({
           </section>
         );
       })}
+      {!editable &&
+        (() => {
+          const pinned = sections.flatMap((rawSection) =>
+            resolveSection(rawSection, device).columns.flatMap((column) =>
+              column.features
+                .filter(isPinnedCredit)
+                .map((feature) => ({ feature, canvasId: rawSection.id })),
+            ),
+          );
+          if (!pinned.length) return null;
+          return (
+            <footer className="site-credit-footer">
+              {pinned.map(({ feature, canvasId }) => (
+                <FeatureBlock
+                  key={`${feature.id}-${animationNonce}`}
+                  feature={feature}
+                  editable={false}
+                  selected={false}
+                  onSelect={() => {}}
+                  onUpdate={() => {}}
+                  greetings={greetings}
+                  addGreeting={addGreeting}
+                  guests={guests}
+                  addGuest={addGuest}
+                  canvasId={canvasId}
+                />
+              ))}
+            </footer>
+          );
+        })()}
+      {showBottomNav && bottomNav && (
+        <BottomNavBar config={bottomNav} rootRef={revealRootRef} />
+      )}
       {soundNode}
     </div>
   );
@@ -17066,6 +18708,13 @@ function InvitationCover({
                         )}
                       </div>
                     )}
+                    {active.coverButtonMode === "slide" ? (
+                      <SlideToOpen
+                        label={active.buttonLabel || "Buka Undangan"}
+                        style={coverButtonStyle(active)}
+                        onOpen={onOpen}
+                      />
+                    ) : (
                     <button
                       className={`cover-open-button icon-${active.coverIconPosition || "left"}`}
                       onClick={onOpen}
@@ -17092,6 +18741,7 @@ function InvitationCover({
                         />
                       )}
                     </button>
+                    )}
                     <em>
                       *Mohon maaf jika terdapat kesalahan dalam penulisan nama &
                       gelar
@@ -17201,6 +18851,12 @@ function FeatureBlock({
   // QA TC-112: pada mode Mobile, nilai yang dipakai adalah override mobile.
   const device = useContext(DeviceContext);
   const feature = resolveFeature(rawFeature, device);
+  // TC-233 — muat font Google yang dipakai fitur ini (sekali per halaman).
+  useEffect(() => {
+    ensureFont(feature.fontFamily);
+    ensureFont(feature.titleFontFamily);
+    ensureFont(feature.bodyFontFamily);
+  }, [feature.fontFamily, feature.titleFontFamily, feature.bodyFontFamily]);
   const objectStyle: React.CSSProperties =
     feature.type === "invitation-cover"
       ? { width: "100%", alignSelf: "stretch" }
@@ -17212,14 +18868,29 @@ function FeatureBlock({
     fontFamily: feature.fontFamily,
     textAlign: feature.align,
     lineHeight: feature.lineHeight,
-    color: feature.textColor,
-    background: getGradientBackground(
-      feature.backgroundGradientEnabled,
-      feature.backgroundGradientFrom,
-      feature.backgroundGradientTo,
-      feature.backgroundGradientAngle,
-      feature.backgroundColor,
-    ),
+    color: feature.textColor || defaultFeatureStyle.textColor,
+    background: (() => {
+      const alpha =
+        feature.backgroundOpacity !== undefined
+          ? feature.backgroundOpacity / 100
+          : undefined;
+      return getGradientBackground(
+        feature.backgroundGradientEnabled,
+        withAlpha(feature.backgroundGradientFrom, alpha),
+        withAlpha(feature.backgroundGradientTo || "#d7b66f", alpha),
+        feature.backgroundGradientAngle,
+        withAlpha(feature.backgroundColor, alpha) || feature.backgroundColor,
+      );
+    })(),
+    ...(feature.boxOpacity !== undefined
+      ? { "--box-alpha": feature.boxOpacity / 100 }
+      : {}),
+    ...(feature.titleFontFamily
+      ? { "--title-font": `"${feature.titleFontFamily}"` }
+      : {}),
+    ...(feature.bodyFontFamily
+      ? { "--body-font": `"${feature.bodyFontFamily}"` }
+      : {}),
     borderRadius: feature.borderRadius,
     padding: feature.type === "invitation-cover" ? 0 : feature.padding,
     marginTop: feature.margin,
@@ -17232,12 +18903,26 @@ function FeatureBlock({
     ...(feature.loopEffect && feature.loopEffect !== "none"
       ? ({ "--loop-speed": `${feature.loopSpeed || 6}s` } as React.CSSProperties)
       : {}),
+    ...(feature.elementMotion
+      ? ({
+          "--lm-speed": `${feature.elementMotionSpeed || 6}s`,
+        } as React.CSSProperties)
+      : {}),
     overflow:
       feature.type === "gallery" && feature.galleryFullWidth
         ? "visible"
         : "hidden",
     // QA TC-117: background image per feature. TC-107: opsi tetap diam saat scroll.
-    ...(feature.backgroundImageUrl
+    ...(feature.backgroundImageUrl &&
+    feature.backgroundImageOpacity !== undefined &&
+    feature.backgroundImageOpacity < 100
+      ? {
+          "--feature-bg-image": `url(${assetUrl(feature.backgroundImageUrl)})`,
+          "--feature-bg-size": feature.backgroundImageSize || "cover",
+          "--feature-bg-position": feature.backgroundImagePosition || "center",
+          "--feature-bg-opacity": feature.backgroundImageOpacity / 100,
+        }
+      : feature.backgroundImageUrl
       ? {
           backgroundImage: `url(${assetUrl(feature.backgroundImageUrl)})`,
           backgroundSize: feature.backgroundImageSize || "cover",
@@ -17249,7 +18934,7 @@ function FeatureBlock({
         }
       : {}),
     "--effect-intensity": `${(feature.effectIntensity ?? 55) / 100}`,
-  } as React.CSSProperties;
+  } as unknown as React.CSSProperties;
   // QA TC-080 (header/supporting dapat dihapus + line break), TC-090 (font size
   // non-header), TC-118 (Heading 2 & Supporting Text 2), TC-121/TC-122 (warna per elemen).
   const editableText = (
@@ -17352,7 +19037,7 @@ function FeatureBlock({
       data-fixed-height={
         feature.freePosition && feature.boxHeight ? "true" : undefined
       }
-      className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""}`}
+      className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
       style={style}
     >
       <FeatureEffect effect={feature.visualEffect || "none"} />
@@ -17408,6 +19093,7 @@ function FeatureBlock({
               </span>
             );
           })()}
+          <CalendarButtons feature={feature} />
         </div>
       )}
       {feature.type === "gift" && (
@@ -17415,7 +19101,7 @@ function FeatureBlock({
           <Crown size={25} />
           {editableText("title", "editable-title")}
           {editableText("body", "editable-body")}
-          <GiftAccountsBlock feature={feature} />
+          <GiftReveal feature={feature} editable={editable} />
         </div>
       )}
       {feature.type === "invitation-cover" && (
@@ -17536,7 +19222,7 @@ function FeatureBlock({
             {editableText("body", "editable-body")}
             <button
               type="button"
-              className={`cover-open-button icon-${feature.coverIconPosition || "left"}`}
+              className={`cover-open-button icon-${feature.coverIconPosition || "left"}${feature.coverButtonMode === "slide" ? " is-slide-preview" : ""}`}
               style={{
                 borderRadius: feature.coverButtonRadius ?? 12,
                 borderWidth: feature.coverButtonBorderWidth ?? 1,
@@ -17632,6 +19318,10 @@ function FeatureBlock({
       {/* QA TC-123: credit / watermark halaman penutup. */}
       {feature.type === "credit" && (
         <CreditFeature feature={feature} editableText={editableText} />
+      )}
+      {/* TC-235 — Live Streaming. */}
+      {feature.type === "live-stream" && (
+        <LiveStreamFeature feature={feature} editableText={editableText} />
       )}
       {feature.type === "sound" && editable && (
         <SoundFeature feature={feature} />
@@ -17769,7 +19459,242 @@ function LoveStoryFeature({
   );
 }
 
+/** TC-237 — tombol "geser untuk membuka". Bisa digeser dengan sentuhan/mouse,
+ *  atau ditekan Enter/Spasi untuk aksesibilitas. */
+function SlideToOpen({
+  label,
+  style,
+  onOpen,
+}: {
+  label: string;
+  style?: React.CSSProperties;
+  onOpen?: () => void;
+}) {
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const startRef = useRef<{ x: number; max: number } | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [done, setDone] = useState(false);
+  const finish = () => {
+    setDone(true);
+    window.setTimeout(() => onOpen?.(), 180);
+  };
+  const onDown = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (done) return;
+    const track = trackRef.current;
+    if (!track) return;
+    const knob = event.currentTarget;
+    startRef.current = {
+      x: event.clientX - offset,
+      max: Math.max(0, track.clientWidth - knob.offsetWidth - 8),
+    };
+    knob.setPointerCapture?.(event.pointerId);
+  };
+  const onMove = (event: React.PointerEvent<HTMLButtonElement>) => {
+    const start = startRef.current;
+    if (!start) return;
+    setOffset(Math.min(start.max, Math.max(0, event.clientX - start.x)));
+  };
+  const onUp = () => {
+    const start = startRef.current;
+    startRef.current = null;
+    if (!start) return;
+    if (start.max > 0 && offset >= start.max * 0.85) {
+      setOffset(start.max);
+      finish();
+    } else setOffset(0);
+  };
+  return (
+    <div
+      ref={trackRef}
+      className={`cover-slide-track ${done ? "is-done" : ""}`}
+      style={style}
+    >
+      <span className="cover-slide-label">{label}</span>
+      <button
+        type="button"
+        className="cover-slide-knob"
+        aria-label={`Geser untuk ${label.toLowerCase()}`}
+        style={{ transform: `translateX(${offset}px)` }}
+        onPointerDown={onDown}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            finish();
+          }
+        }}
+      >
+        <ChevronRight size={18} />
+      </button>
+    </div>
+  );
+}
+
+/** TC-235 — kenali platform siaran dan alamat embed YouTube. */
+function liveStreamInfo(url = "") {
+  const value = url.trim();
+  let host = "";
+  try {
+    host = new URL(value).hostname.replace(/^www\./, "");
+  } catch {
+    host = "";
+  }
+  const yt =
+    value.match(
+      /(?:youtube\.com\/(?:watch\?v=|live\/|embed\/|shorts\/)|youtu\.be\/)([\w-]{6,})/,
+    )?.[1] || "";
+  const platform = yt || host.endsWith("youtube.com") || host === "youtu.be"
+    ? "YouTube"
+    : host.endsWith("instagram.com")
+      ? "Instagram"
+      : host.endsWith("zoom.us")
+        ? "Zoom"
+        : host === "meet.google.com"
+          ? "Google Meet"
+          : host.endsWith("tiktok.com")
+            ? "TikTok"
+            : host.endsWith("facebook.com") || host === "fb.watch"
+              ? "Facebook"
+              : host
+                ? "Link siaran"
+                : "";
+  const safe = /^https?:\/\//i.test(value) ? value : "";
+  return {
+    platform,
+    href: safe,
+    embed: yt ? `https://www.youtube.com/embed/${yt}` : "",
+  };
+}
+
+function LiveStreamFeature({
+  feature,
+  editableText,
+}: {
+  feature: Feature;
+  editableText: (
+    field: "title" | "body" | "title2" | "body2",
+    className: string,
+  ) => React.ReactNode;
+}) {
+  const info = liveStreamInfo(feature.liveUrl);
+  const when = feature.liveSchedule ? new Date(feature.liveSchedule) : null;
+  const whenText =
+    when && !Number.isNaN(when.getTime())
+      ? when.toLocaleString("id-ID", {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        }) + " WIB"
+      : "";
+  return (
+    <div className="live-stream-feature">
+      <span className="live-badge">
+        <Radio size={13} /> LIVE
+      </span>
+      {editableText("title", "editable-title")}
+      {editableText("body", "editable-body")}
+      {whenText && <p className="live-when">{whenText}</p>}
+      {feature.liveEmbed !== false && info.embed ? (
+        <div className="live-embed">
+          <iframe
+            src={info.embed}
+            title={feature.title || "Live streaming"}
+            loading="lazy"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+      ) : null}
+      {info.href ? (
+        <a
+          className="live-button"
+          href={info.href}
+          target="_blank"
+          rel="noreferrer"
+          style={giftCardStyle(feature)}
+        >
+          <PlayCircle size={16} />
+          {feature.liveButtonLabel || "Tonton Live"}
+          {info.platform && <small>{info.platform}</small>}
+        </a>
+      ) : (
+        <p className="live-empty">Tautan siaran belum diisi.</p>
+      )}
+    </div>
+  );
+}
+
+function LiveStreamEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const info = liveStreamInfo(feature.liveUrl);
+  return (
+    <div className="credit-editor live-stream-editor">
+      <label>
+        Tautan live streaming
+        <input
+          type="url"
+          placeholder="https://youtube.com/live/… · instagram.com/… · zoom.us/j/…"
+          value={feature.liveUrl || ""}
+          onChange={(event) => update({ liveUrl: event.target.value })}
+        />
+      </label>
+      {feature.liveUrl && (
+        <small className="field-hint">
+          {info.href
+            ? `Terdeteksi: ${info.platform}${info.embed ? " · bisa di-embed" : ""}`
+            : "Tautan harus diawali https://"}
+        </small>
+      )}
+      <label>
+        Jadwal siaran
+        <input
+          type="datetime-local"
+          value={feature.liveSchedule || ""}
+          onChange={(event) => update({ liveSchedule: event.target.value })}
+        />
+      </label>
+      <label>
+        Label tombol
+        <input
+          value={feature.liveButtonLabel || ""}
+          placeholder="Tonton Live"
+          onChange={(event) => update({ liveButtonLabel: event.target.value })}
+        />
+      </label>
+      <div className="setting-row compact">
+        <span>
+          <strong>Tampilkan pemutar YouTube</strong>
+          <small>Tautan YouTube diputar langsung di undangan.</small>
+        </span>
+        <button
+          className={`toggle ${feature.liveEmbed !== false ? "on" : ""}`}
+          aria-pressed={feature.liveEmbed !== false}
+          aria-label="Tampilkan pemutar YouTube"
+          onClick={() => update({ liveEmbed: feature.liveEmbed === false })}
+        >
+          <i />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // QA TC-123 — credit / watermark pada halaman penutup undangan.
+/** TC-234 — Credit yang dipasang "paling bawah" dilepas dari canvas-nya dan
+ *  dirender sekali di akhir undangan, tanpa padding/min-height canvas. */
+const isPinnedCredit = (feature: Feature) =>
+  feature.type === "credit" && feature.creditPinBottom !== false;
+
 function CreditFeature({
   feature,
   editableText,
@@ -18093,7 +20018,14 @@ function CountdownFeature({ feature }: { feature: Feature }) {
     return () => window.clearInterval(timer);
   }, [feature.eventDate]);
   return (
-    <div className="countdown-feature">
+    <div
+      className="countdown-feature"
+      style={
+        feature.countdownScale
+          ? ({ "--cd-scale": feature.countdownScale / 100 } as React.CSSProperties)
+          : undefined
+      }
+    >
       <small>SAVE THE DATE</small>
       {/* QA TC-110: heading & supporting text dirender sekali saja oleh
           FeatureBlock agar tidak dobel dan tetap bisa dihapus dari inspector. */}
@@ -18110,6 +20042,150 @@ function CountdownFeature({ feature }: { feature: Feature }) {
           </span>
         ))}
       </div>
+      <CalendarButtons feature={feature} />
+    </div>
+  );
+}
+
+/** TC-236 — "Simpan Tanggal": Google Calendar (web/Android) dan berkas .ics
+ *  (iPhone, Outlook, kalender lain). Tampil bila tanggal acara sudah diisi
+ *  dan tidak dimatikan Web Designer. */
+function CalendarButtons({ feature }: { feature: Feature }) {
+  if (feature.calendarButton === false || !feature.eventDate) return null;
+  const start = new Date(feature.eventDate);
+  if (Number.isNaN(start.getTime())) return null;
+  const hours = Math.max(0.5, feature.calendarDurationHours ?? 2);
+  const end = new Date(start.getTime() + hours * 3600_000);
+  // Waktu lokal penulis undangan (tanpa zona), dikunci ke WIB lewat ctz.
+  const local = (date: Date) =>
+    `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}T${String(date.getHours()).padStart(2, "0")}${String(date.getMinutes()).padStart(2, "0")}00`;
+  const title =
+    (feature.type === "countdown" ? feature.title2 : undefined) ||
+    feature.title ||
+    "Acara Pernikahan";
+  const details = feature.body || "";
+  const location = feature.eventMapUrl || feature.locationAddress || "";
+  const google =
+    "https://calendar.google.com/calendar/render?action=TEMPLATE" +
+    `&text=${encodeURIComponent(title)}` +
+    `&dates=${local(start)}/${local(end)}` +
+    `&ctz=Asia/Jakarta` +
+    `&details=${encodeURIComponent(details)}` +
+    (location ? `&location=${encodeURIComponent(location)}` : "");
+  const downloadIcs = () => {
+    const escape = (value: string) =>
+      value.replace(/\\/g, "\\\\").replace(/[,;]/g, "\\$&").replace(/\n/g, "\\n");
+    const ics = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//ikrarku//Undangan//ID",
+      "BEGIN:VEVENT",
+      `UID:${feature.id}@ikrarku.id`,
+      `DTSTAMP:${local(new Date())}`,
+      `DTSTART;TZID=Asia/Jakarta:${local(start)}`,
+      `DTEND;TZID=Asia/Jakarta:${local(end)}`,
+      `SUMMARY:${escape(title)}`,
+      details ? `DESCRIPTION:${escape(details)}` : "",
+      location ? `LOCATION:${escape(location)}` : "",
+      "END:VEVENT",
+      "END:VCALENDAR",
+    ]
+      .filter(Boolean)
+      .join("\r\n");
+    const url = URL.createObjectURL(
+      new Blob([ics], { type: "text/calendar;charset=utf-8" }),
+    );
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "simpan-tanggal.ics";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+  const button = mapButtonStyle(feature);
+  return (
+    <div className="calendar-buttons">
+      <a
+        className={`calendar-button ${button.customized ? `shape-${button.shape}` : ""}`}
+        style={button.customized ? button.style : undefined}
+        href={google}
+        target="_blank"
+        rel="noreferrer"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <CalendarPlus size={14} /> {feature.calendarLabel || "Simpan Tanggal"}
+      </a>
+      <button
+        type="button"
+        className="calendar-ics"
+        onClick={(event) => {
+          event.stopPropagation();
+          downloadIcs();
+        }}
+        title="Untuk iPhone, Outlook, atau aplikasi kalender lain"
+      >
+        iPhone / Outlook (.ics)
+      </button>
+    </div>
+  );
+}
+
+/** Pengaturan tombol Simpan Tanggal di panel Content. */
+function CalendarButtonEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  return (
+    <div className="calendar-button-editor">
+      <div className="setting-row compact">
+        <span>
+          <strong>Tombol Simpan Tanggal</strong>
+          <small>Menambahkan acara ke kalender tamu (Google / iPhone / Outlook).</small>
+        </span>
+        <button
+          className={`toggle ${feature.calendarButton !== false ? "on" : ""}`}
+          aria-pressed={feature.calendarButton !== false}
+          aria-label="Tombol Simpan Tanggal"
+          onClick={() =>
+            update({ calendarButton: feature.calendarButton === false })
+          }
+        >
+          <i />
+        </button>
+      </div>
+      {feature.calendarButton !== false && (
+        <>
+          <label>
+            Label tombol
+            <input
+              value={feature.calendarLabel || ""}
+              placeholder="Simpan Tanggal"
+              onChange={(event) => update({ calendarLabel: event.target.value })}
+            />
+          </label>
+          <label>
+            Durasi acara: {feature.calendarDurationHours ?? 2} jam
+            <input
+              type="range"
+              min={1}
+              max={12}
+              value={feature.calendarDurationHours ?? 2}
+              onChange={(event) =>
+                update({ calendarDurationHours: Number(event.target.value) })
+              }
+            />
+          </label>
+          {!feature.eventDate && (
+            <small className="field-hint">
+              Isi Tanggal & waktu acara agar tombol tampil.
+            </small>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -18259,6 +20335,21 @@ function galleryImageStyle(
   };
 }
 
+/** TC-229 — kelas & variabel CSS untuk tinggi/jarak foto galeri. */
+function galleryBoxProps(feature: Feature, base: string) {
+  const auto = feature.galleryHeightMode === "auto";
+  const height = !auto && feature.galleryImageHeight;
+  return {
+    className: `${base} ${feature.galleryFullWidth ? "full-width" : ""} ${auto ? "h-auto" : ""} ${height ? "has-h" : ""}`,
+    style: {
+      ...(height ? { "--g-h": `${height}px` } : {}),
+      ...(feature.galleryGap !== undefined
+        ? { "--g-gap": `${feature.galleryGap}px` }
+        : {}),
+    } as React.CSSProperties,
+  };
+}
+
 function GalleryFeature({ feature }: { feature: Feature }) {
   const [activeIndex, setActiveIndex] = useState(0);
   // Galeri bisa menyimpan path relatif dari upload lama; assetUrl membuat
@@ -18296,9 +20387,7 @@ function GalleryFeature({ feature }: { feature: Feature }) {
     );
   if (feature.galleryStyle === "carousel")
     return (
-      <div
-        className={`gallery-carousel ${feature.galleryFullWidth ? "full-width" : ""}`}
-      >
+      <div {...galleryBoxProps(feature, "gallery-carousel")}>
         <div
           className="gallery-carousel-track"
           style={{
@@ -18352,9 +20441,7 @@ function GalleryFeature({ feature }: { feature: Feature }) {
     );
   if (feature.galleryStyle === "filmstrip")
     return (
-      <div
-        className={`gallery-filmstrip ${feature.galleryFullWidth ? "full-width" : ""}`}
-      >
+      <div {...galleryBoxProps(feature, "gallery-filmstrip")}>
         {images.map((url, index) => (
           <img
             src={url}
@@ -18372,7 +20459,10 @@ function GalleryFeature({ feature }: { feature: Feature }) {
     );
   return (
     <div
-      className={`gallery-grid layout-${feature.galleryLayoutTemplate || "even"} ${feature.galleryFullWidth ? "full-width" : ""}`}
+      {...galleryBoxProps(
+        feature,
+        `gallery-grid layout-${feature.galleryLayoutTemplate || "even"}`,
+      )}
     >
       {images.map((url, index) => (
         <img
@@ -18713,6 +20803,23 @@ function GreetingsWidget({
   const [name, setName] = useState("");
   const [message, setMessage] = useState("");
   const align = feature?.align || "left";
+  // TC-232 — dulu daftar dipotong ke 3 (atau 8) ucapan terbaru, jadi setiap
+  // ucapan baru "menimpa" yang tertua di layar walau di database tetap ada.
+  // Kini semua ucapan tampil: digulir di dalam kotak, atau per halaman.
+  const paged = feature?.greetingsDisplay === "paged";
+  const perPage = Math.max(1, feature?.greetingsPerPage || 5);
+  const pageCount = Math.max(1, Math.ceil(greetings.length / perPage));
+  const [page, setPage] = useState(1);
+  const currentPage = Math.min(page, pageCount);
+  const visibleGreetings = paged
+    ? greetings.slice((currentPage - 1) * perPage, currentPage * perPage)
+    : greetings;
+  const formatDate = (value: string) => {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime())
+      ? value
+      : date.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
+  };
   return (
     <div
       className={`greetings-widget ${compact ? "compact" : ""} layout-${feature?.greetingsLayout || "split"} ${feature?.backgroundGradientEnabled ? "gradient-active" : ""} align-${align}`}
@@ -18749,6 +20856,7 @@ function GreetingsWidget({
             addGreeting(name.trim(), message.trim());
             setName("");
             setMessage("");
+            setPage(1);
           }
         }}
       >
@@ -18768,17 +20876,20 @@ function GreetingsWidget({
           <Send size={14} /> {feature?.buttonLabel || "Kirim ucapan"}
         </button>
       </form>
-      <div className="greeting-list">
-        {greetings.slice(0, compact ? 3 : 8).map((greeting, index) => (
+      {greetings.length > 0 && (
+        <div className="greeting-count">{greetings.length} ucapan</div>
+      )}
+      <div className={`greeting-list ${paged ? "is-paged" : "is-scroll"}`}>
+        {visibleGreetings.map((greeting, index) => (
           <article
-            key={`${greeting.name}-${index}`}
+            key={greeting.id || `${greeting.name}-${index}`}
             style={feature ? giftCardStyle(feature) : undefined}
           >
             <div className="greeting-avatar">{greeting.name.slice(0, 1)}</div>
             <div>
               <strong>{greeting.name}</strong>
               <p>{greeting.message}</p>
-              <small>{greeting.date}</small>
+              <small>{formatDate(greeting.date)}</small>
             </div>
           </article>
         ))}
@@ -18789,6 +20900,37 @@ function GreetingsWidget({
           </div>
         )}
       </div>
+      {paged && pageCount > 1 && (
+        <nav className="greeting-pages" aria-label="Halaman ucapan">
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setPage(currentPage - 1)}
+            aria-label="Halaman sebelumnya"
+          >
+            ‹
+          </button>
+          {Array.from({ length: pageCount }, (_, i) => i + 1).map((n) => (
+            <button
+              type="button"
+              key={n}
+              className={n === currentPage ? "active" : ""}
+              aria-current={n === currentPage ? "page" : undefined}
+              onClick={() => setPage(n)}
+            >
+              {n}
+            </button>
+          ))}
+          <button
+            type="button"
+            disabled={currentPage === pageCount}
+            onClick={() => setPage(currentPage + 1)}
+            aria-label="Halaman berikutnya"
+          >
+            ›
+          </button>
+        </nav>
+      )}
     </div>
   );
 }
@@ -18922,6 +21064,16 @@ function PreviewModal({
   // Preview selalu dibuka dari section pembuka, termasuk saat berpindah
   // tab Pages/RSVP atau mengganti mode Desktop/Mobile.
   useScrollResetOnOpen(stageRef, true, page, mode);
+  // Revisi 21 Okt — preview Desktop memenuhi lebar layar laptop, tanpa
+  // ruang abu-abu. Tata letak Kolom (70/30) memang responsif, jadi dirender
+  // apa adanya selebar layar; desain penuh diskalakan agar posisi bebas,
+  // crop background, dan tinggi section tetap sama dengan editor.
+  const columnLayout = usesDesktopColumn(sections);
+  const zoom = useFitZoom(
+    stageRef,
+    designWidth,
+    mode === "desktop" && !columnLayout,
+  );
   return (
     <div className="preview-overlay">
       <div className="preview-full">
@@ -18930,7 +21082,9 @@ function PreviewModal({
             <strong>Live Preview</strong>
             <span>
               {mode === "desktop"
-                ? `Selebar canvas editor · ${designWidth} px`
+                ? columnLayout
+                  ? "Desktop · selebar layar"
+                  : `Selebar layar · desain ${designWidth} px diskalakan ${Math.round(zoom * 100)}%`
                 : `Mobile · ${MOBILE_PREVIEW_WIDTH} px`}
             </span>
           </div>
@@ -18970,9 +21124,15 @@ function PreviewModal({
         <PreviewSurfaceContext value={true}>
         <div
           ref={stageRef}
-          className={`preview-full-stage ${mode}`}
-          style={{ "--design-width": `${designWidth}px` } as React.CSSProperties}
+          className={`preview-full-stage ${mode}${mode === "desktop" && columnLayout ? " full-bleed" : ""}`}
+          style={
+            {
+              "--design-width": `${designWidth}px`,
+              "--preview-zoom": mode === "desktop" ? zoom : 1,
+            } as React.CSSProperties
+          }
         >
+          <PreviewZoomContext value={mode === "desktop" ? zoom : 1}>
           <div className="preview-content">
             <WeddingCanvas
               page={page}
@@ -18984,6 +21144,7 @@ function PreviewModal({
               addGuest={addGuest}
             />
           </div>
+          </PreviewZoomContext>
         </div>
         </PreviewSurfaceContext>
         </DeviceContext>
@@ -20661,6 +22822,15 @@ function CustomerServiceDatabase({
                         customer
                       </em>
                     )}
+                    {/* TC-226 — nama pengirim pada setiap catatan/balasan staff. */}
+                    {message.sender_type === "support" && (
+                      <strong className="cs-message-sender">
+                        {message.sender_name?.trim() || "Staff ikrarku"}
+                        {message.sender_role && (
+                          <small> · {message.sender_role}</small>
+                        )}
+                      </strong>
+                    )}
                     <p>{message.body}</p>
                     <span>
                       {new Date(message.created_at).toLocaleString("id-ID")}
@@ -20981,24 +23151,54 @@ function MyOrdersPage({
                 </div>
               </div>
             )}
-            <div className="project-order-summary">
+            {/* TC-222 — billing sebagai daftar ke bawah (label kiri, nilai
+                kanan), bukan kotak-kotak, supaya terbaca seperti tagihan. */}
+            <dl className="billing-list">
               <div>
-                <small>Total</small>
-                <strong>{formatRupiah(order.amount)}</strong>
+                <dt>No. order</dt>
+                <dd>{order.order_no}</dd>
               </div>
               <div>
-                <small>Status project</small>
-                <strong>{order.order_status}</strong>
+                <dt>Template</dt>
+                <dd>{order.template_name}</dd>
               </div>
               <div>
-                <small>Customer Service</small>
-                <strong>{order.cs_name || "Menunggu assignment"}</strong>
+                <dt>Tanggal pesan</dt>
+                <dd>{formatShortDate(order.created_at)}</dd>
               </div>
               <div>
-                <small>Web Designer</small>
-                <strong>{order.editor_name || "Menunggu assignment"}</strong>
+                <dt>Status pembayaran</dt>
+                <dd>{paid ? "Lunas" : "Menunggu pembayaran"}</dd>
               </div>
-            </div>
+              {order.payment_method && (
+                <div>
+                  <dt>Metode pembayaran</dt>
+                  <dd>{order.payment_method}</dd>
+                </div>
+              )}
+              {order.paid_at && (
+                <div>
+                  <dt>Tanggal bayar</dt>
+                  <dd>{formatShortDate(order.paid_at)}</dd>
+                </div>
+              )}
+              <div>
+                <dt>Status project</dt>
+                <dd>{order.order_status}</dd>
+              </div>
+              <div>
+                <dt>Customer Service</dt>
+                <dd>{order.cs_name || "Menunggu assignment"}</dd>
+              </div>
+              <div>
+                <dt>Web Designer</dt>
+                <dd>{order.editor_name || "Menunggu assignment"}</dd>
+              </div>
+              <div className="billing-total">
+                <dt>Total</dt>
+                <dd>{formatRupiah(order.amount)}</dd>
+              </div>
+            </dl>
             <div className="project-timeline">
               {(order.tasks || []).map((task: any, index: number) => (
                 <div
@@ -21846,6 +24046,7 @@ function FeatureIcon({ type }: { type: FeatureType }) {
     icon: Heart,
     "love-story": BookOpen,
     credit: BadgeCheck,
+    "live-stream": Radio,
   };
   const Icon = map[type];
   return <Icon size={14} />;
@@ -21973,11 +24174,7 @@ function TemplateCreatorModal({
           )}
           <label>
             Accent color
-            <input
-              type="color"
-              value={accent}
-              onChange={(event) => setAccent(event.target.value)}
-            />
+            <ColorInput value={accent} fallback="#125946" onChange={(next) => setAccent(next ?? "#125946")} />
           </label>
         </div>
         <div
@@ -22080,6 +24277,79 @@ async function shrinkImageToLimit(file: File, maxBytes: number): Promise<File> {
  *  menjamin setiap pilihan diproses. */
 function resetFileInput(event: React.MouseEvent<HTMLInputElement>) {
   event.currentTarget.value = "";
+}
+
+/** TC-245 — dialog yang tidak bisa ditutup sampai password baru dibuat. */
+function FirstPasswordDialog({ onDone }: { onDone: () => void }) {
+  const [password, setPassword] = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const submit = async () => {
+    setError("");
+    if (password.length < 8) return setError("Password minimal 8 karakter.");
+    if (password !== confirm) return setError("Konfirmasi password tidak sama.");
+    setBusy(true);
+    try {
+      await api.firstPassword(password, confirm);
+      onDone();
+    } catch (issue) {
+      setError(issue instanceof Error ? issue.message : "Gagal menyimpan password.");
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div
+      className="dialog-overlay first-password-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="first-password-title"
+    >
+      <form
+        className="first-password-dialog"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+      >
+        <KeyRound size={26} />
+        <h2 id="first-password-title">Buat password baru</h2>
+        <p>
+          Akun Anda dibuat otomatis setelah pembayaran dengan password
+          sementara. Buat password baru sebelum melanjutkan.
+        </p>
+        <label>
+          Password baru
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoFocus
+          />
+        </label>
+        <label>
+          Ulangi password baru
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(event) => setConfirm(event.target.value)}
+          />
+        </label>
+        <small>Minimal 8 karakter, berbeda dari password sementara.</small>
+        {error && (
+          <p className="password-error" role="alert">
+            {error}
+          </p>
+        )}
+        <button className="primary-btn" type="submit" disabled={busy}>
+          {busy ? "Menyimpan..." : "Simpan password"}
+        </button>
+      </form>
+    </div>
+  );
 }
 
 function Toast({ message }: { message: string }) {
@@ -22486,13 +24756,7 @@ function ExtraTextEditor({
             </label>
             <label>
               Warna
-              <input
-                type="color"
-                value={item.color}
-                onChange={(event) =>
-                  patch(item.id, { color: event.target.value })
-                }
-              />
+              <ColorInput value={item.color} fallback="#ffffff" onChange={(next) => patch(item.id, { color: next })} />
             </label>
           </div>
           <div className="toolbar-row alignment">
@@ -22629,7 +24893,11 @@ function VideoFeature({ feature }: { feature: Feature }) {
 // tidak hilang di atas kolom putih transparan.
 function giftCardStyle(feature: Feature): React.CSSProperties {
   return {
-    background: feature.cardBackground || "rgba(255,255,255,.82)",
+    background:
+      withAlpha(
+        feature.cardBackground,
+        feature.boxOpacity !== undefined ? feature.boxOpacity / 100 : undefined,
+      ) || "rgba(255,255,255,var(--box-alpha,.82))",
     color: feature.cardTextColor || "inherit",
     borderColor: feature.cardBorderColor || "rgba(22,77,62,.16)",
     borderRadius: feature.cardRadius ?? 12,
@@ -22668,10 +24936,94 @@ function bankLogoStyle(feature: Feature): React.CSSProperties {
     alignSelf: feature.bankLogoAlign || undefined,
   };
 }
+/** TC-241 — mode ringkas: hanya tombol "Lihat Rekening" yang membuka daftar
+ *  rekening dan alamat kado. Di editor isi tetap terlihat agar bisa dirapikan. */
+function GiftReveal({
+  feature,
+  editable,
+}: {
+  feature: Feature;
+  editable?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  if (feature.giftDisplay !== "compact") return <GiftAccountsBlock feature={feature} />;
+  const visible = open || Boolean(editable);
+  return (
+    <div className={`gift-reveal ${visible ? "is-open" : ""}`}>
+      <button
+        type="button"
+        className="gift-reveal-button"
+        style={submitButtonStyle(feature)}
+        aria-expanded={visible}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen((value) => !value);
+        }}
+      >
+        <Wallet size={14} />
+        {open
+          ? "Tutup"
+          : feature.giftRevealLabel || "Lihat Rekening"}
+      </button>
+      {visible && <GiftAccountsBlock feature={feature} />}
+    </div>
+  );
+}
+
+/** TC-240 — box alamat pengiriman kado dengan tombol salin. */
+function GiftAddressCard({ feature }: { feature: Feature }) {
+  const [copied, setCopied] = useState(false);
+  if (!feature.giftAddressEnabled || !feature.giftAddressText?.trim())
+    return null;
+  const full = [
+    feature.giftAddressName,
+    feature.giftAddressPhone,
+    feature.giftAddressText,
+  ]
+    .filter(Boolean)
+    .join("\n");
+  return (
+    <div
+      className="gift-account-card gift-address-card"
+      style={giftCardStyle(feature)}
+    >
+      <span className="gift-address-head">
+        <MapPin size={15} /> Kirim Kado
+      </span>
+      {feature.giftAddressName && <strong>{feature.giftAddressName}</strong>}
+      {feature.giftAddressPhone && <small>{feature.giftAddressPhone}</small>}
+      <p className="gift-address-text">{feature.giftAddressText}</p>
+      <button
+        type="button"
+        style={submitButtonStyle(feature)}
+        onClick={(event) => {
+          event.stopPropagation();
+          void navigator.clipboard?.writeText(full);
+          setCopied(true);
+          window.setTimeout(() => setCopied(false), 1800);
+        }}
+      >
+        {copied ? (
+          <>
+            <Check size={13} /> Tersalin
+          </>
+        ) : (
+          <>
+            <Copy size={13} /> Salin alamat
+          </>
+        )}
+      </button>
+    </div>
+  );
+}
+
 function GiftAccountsBlock({ feature }: { feature: Feature }) {
   const accounts = feature.giftAccounts || [];
   const [copied, setCopied] = useState("");
-  if (!accounts.length) return null;
+  const hasAddress = Boolean(
+    feature.giftAddressEnabled && feature.giftAddressText?.trim(),
+  );
+  if (!accounts.length && !hasAddress) return null;
   return (
     <div className="gift-account-list">
       {accounts.map((account) => (
@@ -22723,6 +25075,7 @@ function GiftAccountsBlock({ feature }: { feature: Feature }) {
           </button>
         </div>
       ))}
+      <GiftAddressCard feature={feature} />
     </div>
   );
 }
@@ -22874,7 +25227,7 @@ function IconFeature({ feature }: { feature: Feature }) {
     );
   return (
     <div
-      className={`icon-feature style-${feature.iconStyle || "circle"}`}
+      className={`icon-feature style-${feature.iconStyle || "circle"} text-${feature.iconTextPosition || "below"}`}
       style={{
         justifyContent:
           feature.align === "left"
@@ -22896,12 +25249,26 @@ function IconFeature({ feature }: { feature: Feature }) {
             onClick={(event) => event.stopPropagation()}
           >
             <SocialGlyph name={item.name} size={feature.iconSize || 26} />
-            <span>{item.label}</span>
+            {feature.iconTextPosition !== "none" && (
+              <span
+                className="icon-text"
+                style={feature.iconTextSize ? { fontSize: feature.iconTextSize } : undefined}
+              >
+                {item.text || item.label}
+              </span>
+            )}
           </a>
         ) : (
           <span key={item.id} title={item.label}>
             <SocialGlyph name={item.name} size={feature.iconSize || 26} />
-            <span>{item.label}</span>
+            {feature.iconTextPosition !== "none" && (
+              <span
+                className="icon-text"
+                style={feature.iconTextSize ? { fontSize: feature.iconTextSize } : undefined}
+              >
+                {item.text || item.label}
+              </span>
+            )}
           </span>
         ),
       )}
@@ -23185,6 +25552,92 @@ function GiftAccountEditor({
     );
   return (
     <div className="gift-account-editor">
+      {/* TC-241 — tampilan ringkas dengan tombol Lihat Rekening. */}
+      <div className="bank-logo-style">
+        <strong>Tampilan Wedding Gift</strong>
+        <label>
+          Mode tampilan
+          <select
+            value={feature.giftDisplay || "full"}
+            onChange={(event) =>
+              update({
+                giftDisplay: event.target.value as Feature["giftDisplay"],
+              })
+            }
+          >
+            <option value="full">Lengkap (rekening langsung tampil)</option>
+            <option value="compact">
+              Ringkas (header, teks, tombol Lihat Rekening)
+            </option>
+          </select>
+        </label>
+        {feature.giftDisplay === "compact" && (
+          <label>
+            Label tombol
+            <input
+              value={feature.giftRevealLabel || ""}
+              placeholder="Lihat Rekening"
+              onChange={(event) =>
+                update({ giftRevealLabel: event.target.value })
+              }
+            />
+          </label>
+        )}
+      </div>
+      {/* TC-240 — box alamat pengiriman kado (opsional). */}
+      <div className="bank-logo-style gift-address-editor">
+        <div className="setting-row compact">
+          <span>
+            <strong>Box alamat pengiriman kado</strong>
+            <small>Tampilkan alamat untuk tamu yang ingin mengirim kado fisik.</small>
+          </span>
+          <button
+            className={`toggle ${feature.giftAddressEnabled ? "on" : ""}`}
+            aria-pressed={Boolean(feature.giftAddressEnabled)}
+            aria-label="Aktifkan box alamat pengiriman kado"
+            onClick={() =>
+              update({ giftAddressEnabled: !feature.giftAddressEnabled })
+            }
+          >
+            <i />
+          </button>
+        </div>
+        {feature.giftAddressEnabled && (
+          <>
+            <label>
+              Nama penerima
+              <input
+                value={feature.giftAddressName || ""}
+                placeholder="Nama penerima kado"
+                onChange={(event) =>
+                  update({ giftAddressName: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              No. telepon (opsional)
+              <input
+                value={feature.giftAddressPhone || ""}
+                placeholder="08xx"
+                onChange={(event) =>
+                  update({ giftAddressPhone: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Alamat lengkap
+              <textarea
+                rows={3}
+                value={feature.giftAddressText || ""}
+                placeholder="Jalan, nomor, kota, kode pos"
+                onChange={(event) =>
+                  update({ giftAddressText: event.target.value })
+                }
+              />
+            </label>
+          </>
+        )}
+      </div>
       {/* TC-212 — logo bank bisa disesuaikan dengan tema. */}
       <div className="bank-logo-style">
         <strong>Tampilan logo bank</strong>
@@ -23248,23 +25701,11 @@ function GiftAccountEditor({
         <div className="two-cols">
           <label>
             Warna latar
-            <input
-              type="color"
-              value={feature.bankLogoBackground || "#123f33"}
-              onChange={(event) =>
-                update({ bankLogoBackground: event.target.value })
-              }
-            />
+            <ColorInput value={feature.bankLogoBackground} fallback="#123f33" noneValue="transparent" onChange={(next) => update({ bankLogoBackground: next })} />
           </label>
           <label>
             Warna teks
-            <input
-              type="color"
-              value={feature.bankLogoTextColor || "#ffffff"}
-              onChange={(event) =>
-                update({ bankLogoTextColor: event.target.value })
-              }
-            />
+            <ColorInput value={feature.bankLogoTextColor} fallback="#ffffff" onChange={(next) => update({ bankLogoTextColor: next })} />
           </label>
         </div>
         <button
@@ -23455,11 +25896,7 @@ function IconListEditor({
         </label>
         <label>
           Warna
-          <input
-            type="color"
-            value={feature.iconColor || "#154f40"}
-            onChange={(event) => update({ iconColor: event.target.value })}
-          />
+          <ColorInput value={feature.iconColor} fallback="#154f40" onChange={(next) => update({ iconColor: next })} />
         </label>
       </div>
       <label>
@@ -23477,6 +25914,36 @@ function IconListEditor({
           <option value="outline">Lingkaran outline</option>
         </select>
       </label>
+      {/* TC-238 — teks pendamping icon (mis. username Instagram). */}
+      <div className="two-inputs">
+        <label>
+          Posisi teks
+          <select
+            value={feature.iconTextPosition || "below"}
+            onChange={(event) =>
+              update({
+                iconTextPosition: event.target.value as Feature["iconTextPosition"],
+              })
+            }
+          >
+            <option value="right">Di samping icon</option>
+            <option value="below">Di bawah icon</option>
+            <option value="none">Tanpa teks</option>
+          </select>
+        </label>
+        <label>
+          Ukuran teks: {feature.iconTextSize || 8}px
+          <input
+            type="range"
+            min={7}
+            max={24}
+            value={feature.iconTextSize || 8}
+            onChange={(event) =>
+              update({ iconTextSize: Number(event.target.value) })
+            }
+          />
+        </label>
+      </div>
       {icons.map((item) => (
         <div className="icon-row" key={item.id}>
           <div className="form-spec-head">
@@ -23518,6 +25985,14 @@ function IconListEditor({
               onChange={(event) =>
                 patch(item.id, { label: event.target.value })
               }
+            />
+          </label>
+          <label>
+            Teks pendamping (opsional)
+            <input
+              value={item.text || ""}
+              onChange={(event) => patch(item.id, { text: event.target.value })}
+              placeholder="mis. @dimasadttyaa"
             />
           </label>
           <label>
@@ -23677,10 +26152,10 @@ function SecondaryTextEditor({
             </label>
             <label>
               Warna
-              <input
-                type="color"
-                value={feature.title2Color || feature.textColor || "#154f40"}
-                onChange={(event) => update({ title2Color: event.target.value })}
+              <ColorInput
+                value={feature.title2Color}
+                fallback="#154f40"
+                onChange={(next) => update({ title2Color: next })}
               />
             </label>
           </div>
@@ -23726,10 +26201,10 @@ function SecondaryTextEditor({
             </label>
             <label>
               Warna
-              <input
-                type="color"
-                value={feature.body2Color || feature.textColor || "#154f40"}
-                onChange={(event) => update({ body2Color: event.target.value })}
+              <ColorInput
+                value={feature.body2Color}
+                fallback="#154f40"
+                onChange={(next) => update({ body2Color: next })}
               />
             </label>
           </div>
@@ -23750,27 +26225,17 @@ function PerElementColorEditor({
   const swatch = (
     label: string,
     value: string | undefined,
-    fallback: string,
+    fallback: string | undefined,
     key: keyof Feature,
   ) => (
     <label>
       {label}
-      <span className="color-row">
-        <input
-          type="color"
-          value={value || fallback}
-          onChange={(event) => update({ [key]: event.target.value } as Partial<Feature>)}
-        />
-        {value && (
-          <button
-            className="clear-color"
-            title="Kembali ke warna dasar"
-            onClick={() => update({ [key]: undefined } as Partial<Feature>)}
-          >
-            <X size={11} />
-          </button>
-        )}
-      </span>
+      <ColorInput
+        value={value}
+        fallback={fallback}
+        noneValue={/background|Background/.test(String(key)) ? "transparent" : undefined}
+        onChange={(next) => update({ [key]: next } as Partial<Feature>)}
+      />
     </label>
   );
   // Pengaturan kolom/kartu hanya berpengaruh pada Gift, Greetings, dan Love
@@ -23837,29 +26302,17 @@ function FormStyleEditor({
       <div className="two-inputs">
         <label>
           Latar kolom
-          <input
-            type="color"
-            value={feature.fieldBackground || "#ffffff"}
-            onChange={(event) => update({ fieldBackground: event.target.value })}
-          />
+          <ColorInput value={feature.fieldBackground} fallback="#ffffff" noneValue="transparent" onChange={(next) => update({ fieldBackground: next })} />
         </label>
         <label>
           Teks kolom
-          <input
-            type="color"
-            value={feature.fieldTextColor || "#154f40"}
-            onChange={(event) => update({ fieldTextColor: event.target.value })}
-          />
+          <ColorInput value={feature.fieldTextColor} fallback="#154f40" onChange={(next) => update({ fieldTextColor: next })} />
         </label>
       </div>
       <div className="two-inputs">
         <label>
           Border kolom
-          <input
-            type="color"
-            value={feature.fieldBorderColor || "#d8e2dd"}
-            onChange={(event) => update({ fieldBorderColor: event.target.value })}
-          />
+          <ColorInput value={feature.fieldBorderColor} fallback="#d8e2dd" noneValue="transparent" onChange={(next) => update({ fieldBorderColor: next })} />
         </label>
         <label>
           Sudut kolom <span>{feature.fieldRadius ?? 8}px</span>
@@ -23883,19 +26336,11 @@ function FormStyleEditor({
       <div className="two-inputs">
         <label>
           Latar button
-          <input
-            type="color"
-            value={feature.buttonBackground || "#125946"}
-            onChange={(event) => update({ buttonBackground: event.target.value })}
-          />
+          <ColorInput value={feature.buttonBackground} fallback="#125946" noneValue="transparent" onChange={(next) => update({ buttonBackground: next })} />
         </label>
         <label>
           Teks button
-          <input
-            type="color"
-            value={feature.buttonTextColor || "#ffffff"}
-            onChange={(event) => update({ buttonTextColor: event.target.value })}
-          />
+          <ColorInput value={feature.buttonTextColor} fallback="#ffffff" onChange={(next) => update({ buttonTextColor: next })} />
         </label>
       </div>
       <div className="two-inputs">
@@ -23925,11 +26370,7 @@ function FormStyleEditor({
       {Boolean(feature.buttonBorderWidth) && (
         <label>
           Warna border button
-          <input
-            type="color"
-            value={feature.buttonBorderColor || "#125946"}
-            onChange={(event) => update({ buttonBorderColor: event.target.value })}
-          />
+          <ColorInput value={feature.buttonBorderColor} fallback="#125946" noneValue="transparent" onChange={(next) => update({ buttonBorderColor: next })} />
         </label>
       )}
     </div>
@@ -24480,19 +26921,11 @@ function MapButtonEditor({
       <div className="two-inputs">
         <label>
           Warna latar
-          <input
-            type="color"
-            value={feature.mapButtonBackground || "#125946"}
-            onChange={(event) => update({ mapButtonBackground: event.target.value })}
-          />
+          <ColorInput value={feature.mapButtonBackground} fallback="#125946" noneValue="transparent" onChange={(next) => update({ mapButtonBackground: next })} />
         </label>
         <label>
           Warna teks
-          <input
-            type="color"
-            value={feature.mapButtonTextColor || "#ffffff"}
-            onChange={(event) => update({ mapButtonTextColor: event.target.value })}
-          />
+          <ColorInput value={feature.mapButtonTextColor} fallback="#ffffff" onChange={(next) => update({ mapButtonTextColor: next })} />
         </label>
       </div>
       <div className="two-inputs">
@@ -24731,37 +27164,45 @@ function CreditEditor({
       <div className="two-inputs">
         <label>
           Warna teks & ikon
-          <input
-            type="color"
-            value={feature.cardTextColor || "#154f40"}
-            onChange={(event) => update({ cardTextColor: event.target.value })}
-          />
+          <ColorInput value={feature.cardTextColor} fallback="#154f40" onChange={(next) => update({ cardTextColor: next })} />
         </label>
         <label>
           Warna kotak
-          <input
-            type="color"
-            value={
-              feature.cardBackground?.startsWith("#")
-                ? feature.cardBackground
-                : "#ffffff"
-            }
-            onChange={(event) => update({ cardBackground: event.target.value })}
+          <ColorInput
+            value={feature.cardBackground}
+            noneValue="transparent"
+            onChange={(next) => update({ cardBackground: next })}
           />
         </label>
       </div>
       <label>
         Warna garis
-        <input
-          type="color"
-          value={
-            feature.cardBorderColor?.startsWith("#")
-              ? feature.cardBorderColor
-              : "#d5ddd9"
-          }
-          onChange={(event) => update({ cardBorderColor: event.target.value })}
+        <ColorInput
+          value={feature.cardBorderColor}
+          fallback="#d5ddd9"
+          noneValue="transparent"
+          onChange={(next) => update({ cardBorderColor: next })}
         />
       </label>
+      <div className="setting-row compact">
+        <span>
+          <strong>Tempel di paling bawah undangan</strong>
+          <small>
+            Di Preview & undangan, Credit tampil di akhir halaman tanpa ruang
+            kosong di bawahnya, di canvas mana pun ia diletakkan.
+          </small>
+        </span>
+        <button
+          className={`toggle ${feature.creditPinBottom !== false ? "on" : ""}`}
+          aria-pressed={feature.creditPinBottom !== false}
+          aria-label="Tempel Credit di paling bawah"
+          onClick={() =>
+            update({ creditPinBottom: feature.creditPinBottom === false })
+          }
+        >
+          <i />
+        </button>
+      </div>
       <label>
         Gaya teks credit
         <select
@@ -24809,11 +27250,7 @@ function CreditEditor({
       </label>
       <label>
         Warna elemen musik
-        <input
-          type="color"
-          value={feature.creditMusicColor || "#125946"}
-          onChange={(event) => update({ creditMusicColor: event.target.value })}
-        />
+        <ColorInput value={feature.creditMusicColor} fallback="#125946" onChange={(next) => update({ creditMusicColor: next })} />
       </label>
       <button
         className="secondary-btn"

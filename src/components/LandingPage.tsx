@@ -15,6 +15,168 @@ import {
 import type { Template, ArticleItem, View } from "../App";
 import "./LandingPage.css";
 
+/** TC-246 — teks landing page dalam dua bahasa. Pilihan tersimpan per
+ *  pengunjung (localStorage) dan ditandai pada <html lang>. */
+export type LandingLang = "id" | "en";
+const COPY = {
+  id: {
+    skip: "Lewati ke konten",
+    home: "Ikrarku beranda",
+    mainNav: "Navigasi utama",
+    navDesigns: "Desain undangan",
+    navHow: "Cara memulai",
+    navFeatures: "Fitur",
+    navJournal: "Jurnal ikrarku",
+    workspace: "Buka workspace ikrarku",
+    login: "Masuk",
+    findDesign: "Temukan desain",
+    menuOpen: "Buka menu",
+    menuClose: "Tutup menu",
+    langLabel: "Pilih bahasa",
+    heroLines: ["Sebuah janji.", "Sebuah cerita.", "Sebuah undangan."],
+    heroBody:
+      "Hadirkan hari istimewa kalian dalam undangan digital yang personal. Pilih desain, ceritakan kisahnya, dan sambut setiap tamu dengan hangat.",
+    heroCta: "Pilih desain kalian",
+    heroHow: "Lihat cara kerjanya",
+    heroArt: "Ilustrasi undangan digital",
+    inviteTagline: "Bersama, memulai selamanya.",
+    inviteOpen: "Buka undangan",
+    strip: ["Cerita kalian, satu tautan.", "RSVP online", "Galeri kenangan", "Lokasi acara", "Musik pilihan"],
+    tplEyebrow: "TEMUKAN YANG TERASA SEPERTI KALIAN",
+    tplTitle: ["Berawal dari desain", "yang kalian sukai."],
+    tplBody:
+      "Eksplorasi gaya, lihat preview, dan temukan detail harga sebelum melangkah lebih jauh.",
+    tplFilter: "Filter kategori desain",
+    all: "Semua",
+    viewDesign: "Lihat desain",
+    styleIllustration: "ILUSTRASI GAYA",
+    tplEmpty: "Desain untuk kategori ini belum tersedia.",
+    tplOffline:
+      "Katalog belum dapat dimuat. Silakan muat ulang atau coba beberapa saat lagi.",
+    seeAllDesigns: "Lihat semua desain",
+    featEyebrow: "INDAH DILIHAT. MUDAH DIGUNAKAN.",
+    featTitle: ["Detail kecil.", "Arti yang besar."],
+    featBody:
+      "Semua informasi penting dalam satu tempat, agar kalian bisa lebih menikmati perjalanan menuju hari bahagia.",
+    features: [
+      ["Sesuai karakter kalian", "Personalisasi warna, foto, tipografi, dan animasi."],
+      ["Lebih dekat dengan tamu", "Terima konfirmasi kehadiran dan ucapan secara online."],
+      ["Informasi yang mudah ditemukan", "Bagikan waktu dan lokasi acara tanpa pesan berulang."],
+      ["Didampingi dari awal", "CS dan Web Designer membantu proses personalisasi."],
+    ],
+    howEyebrow: "DARI IDE MENJADI UNDANGAN",
+    howTitle: ["Tiga langkah.", "Satu awal yang indah."],
+    steps: [
+      ["Pilih desain", "Lihat koleksi dan preview. Pilih desain yang paling dekat dengan cerita kalian."],
+      ["Personalisasi bersama", "Lengkapi pemesanan, lalu sesuaikan isi dan tampilan bersama tim."],
+      ["Bagikan kebahagiaan", "Periksa hasilnya di desktop dan mobile, lalu bagikan tautan undangan."],
+    ],
+    faqEyebrow: "SEBELUM MEMULAI",
+    faqTitle: ["Ada yang ingin", "kalian tanyakan?"],
+    faq: [
+      ["Apakah perlu bisa coding?", "Tidak. Konten dan desain dapat diatur melalui editor visual. Tim CS dan Web Designer juga mendampingi prosesnya."],
+      ["Bisa melihat desain sebelum memesan?", "Bisa. Buka desain yang kalian sukai untuk melihat preview, informasi template, dan harga."],
+      ["Apakah undangan bisa dibuka dari HP?", "Undangan dapat dibuka melalui browser. Gunakan preview mobile sebelum publikasi untuk memeriksa susunan setiap elemen."],
+      ["Apa yang perlu disiapkan?", "Nama pasangan, waktu dan lokasi acara, foto pilihan, serta cerita atau informasi lain yang ingin dibagikan."],
+    ],
+    jrEyebrow: "JURNAL IKRARKU",
+    jrTitle: ["Inspirasi untuk", "hari istimewa kalian."],
+    jrFilter: "Filter kategori jurnal",
+    jrEmpty: "Belum ada artikel pada kategori ini.",
+    jrPrev: "Artikel sebelumnya",
+    jrNext: "Artikel berikutnya",
+    jrGroup: "Ke kelompok artikel",
+    jrAll: "Lihat semua Jurnal ikrarku",
+    jrRead: "Baca cerita",
+    finalTitle: ["Siap merangkai", "cerita kalian?"],
+    finalCta: "Temukan desain pilihan",
+    footer: "Undangan digital. Cerita yang personal.",
+  },
+  en: {
+    skip: "Skip to content",
+    home: "ikrarku home",
+    mainNav: "Main navigation",
+    navDesigns: "Invitation designs",
+    navHow: "How it works",
+    navFeatures: "Features",
+    navJournal: "ikrarku Journal",
+    workspace: "Open ikrarku workspace",
+    login: "Log in",
+    findDesign: "Find a design",
+    menuOpen: "Open menu",
+    menuClose: "Close menu",
+    langLabel: "Choose language",
+    heroLines: ["A promise.", "A story.", "An invitation."],
+    heroBody:
+      "Bring your special day to life with a personal digital invitation. Choose a design, tell your story, and welcome every guest warmly.",
+    heroCta: "Choose your design",
+    heroHow: "See how it works",
+    heroArt: "Digital invitation illustration",
+    inviteTagline: "Together, beginning forever.",
+    inviteOpen: "Open invitation",
+    strip: ["Your story, one link.", "Online RSVP", "Memory gallery", "Event location", "Your music"],
+    tplEyebrow: "FIND THE ONE THAT FEELS LIKE YOU",
+    tplTitle: ["It starts with a design", "you love."],
+    tplBody:
+      "Explore styles, view previews, and check pricing details before taking the next step.",
+    tplFilter: "Filter design categories",
+    all: "All",
+    viewDesign: "View design",
+    styleIllustration: "STYLE ILLUSTRATION",
+    tplEmpty: "No designs in this category yet.",
+    tplOffline: "The catalog could not be loaded. Please reload or try again shortly.",
+    seeAllDesigns: "See all designs",
+    featEyebrow: "BEAUTIFUL TO SEE. EASY TO USE.",
+    featTitle: ["Small details.", "Big meaning."],
+    featBody:
+      "Every important detail in one place, so you can enjoy the journey to your big day.",
+    features: [
+      ["True to your character", "Personalize colors, photos, typography, and animation."],
+      ["Closer to your guests", "Receive RSVPs and wishes online."],
+      ["Information that's easy to find", "Share the time and venue without repeating messages."],
+      ["Supported from the start", "Our CS and Web Designers help you personalize it."],
+    ],
+    howEyebrow: "FROM IDEA TO INVITATION",
+    howTitle: ["Three steps.", "One beautiful beginning."],
+    steps: [
+      ["Choose a design", "Browse the collection and previews. Pick the design closest to your story."],
+      ["Personalize together", "Complete your order, then adjust content and look with our team."],
+      ["Share the joy", "Check the result on desktop and mobile, then share your invitation link."],
+    ],
+    faqEyebrow: "BEFORE YOU START",
+    faqTitle: ["Anything you'd", "like to ask?"],
+    faq: [
+      ["Do I need to know how to code?", "No. Content and design are managed in a visual editor, and our CS and Web Designer team guide you through it."],
+      ["Can I see a design before ordering?", "Yes. Open any design you like to see its preview, template details, and price."],
+      ["Can the invitation be opened on a phone?", "The invitation opens in any browser. Use the mobile preview before publishing to check every element."],
+      ["What do I need to prepare?", "The couple's names, event time and venue, favorite photos, and any story or details you want to share."],
+    ],
+    jrEyebrow: "IKRARKU JOURNAL",
+    jrTitle: ["Inspiration for", "your special day."],
+    jrFilter: "Filter journal categories",
+    jrEmpty: "No articles in this category yet.",
+    jrPrev: "Previous articles",
+    jrNext: "Next articles",
+    jrGroup: "Go to article group",
+    jrAll: "See all ikrarku Journal",
+    jrRead: "Read story",
+    finalTitle: ["Ready to tell", "your story?"],
+    finalCta: "Find your design",
+    footer: "Digital invitations. Personal stories.",
+  },
+};
+type Copy = (typeof COPY)["id"];
+const LANG_KEY = "ikrarku.landingLang";
+function readLang(): LandingLang {
+  try {
+    const saved = window.localStorage.getItem(LANG_KEY);
+    if (saved === "en" || saved === "id") return saved;
+  } catch {
+    /* storage tidak tersedia */
+  }
+  return "id";
+}
+
 type Props = {
   setView: (view: View) => void;
   templates: Template[];
@@ -33,9 +195,11 @@ type Props = {
 export function JournalCard({
   article,
   onOpen,
+  readLabel = "Baca cerita",
 }: {
   article: ArticleItem;
   onOpen: (article: ArticleItem) => void;
+  readLabel?: string;
 }) {
   return (
     /* SEO — dulu ini <button>, jadi crawler tidak melihat tautan apa pun ke
@@ -80,7 +244,7 @@ export function JournalCard({
         <p>{article.excerpt}</p>
       </span>
       <span className="ikr-journal-foot">
-        Baca cerita <ArrowRight size={16} />
+        {readLabel} <ArrowRight size={16} />
       </span>
     </a>
   );
@@ -92,23 +256,25 @@ function JournalCarousel({
   articles,
   onArticle,
   onSeeAll,
+  tx,
 }: {
   articles: ArticleItem[];
   onArticle: (article: ArticleItem) => void;
   onSeeAll: () => void;
+  tx: Copy;
 }) {
   const published = useMemo(
     () => articles.filter((item) => item.status === "Published"),
     [articles],
   );
   const categories = useMemo(
-    () => ["Semua", ...new Set(published.map((item) => item.category))],
+    () => [ALL, ...new Set(published.map((item) => item.category))],
     [published],
   );
-  const [category, setCategory] = useState("Semua");
+  const [category, setCategory] = useState(ALL);
   const visible = useMemo(
     () =>
-      (category === "Semua"
+      (category === ALL
         ? published
         : published.filter((item) => item.category === category)
       ).slice(0, 10),
@@ -140,20 +306,20 @@ function JournalCarousel({
   if (!visible.length)
     return (
       <div className="ikr-journal-empty">
-        Belum ada artikel pada kategori ini.
+        {tx.jrEmpty}
       </div>
     );
   return (
     <>
       {/* Gaya tombol disamakan dengan filter pada bagian desain undangan. */}
-      <div className="ikr-filters" aria-label="Filter kategori jurnal">
+      <div className="ikr-filters" aria-label={tx.jrFilter}>
         {categories.map((item) => (
           <button
             key={item}
             aria-pressed={category === item}
             onClick={() => setCategory(item)}
           >
-            {item}
+            {item === ALL ? tx.all : item}
           </button>
         ))}
       </div>
@@ -161,7 +327,7 @@ function JournalCarousel({
         {visible.length > perView && (
           <button
             className="ikr-journal-nav prev"
-            aria-label="Artikel sebelumnya"
+            aria-label={tx.jrPrev}
             onClick={() => step(-1)}
           >
             <ChevronLeft size={18} />
@@ -203,6 +369,7 @@ function JournalCarousel({
                 key={article.id}
                 article={article}
                 onOpen={onArticle}
+                readLabel={tx.jrRead}
               />
             ))}
           </div>
@@ -210,7 +377,7 @@ function JournalCarousel({
         {visible.length > perView && (
           <button
             className="ikr-journal-nav next"
-            aria-label="Artikel berikutnya"
+            aria-label={tx.jrNext}
             onClick={() => step(1)}
           >
             <ChevronRight size={18} />
@@ -223,7 +390,7 @@ function JournalCarousel({
             <button
               key={index}
               type="button"
-              aria-label={`Ke kelompok artikel ${index + 1}`}
+              aria-label={`${tx.jrGroup} ${index + 1}`}
               className={index === safeStart ? "is-active" : ""}
               onClick={() => setStart(index)}
             />
@@ -232,13 +399,15 @@ function JournalCarousel({
       )}
       <div className="ikr-journal-more">
         <button className="ikr-btn" onClick={onSeeAll}>
-          Lihat semua Jurnal ikrarku <ArrowRight size={16} />
+          {tx.jrAll} <ArrowRight size={16} />
         </button>
       </div>
     </>
   );
 }
 
+/** Nilai internal kategori "semua"; labelnya diterjemahkan saat render. */
+const ALL = "Semua";
 const rupiah = (value = 0) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -265,17 +434,34 @@ export default function LandingPage({
   renderPreview,
 }: Props) {
   const [menu, setMenu] = useState(false),
-    [category, setCategory] = useState("Semua");
+    [category, setCategory] = useState(ALL);
+  const [lang, setLangState] = useState<LandingLang>(readLang);
+  const tx = COPY[lang];
+  const setLang = (next: LandingLang) => {
+    setLangState(next);
+    try {
+      window.localStorage.setItem(LANG_KEY, next);
+    } catch {
+      /* storage tidak tersedia */
+    }
+  };
+  useEffect(() => {
+    const previous = document.documentElement.lang;
+    document.documentElement.lang = lang;
+    return () => {
+      document.documentElement.lang = previous || "id";
+    };
+  }, [lang]);
   const root = useRef<HTMLDivElement>(null);
   const categories = useMemo(
-    () => ["Semua", ...new Set(templates.map((t) => t.category))],
+    () => [ALL, ...new Set(templates.map((t) => t.category))],
     [templates],
   );
   // QA TC-151: desain rekomendasi tampil lebih dulu supaya customer yang
   // bingung memilih langsung melihatnya.
   const visible = useMemo(() => {
     const filtered = templates.filter(
-      (t) => category === "Semua" || t.category === category,
+      (t) => category === ALL || t.category === category,
     );
     return [
       ...filtered.filter((t) => t.recommended),
@@ -324,10 +510,10 @@ export default function LandingPage({
   return (
     <div className="ikr-landing" ref={root}>
       <a className="ikr-skip" href="#main-content">
-        Lewati ke konten
+        {tx.skip}
       </a>
       <header className="ikr-nav">
-        <a href="#" aria-label="Ikrarku beranda" className="ikr-brand">
+        <a href="#" aria-label={tx.home} className="ikr-brand">
           <img
             src="/brand/ikrarku-logo.png"
             alt="ikrarku"
@@ -336,18 +522,18 @@ export default function LandingPage({
           />
         </a>
         <nav
-          aria-label="Navigasi utama"
+          aria-label={tx.mainNav}
           className={menu ? "is-open" : ""}
           id="landing-menu"
         >
           <a href="#templates" onClick={() => nav("templates")}>
-            Desain undangan
+            {tx.navDesigns}
           </a>
           <a href="#how-it-works" onClick={() => nav("how-it-works")}>
-            Cara memulai
+            {tx.navHow}
           </a>
           <a href="#features" onClick={() => nav("features")}>
-            Fitur
+            {tx.navFeatures}
           </a>
           <a href="#faq" onClick={() => nav("faq")}>
             FAQ
@@ -360,34 +546,48 @@ export default function LandingPage({
               setView("journal");
             }}
           >
-            Jurnal ikrarku
+            {tx.navJournal}
           </a>
         </nav>
         <div className="ikr-nav-actions">
+          <div className="ikr-lang" role="group" aria-label={tx.langLabel}>
+            {(["id", "en"] as const).map((code) => (
+              <button
+                key={code}
+                type="button"
+                lang={code}
+                aria-pressed={lang === code}
+                className={lang === code ? "is-active" : ""}
+                onClick={() => setLang(code)}
+              >
+                {code.toUpperCase()}
+              </button>
+            ))}
+          </div>
           {/* Pengunjung yang sudah login melihat namanya, dan klik namanya
               membawa langsung ke workspace. */}
           {accountName ? (
             <button
               className="ikr-login is-account"
               onClick={() => onOpenWorkspace?.()}
-              title="Buka workspace ikrarku"
+              title={tx.workspace}
             >
               {accountName}
             </button>
           ) : (
             <button className="ikr-login" onClick={() => setView("login")}>
-              Masuk
+              {tx.login}
             </button>
           )}
           <button
             className="ikr-btn ikr-nav-cta"
             onClick={() => nav("templates")}
           >
-            Temukan desain <ArrowRight size={16} />
+            {tx.findDesign} <ArrowRight size={16} />
           </button>
           <button
             className="ikr-menu"
-            aria-label={menu ? "Tutup menu" : "Buka menu"}
+            aria-label={menu ? tx.menuClose : tx.menuOpen}
             aria-expanded={menu}
             aria-controls="landing-menu"
             onClick={() => setMenu(!menu)}
@@ -400,30 +600,26 @@ export default function LandingPage({
         <section className="ikr-hero">
           <div className="ikr-hero-copy">
             <h1>
-              Sebuah janji.
+              {tx.heroLines[0]}
               <br />
-              Sebuah cerita.
+              {tx.heroLines[1]}
               <br />
-              <em>Sebuah undangan.</em>
+              <em>{tx.heroLines[2]}</em>
             </h1>
-            <p>
-              Hadirkan hari istimewa kalian dalam undangan digital yang
-              personal. Pilih desain, ceritakan kisahnya, dan sambut setiap tamu
-              dengan hangat.
-            </p>
+            <p>{tx.heroBody}</p>
             <div className="ikr-actions">
               <button className="ikr-btn" onClick={() => nav("templates")}>
-                Pilih desain kalian <ArrowRight size={18} />
+                {tx.heroCta} <ArrowRight size={18} />
               </button>
               <button
                 className="ikr-text-button"
                 onClick={() => nav("how-it-works")}
               >
-                Lihat cara kerjanya <ChevronDown size={16} />
+                {tx.heroHow} <ChevronDown size={16} />
               </button>
             </div>
           </div>
-          <div className="ikr-hero-art" aria-label="Ilustrasi undangan digital">
+          <div className="ikr-hero-art" aria-label={tx.heroArt}>
             <div className="ikr-art-caption">
               A LITTLE PREVIEW OF YOUR FOREVER
             </div>
@@ -451,50 +647,45 @@ export default function LandingPage({
                 Alya <i>&</i> Raka
               </h2>
               <span className="ikr-invite-rule" />
-              <p>Bersama, memulai selamanya.</p>
+              <p>{tx.inviteTagline}</p>
               <strong>20 . 12 . 2026</strong>
               <span className="ikr-invite-location">BANDUNG, INDONESIA</span>
               <span className="ikr-invite-open">
-                Buka undangan <ArrowRight size={13} />
+                {tx.inviteOpen} <ArrowRight size={13} />
               </span>
             </div>
           </div>
         </section>
         <div className="ikr-benefit-strip">
-          <span>Cerita kalian, satu tautan.</span>
-          <p>RSVP online</p>
+          <span>{tx.strip[0]}</span>
+          <p>{tx.strip[1]}</p>
           <i />
-          <p>Galeri kenangan</p>
+          <p>{tx.strip[2]}</p>
           <i />
-          <p>Lokasi acara</p>
+          <p>{tx.strip[3]}</p>
           <i />
-          <p>Musik pilihan</p>
+          <p>{tx.strip[4]}</p>
         </div>
         <section id="templates" className="ikr-section" data-reveal>
           <div className="ikr-section-heading">
             <div>
-              <span className="ikr-eyebrow">
-                TEMUKAN YANG TERASA SEPERTI KALIAN
-              </span>
+              <span className="ikr-eyebrow">{tx.tplEyebrow}</span>
               <h2>
-                Berawal dari desain
+                {tx.tplTitle[0]}
                 <br />
-                <em>yang kalian sukai.</em>
+                <em>{tx.tplTitle[1]}</em>
               </h2>
             </div>
-            <p>
-              Eksplorasi gaya, lihat preview, dan temukan detail harga sebelum
-              melangkah lebih jauh.
-            </p>
+            <p>{tx.tplBody}</p>
           </div>
-          <div className="ikr-filters" aria-label="Filter kategori desain">
+          <div className="ikr-filters" aria-label={tx.tplFilter}>
             {categories.map((c) => (
               <button
                 key={c}
                 aria-pressed={category === c}
                 onClick={() => setCategory(c)}
               >
-                {c}
+                {c === ALL ? tx.all : c}
               </button>
             ))}
           </div>
@@ -503,7 +694,7 @@ export default function LandingPage({
               <article className="ikr-template" key={t.id}>
                 <button
                   className="ikr-template-preview"
-                  aria-label={`Lihat desain ${t.name}`}
+                  aria-label={`${tx.viewDesign} ${t.name}`}
                   onClick={() => onTemplate(t)}
                 >
                   {t.sampleImage || t.preview ? (
@@ -531,11 +722,11 @@ export default function LandingPage({
                         <i>beautifully told.</i>
                       </span>
                       <Heart size={24} />
-                      <small>ILUSTRASI GAYA</small>
+                      <small>{tx.styleIllustration}</small>
                     </div>
                   )}
                   <span className="ikr-preview-action">
-                    Lihat desain <ArrowRight size={16} />
+                    {tx.viewDesign} <ArrowRight size={16} />
                   </span>
                   {t.recommended && (
                     <span className="ikr-template-badge">
@@ -556,58 +747,35 @@ export default function LandingPage({
           {!visible.length && (
             <div className="ikr-empty" role="status">
               {databaseOnline
-                ? "Desain untuk kategori ini belum tersedia."
-                : "Katalog belum dapat dimuat. Silakan muat ulang atau coba beberapa saat lagi."}
+                ? tx.tplEmpty
+                : tx.tplOffline}
             </div>
           )}
           {/* Landing menampilkan 9 desain; selebihnya dibuka di halaman khusus. */}
           {visible.length > 9 && (
             <div className="ikr-template-more">
               <button className="ikr-btn" onClick={() => setView("designs")}>
-                Lihat semua desain ({visible.length}) <ArrowRight size={16} />
+                {tx.seeAllDesigns} ({visible.length}) <ArrowRight size={16} />
               </button>
             </div>
           )}
         </section>
         <section id="features" className="ikr-features" data-reveal>
           <div className="ikr-feature-lead">
-            <span className="ikr-eyebrow">INDAH DILIHAT. MUDAH DIGUNAKAN.</span>
+            <span className="ikr-eyebrow">{tx.featEyebrow}</span>
             <h2>
-              Detail kecil.
+              {tx.featTitle[0]}
               <br />
-              <em>Arti yang besar.</em>
+              <em>{tx.featTitle[1]}</em>
             </h2>
-            <p>
-              Semua informasi penting dalam satu tempat, agar kalian bisa lebih
-              menikmati perjalanan menuju hari bahagia.
-            </p>
+            <p>{tx.featBody}</p>
           </div>
           <div className="ikr-feature-grid">
-            {[
-              [
-                Palette,
-                "Sesuai karakter kalian",
-                "Personalisasi warna, foto, tipografi, dan animasi.",
-              ],
-              [
-                Heart,
-                "Lebih dekat dengan tamu",
-                "Terima konfirmasi kehadiran dan ucapan secara online.",
-              ],
-              [
-                MapPin,
-                "Informasi yang mudah ditemukan",
-                "Bagikan waktu dan lokasi acara tanpa pesan berulang.",
-              ],
-              [
-                MousePointer2,
-                "Didampingi dari awal",
-                "CS dan Web Designer membantu proses personalisasi.",
-              ],
-            ].map(([Icon, title, description]) => {
+            {[Palette, Heart, MapPin, MousePointer2].map((Icon, index) => {
               const I = Icon as typeof Heart;
+              const [title, description] = tx.features[index];
               return (
-                <article key={String(title)}>
+                <article key={index}>
                   <I size={23} />
                   <h3>{String(title)}</h3>
                   <p>{String(description)}</p>
@@ -617,30 +785,14 @@ export default function LandingPage({
           </div>
         </section>
         <section id="how-it-works" className="ikr-section" data-reveal>
-          <span className="ikr-eyebrow">DARI IDE MENJADI UNDANGAN</span>
+          <span className="ikr-eyebrow">{tx.howEyebrow}</span>
           <h2>
-            Tiga langkah.
+            {tx.howTitle[0]}
             <br />
-            <em>Satu awal yang indah.</em>
+            <em>{tx.howTitle[1]}</em>
           </h2>
           <div className="ikr-steps">
-            {[
-              [
-                "01",
-                "Pilih desain",
-                "Lihat koleksi dan preview. Pilih desain yang paling dekat dengan cerita kalian.",
-              ],
-              [
-                "02",
-                "Personalisasi bersama",
-                "Lengkapi pemesanan, lalu sesuaikan isi dan tampilan bersama tim.",
-              ],
-              [
-                "03",
-                "Bagikan kebahagiaan",
-                "Periksa hasilnya di desktop dan mobile, lalu bagikan tautan undangan.",
-              ],
-            ].map(([n, t, d]) => (
+            {tx.steps.map(([t, d], index) => [`0${index + 1}`, t, d]).map(([n, t, d]) => (
               <article key={n}>
                 <span>{n}</span>
                 <h3>{t}</h3>
@@ -651,32 +803,15 @@ export default function LandingPage({
         </section>
         <section id="faq" className="ikr-faq ikr-section" data-reveal>
           <div>
-            <span className="ikr-eyebrow">SEBELUM MEMULAI</span>
+            <span className="ikr-eyebrow">{tx.faqEyebrow}</span>
             <h2>
-              Ada yang ingin
+              {tx.faqTitle[0]}
               <br />
-              <em>kalian tanyakan?</em>
+              <em>{tx.faqTitle[1]}</em>
             </h2>
           </div>
           <div>
-            {[
-              [
-                "Apakah perlu bisa coding?",
-                "Tidak. Konten dan desain dapat diatur melalui editor visual. Tim CS dan Web Designer juga mendampingi prosesnya.",
-              ],
-              [
-                "Bisa melihat desain sebelum memesan?",
-                "Bisa. Buka desain yang kalian sukai untuk melihat preview, informasi template, dan harga.",
-              ],
-              [
-                "Apakah undangan bisa dibuka dari HP?",
-                "Undangan dapat dibuka melalui browser. Gunakan preview mobile sebelum publikasi untuk memeriksa susunan setiap elemen.",
-              ],
-              [
-                "Apa yang perlu disiapkan?",
-                "Nama pasangan, waktu dan lokasi acara, foto pilihan, serta cerita atau informasi lain yang ingin dibagikan.",
-              ],
-            ].map(([q, a]) => (
+            {tx.faq.map(([q, a]) => (
               <details key={q}>
                 <summary>
                   {q}
@@ -689,28 +824,29 @@ export default function LandingPage({
         </section>
         {!!articles.length && (
           <section id="articles" className="ikr-section" data-reveal>
-            <span className="ikr-eyebrow">JURNAL IKRARKU</span>
+            <span className="ikr-eyebrow">{tx.jrEyebrow}</span>
             <h2>
-              Inspirasi untuk
+              {tx.jrTitle[0]}
               <br />
-              <em>hari istimewa kalian.</em>
+              <em>{tx.jrTitle[1]}</em>
             </h2>
             <JournalCarousel
               articles={articles}
               onArticle={onArticle}
               onSeeAll={() => setView("journal")}
+              tx={tx}
             />
           </section>
         )}
         <section className="ikr-final">
           <span className="ikr-eyebrow">YOUR STORY STARTS HERE</span>
           <h2>
-            Siap merangkai
+            {tx.finalTitle[0]}
             <br />
-            <em>cerita kalian?</em>
+            <em>{tx.finalTitle[1]}</em>
           </h2>
           <button className="ikr-btn" onClick={() => nav("templates")}>
-            Temukan desain pilihan <ArrowRight size={18} />
+            {tx.finalCta} <ArrowRight size={18} />
           </button>
         </section>
       </main>
@@ -721,7 +857,7 @@ export default function LandingPage({
           width="130"
           height="39"
         />
-        <p>Undangan digital. Cerita yang personal.</p>
+        <p>{tx.footer}</p>
         <small>© {new Date().getFullYear()} ikrarku</small>
       </footer>
     </div>

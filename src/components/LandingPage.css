@@ -761,3 +761,10 @@
   overflow: hidden;
   aspect-ratio: 4 / 5;
 }
+/* TC-246 — pilihan bahasa ID/EN */
+.ikr-lang{display:inline-flex;align-items:center;gap:2px;padding:3px;border-radius:999px;border:1px solid rgba(23,63,52,.18);background:rgba(255,255,255,.7)}
+.ikr-lang button{border:0;background:transparent;color:inherit;font:inherit;font-size:12px;font-weight:700;letter-spacing:.5px;padding:5px 10px;border-radius:999px;cursor:pointer;min-height:30px}
+.ikr-lang button.is-active{background:#173f34;color:#fff}
+.ikr-lang button:focus-visible{outline:2px solid #b68a48;outline-offset:2px}
+.ikr-login{white-space:nowrap}
+@media (max-width:420px){.ikr-nav-actions{gap:10px}.ikr-lang button{padding:5px 8px}}

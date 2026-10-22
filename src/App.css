@@ -1833,3 +1833,296 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .gift-logo-pick{display:inline-flex;align-items:center;gap:5px;cursor:pointer;font-size:11px;padding:5px 10px}
 .field-hint{display:block;color:#7a8a85;font-size:10px;font-weight:400}
 .bank-logo-style .text-button,.gift-logo-upload .text-button{border:0;background:none;padding:2px 0;color:#125946;font-size:11px;font-weight:600;text-decoration:underline;cursor:pointer;justify-self:start}
+/* TC-232 — semua ucapan tampil: digulir di dalam kotak atau per halaman. */
+.greeting-list.is-scroll{max-height:340px;overflow-y:auto;overscroll-behavior:contain;padding-right:4px}
+.greeting-list.is-paged{max-height:none;overflow:visible}
+.greeting-count{font-size:8px;opacity:.65;margin:6px 0 4px;letter-spacing:.04em}
+.greeting-pages{display:flex;flex-wrap:wrap;justify-content:center;gap:4px;margin-top:8px}
+.greeting-pages button{min-width:22px;height:22px;padding:0 6px;border:1px solid rgba(22,77,62,.25);border-radius:6px;background:rgba(255,255,255,.8);color:inherit;font-size:9px;cursor:pointer}
+.greeting-pages button.active{background:var(--accent,#125946);border-color:var(--accent,#125946);color:#fff}
+.greeting-pages button:disabled{opacity:.35;cursor:default}
+/* TC-245 */
+.first-password-overlay{z-index:3000}
+.first-password-dialog{width:min(420px,92vw);background:#fff;border-radius:16px;padding:26px 26px 22px;display:grid;gap:10px;box-shadow:0 24px 70px rgba(5,21,16,.3);color:#1d2b27}
+.first-password-dialog>svg{color:#125946}
+.first-password-dialog h2{margin:0;font-size:20px;color:#123f33}
+.first-password-dialog p{margin:0;font-size:13px;line-height:1.5;color:#4b5f58}
+.first-password-dialog label{display:grid;gap:5px;font-size:12px;font-weight:600}
+.first-password-dialog input{border:1px solid #cfdad5;border-radius:9px;padding:10px 12px;font-size:14px}
+.first-password-dialog small{font-size:11px;color:#6b7a74}
+.checkout-no-account{font-size:12px;color:#4b5f58;align-self:center}
+/* TC-222 — billing My Order sebagai daftar ke bawah */
+.billing-list{margin:16px 0;padding:0;border-top:1px solid #e6ece9}
+.billing-list>div{display:flex;justify-content:space-between;gap:16px;padding:9px 2px;border-bottom:1px solid #eef2f0;font-size:13px}
+.billing-list dt{color:#6f817b;margin:0}
+.billing-list dd{margin:0;font-weight:600;color:#1d2b27;text-align:right;word-break:break-word}
+.billing-list .billing-total{border-bottom:0;padding-top:12px}
+.billing-list .billing-total dt{color:#1d2b27;font-weight:700}
+.billing-list .billing-total dd{color:#125946;font-size:15px}
+/* TC-223 — Hubungi Support dari editor customer */
+.editor-support-btn{display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.support-help-card{display:grid;grid-template-columns:auto 1fr;align-items:center;gap:6px 10px;margin:10px 14px 0;padding:11px 12px;border:1px solid #cfe3da;border-radius:10px;background:#eef7f2;color:#1f4b3d}
+.support-help-card strong{display:block;font-size:12px}
+.support-help-card span{display:block;font-size:11px;color:#46625a}
+.support-help-card button{grid-column:1/-1;justify-self:start;border:0;border-radius:8px;background:#125946;color:#fff;padding:7px 12px;font-size:11px;font-weight:600;cursor:pointer}
+.support-help-card.compact{margin:0 0 12px}
+/* TC-224 — upselling katalog di bawah Template & Canvas */
+.upsell-catalog{margin-top:28px}
+.upsell-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:12px}
+.upsell-card{display:flex;flex-direction:column;border:1px solid #e3e8e5;border-radius:14px;overflow:hidden;background:#fff}
+.upsell-thumb{position:relative;aspect-ratio:4/5;background-size:cover;background-position:center}
+.upsell-thumb em{position:absolute;top:8px;left:8px;display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:999px;background:rgba(255,255,255,.92);color:#8a5a12;font-size:10px;font-style:normal;font-weight:700}
+.upsell-meta{padding:10px 12px 4px;display:grid;gap:2px}
+.upsell-meta strong{font-size:13px}
+.upsell-meta span{font-size:11px;color:#6f817b}
+.upsell-card .secondary-btn{margin:8px 12px 12px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+/* TC-228 — box waktu Save The Date: tidak terpotong, ukuran bisa diatur */
+.countdown-feature{--cd-scale:1}
+.countdown-feature>div{grid-template-columns:repeat(4,minmax(0,1fr));max-width:calc(620px * var(--cd-scale));width:100%;box-sizing:border-box}
+.countdown-feature>div span{padding:calc(19px * var(--cd-scale)) calc(6px * var(--cd-scale));min-width:0}
+.countdown-feature>div strong{font-size:calc(min(38px, 8.5vw) * var(--cd-scale));overflow-wrap:normal}
+.countdown-feature>div em{font-size:calc(8px * var(--cd-scale));letter-spacing:calc(1.5px * var(--cd-scale));white-space:nowrap;overflow:hidden;text-overflow:clip}
+.wedding-site.device-mobile .countdown-feature>div strong{font-size:calc(30px * var(--cd-scale))}
+/* TC-236 — Simpan Tanggal */
+.calendar-buttons{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px 12px;margin-top:16px}
+.calendar-button{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;background:var(--accent,#125946);color:#fff;font-size:11px;letter-spacing:.04em;text-decoration:none}
+.calendar-ics{border:0;background:none;color:inherit;opacity:.75;font-size:9px;text-decoration:underline;cursor:pointer;padding:0}
+.calendar-button-editor{display:grid;gap:8px;margin:8px 0;padding:10px;border:1px solid #e3e8e5;border-radius:9px;background:#fafcfb}
+.calendar-button-editor .setting-row{padding:0;border:0}
+/* TC-229 — tinggi & jarak foto galeri; mode otomatis tanpa ruang kosong */
+.gallery-grid{gap:var(--g-gap,9px)}
+.gallery-grid.layout-masonry{column-gap:var(--g-gap,9px)}
+.gallery-grid.layout-masonry img{margin-bottom:var(--g-gap,9px)}
+.gallery-filmstrip{gap:var(--g-gap,10px)}
+.gallery-grid.has-h:not(.layout-mosaic):not(.layout-masonry) img{height:var(--g-h)}
+.gallery-grid.layout-mosaic.has-h{grid-auto-rows:calc(var(--g-h) / 2)}
+.gallery-grid.h-auto:not(.layout-mosaic){align-items:start}
+.gallery-grid.h-auto:not(.layout-mosaic) img{height:auto!important;object-fit:contain!important;min-height:0}
+.gallery-carousel.has-h .gallery-carousel-slide{height:var(--g-h)}
+.gallery-carousel.h-auto .gallery-carousel-track{align-items:flex-start}
+.gallery-carousel.h-auto .gallery-carousel-slide{height:auto}
+.gallery-carousel.h-auto .gallery-carousel-slide img{height:auto;max-height:85vh;object-fit:contain!important}
+.gallery-filmstrip.has-h img{height:var(--g-h)}
+.gallery-filmstrip.h-auto img{width:auto;max-width:88%;object-fit:contain!important}
+/* TC-234 — Credit di paling bawah undangan tanpa ruang kosong */
+.site-credit-footer{position:relative;z-index:1;margin:0;padding:0}
+.site-credit-footer .feature-block{margin:0!important}
+.wedding-site:has(.site-credit-footer){padding-bottom:0}
+/* TC-231 — gambar background fitur dengan transparansi */
+.feature-block.has-bg-fade::before{content:"";position:absolute;inset:0;z-index:0;pointer-events:none;border-radius:inherit;background-image:var(--feature-bg-image);background-size:var(--feature-bg-size,cover);background-position:var(--feature-bg-position,center);background-repeat:no-repeat;opacity:var(--feature-bg-opacity,1)}
+/* Kotak/kolom putih mengikuti --box-alpha bila diatur */
+.feature-block[style*="--box-alpha"] .greeting-list article,
+.feature-block[style*="--box-alpha"] .greetings-widget form,
+.feature-block[style*="--box-alpha"] .canvas-form input,
+.feature-block[style*="--box-alpha"] .canvas-form textarea,
+.feature-block[style*="--box-alpha"] .canvas-form select,
+.feature-block[style*="--box-alpha"] .location-feature,
+.feature-block[style*="--box-alpha"] .love-story-item,
+.feature-block[style*="--box-alpha"] .countdown-feature>div{background-color:rgba(255,255,255,var(--box-alpha))}
+/* TC-233 — font heading & teks terpisah; hanya berlaku bila dipilih, supaya
+   font bawaan tiap tema tidak tertimpa. */
+.feature-block.has-title-font [class*="editable-title"],.feature-block.has-title-font .greetings-heading strong,.feature-block.has-title-font .love-story-item strong,.feature-block.has-title-font .location-feature h3,.feature-block.has-title-font .countdown-feature h3{font-family:var(--title-font)!important}
+.feature-block.has-body-font [class*="editable-body"],.feature-block.has-body-font .greetings-heading span,.feature-block.has-body-font .love-story-item p,.feature-block.has-body-font .extra-text-block{font-family:var(--body-font)!important}
+/* TC-238 — teks pendamping icon */
+.icon-feature.text-right a,.icon-feature.text-right>span{flex-direction:row;gap:8px}
+.icon-feature .icon-text{line-height:1.3;word-break:break-word}
+.icon-feature.text-right .icon-text{text-align:left}
+/* TC-235 Live Streaming */
+.live-stream-feature{display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;width:100%}
+.live-badge{display:inline-flex;align-items:center;gap:5px;background:#d93636;color:#fff;font-size:11px;font-weight:800;letter-spacing:2px;padding:4px 10px;border-radius:999px}
+.live-when{margin:0;font-size:14px;opacity:.85}
+.live-embed{position:relative;width:100%;max-width:640px;aspect-ratio:16/9;border-radius:12px;overflow:hidden;background:#000}
+.live-embed iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.live-button{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:999px;border:1px solid rgba(0,0,0,.12);font-weight:700;text-decoration:none;color:inherit}
+.live-button small{font-weight:500;opacity:.7}
+.live-empty{font-size:12px;opacity:.6;margin:0}
+/* TC-237 Button slide */
+.cover-slide-track{position:relative;display:flex;align-items:center;justify-content:center;width:min(320px,86vw);min-height:54px;padding:4px;border-style:solid;overflow:hidden;user-select:none;touch-action:none;margin:0 auto}
+.cover-slide-label{font-weight:700;letter-spacing:2px;text-transform:uppercase;font-size:13px;padding-left:44px;animation:slideHint 2.2s ease-in-out infinite}
+.cover-slide-knob{position:absolute;left:4px;top:4px;bottom:4px;width:46px;border:0;border-radius:inherit;background:rgba(255,255,255,.92);color:#102f27;display:flex;align-items:center;justify-content:center;cursor:grab;transition:transform .2s;padding:0;min-height:0}
+.cover-slide-knob:active{cursor:grabbing;transition:none}
+.cover-slide-track.is-done .cover-slide-label{opacity:0}
+@keyframes slideHint{0%,100%{opacity:.65}50%{opacity:1}}
+.cover-open-button.is-slide-preview{position:relative;padding-left:64px!important}
+.cover-open-button.is-slide-preview::before{content:"›";position:absolute;left:5px;top:5px;bottom:5px;width:44px;border-radius:inherit;background:rgba(255,255,255,.92);color:#102f27;display:flex;align-items:center;justify-content:center;font-size:24px}
+@media (prefers-reduced-motion:reduce){.cover-slide-label{animation:none}}
+/* TC-240/241 Wedding Gift */
+.gift-reveal{display:flex;flex-direction:column;align-items:center;gap:14px;width:100%}
+.gift-reveal-button{display:inline-flex;align-items:center;gap:8px;border:0;border-radius:999px;background:var(--accent,#125946);color:#fff;padding:11px 22px;font-size:12px;font-weight:700;letter-spacing:.5px;cursor:pointer}
+.gift-reveal.is-open .gift-account-list{animation:giftReveal .3s ease}
+@keyframes giftReveal{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.gift-address-head{display:inline-flex;align-items:center;gap:6px;font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;opacity:.8}
+.gift-address-text{margin:0;white-space:pre-wrap;line-height:1.5;font-size:13px}
+.gift-address-editor textarea{width:100%;resize:vertical}
+/* TC-239 Live motion per elemen (layer 2) */
+.feature-block.lm-image-fade img:not(.bank-logo-img),.feature-block.lm-image-fade video{animation:loopFade var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-image-float img:not(.bank-logo-img),.feature-block.lm-image-float video{animation:loopFloat var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-image-sway img:not(.bank-logo-img),.feature-block.lm-image-sway video{animation:loopSway var(--lm-speed,6s) ease-in-out infinite;transform-origin:50% 90%}
+.feature-block.lm-image-pulse img:not(.bank-logo-img),.feature-block.lm-image-pulse video{animation:loopPulse var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-image-shimmer img:not(.bank-logo-img),.feature-block.lm-image-shimmer video{animation:loopShimmer var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-image-drift img:not(.bank-logo-img),.feature-block.lm-image-drift video{animation:loopDrift var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-box-fade .gift-account-card,.feature-block.lm-box-fade .love-story-item,.feature-block.lm-box-fade .credit-meta,.feature-block.lm-box-fade .image-layout-frame,.feature-block.lm-box-fade .greeting-list article,.feature-block.lm-box-fade .live-button,.feature-block.lm-box-fade .countdown-feature>div>span,.feature-block.lm-box-fade .location-qr-frame,.feature-block.lm-box-fade .location-map-embed,.feature-block.lm-box-fade .canvas-form{animation:loopFade var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-box-float .gift-account-card,.feature-block.lm-box-float .love-story-item,.feature-block.lm-box-float .credit-meta,.feature-block.lm-box-float .image-layout-frame,.feature-block.lm-box-float .greeting-list article,.feature-block.lm-box-float .live-button,.feature-block.lm-box-float .countdown-feature>div>span,.feature-block.lm-box-float .location-qr-frame,.feature-block.lm-box-float .location-map-embed,.feature-block.lm-box-float .canvas-form{animation:loopFloat var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-box-sway .gift-account-card,.feature-block.lm-box-sway .love-story-item,.feature-block.lm-box-sway .credit-meta,.feature-block.lm-box-sway .image-layout-frame,.feature-block.lm-box-sway .greeting-list article,.feature-block.lm-box-sway .live-button,.feature-block.lm-box-sway .countdown-feature>div>span,.feature-block.lm-box-sway .location-qr-frame,.feature-block.lm-box-sway .location-map-embed,.feature-block.lm-box-sway .canvas-form{animation:loopSway var(--lm-speed,6s) ease-in-out infinite;transform-origin:50% 90%}
+.feature-block.lm-box-pulse .gift-account-card,.feature-block.lm-box-pulse .love-story-item,.feature-block.lm-box-pulse .credit-meta,.feature-block.lm-box-pulse .image-layout-frame,.feature-block.lm-box-pulse .greeting-list article,.feature-block.lm-box-pulse .live-button,.feature-block.lm-box-pulse .countdown-feature>div>span,.feature-block.lm-box-pulse .location-qr-frame,.feature-block.lm-box-pulse .location-map-embed,.feature-block.lm-box-pulse .canvas-form{animation:loopPulse var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-box-shimmer .gift-account-card,.feature-block.lm-box-shimmer .love-story-item,.feature-block.lm-box-shimmer .credit-meta,.feature-block.lm-box-shimmer .image-layout-frame,.feature-block.lm-box-shimmer .greeting-list article,.feature-block.lm-box-shimmer .live-button,.feature-block.lm-box-shimmer .countdown-feature>div>span,.feature-block.lm-box-shimmer .location-qr-frame,.feature-block.lm-box-shimmer .location-map-embed,.feature-block.lm-box-shimmer .canvas-form{animation:loopShimmer var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-box-drift .gift-account-card,.feature-block.lm-box-drift .love-story-item,.feature-block.lm-box-drift .credit-meta,.feature-block.lm-box-drift .image-layout-frame,.feature-block.lm-box-drift .greeting-list article,.feature-block.lm-box-drift .live-button,.feature-block.lm-box-drift .countdown-feature>div>span,.feature-block.lm-box-drift .location-qr-frame,.feature-block.lm-box-drift .location-map-embed,.feature-block.lm-box-drift .canvas-form{animation:loopDrift var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-title-fade .editable-title{animation:loopFade var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-title-float .editable-title{animation:loopFloat var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-title-sway .editable-title{animation:loopSway var(--lm-speed,6s) ease-in-out infinite;transform-origin:50% 90%}
+.feature-block.lm-title-pulse .editable-title{animation:loopPulse var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-title-shimmer .editable-title{animation:loopShimmer var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-title-drift .editable-title{animation:loopDrift var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-body-fade .editable-body{animation:loopFade var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-body-float .editable-body{animation:loopFloat var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-body-sway .editable-body{animation:loopSway var(--lm-speed,6s) ease-in-out infinite;transform-origin:50% 90%}
+.feature-block.lm-body-pulse .editable-body{animation:loopPulse var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-body-shimmer .editable-body{animation:loopShimmer var(--lm-speed,6s) ease-in-out infinite}
+.feature-block.lm-body-drift .editable-body{animation:loopDrift var(--lm-speed,6s) ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.feature-block.lm-image-fade img:not(.bank-logo-img),.feature-block.lm-image-fade video,.feature-block.lm-image-float img:not(.bank-logo-img),.feature-block.lm-image-float video,.feature-block.lm-image-sway img:not(.bank-logo-img),.feature-block.lm-image-sway video,.feature-block.lm-image-pulse img:not(.bank-logo-img),.feature-block.lm-image-pulse video,.feature-block.lm-image-shimmer img:not(.bank-logo-img),.feature-block.lm-image-shimmer video,.feature-block.lm-image-drift img:not(.bank-logo-img),.feature-block.lm-image-drift video,.feature-block.lm-box-fade .gift-account-card,.feature-block.lm-box-fade .love-story-item,.feature-block.lm-box-fade .credit-meta,.feature-block.lm-box-fade .image-layout-frame,.feature-block.lm-box-fade .greeting-list article,.feature-block.lm-box-fade .live-button,.feature-block.lm-box-fade .countdown-feature>div>span,.feature-block.lm-box-fade .location-qr-frame,.feature-block.lm-box-fade .location-map-embed,.feature-block.lm-box-fade .canvas-form,.feature-block.lm-box-float .gift-account-card,.feature-block.lm-box-float .love-story-item,.feature-block.lm-box-float .credit-meta,.feature-block.lm-box-float .image-layout-frame,.feature-block.lm-box-float .greeting-list article,.feature-block.lm-box-float .live-button,.feature-block.lm-box-float .countdown-feature>div>span,.feature-block.lm-box-float .location-qr-frame,.feature-block.lm-box-float .location-map-embed,.feature-block.lm-box-float .canvas-form,.feature-block.lm-box-sway .gift-account-card,.feature-block.lm-box-sway .love-story-item,.feature-block.lm-box-sway .credit-meta,.feature-block.lm-box-sway .image-layout-frame,.feature-block.lm-box-sway .greeting-list article,.feature-block.lm-box-sway .live-button,.feature-block.lm-box-sway .countdown-feature>div>span,.feature-block.lm-box-sway .location-qr-frame,.feature-block.lm-box-sway .location-map-embed,.feature-block.lm-box-sway .canvas-form,.feature-block.lm-box-pulse .gift-account-card,.feature-block.lm-box-pulse .love-story-item,.feature-block.lm-box-pulse .credit-meta,.feature-block.lm-box-pulse .image-layout-frame,.feature-block.lm-box-pulse .greeting-list article,.feature-block.lm-box-pulse .live-button,.feature-block.lm-box-pulse .countdown-feature>div>span,.feature-block.lm-box-pulse .location-qr-frame,.feature-block.lm-box-pulse .location-map-embed,.feature-block.lm-box-pulse .canvas-form,.feature-block.lm-box-shimmer .gift-account-card,.feature-block.lm-box-shimmer .love-story-item,.feature-block.lm-box-shimmer .credit-meta,.feature-block.lm-box-shimmer .image-layout-frame,.feature-block.lm-box-shimmer .greeting-list article,.feature-block.lm-box-shimmer .live-button,.feature-block.lm-box-shimmer .countdown-feature>div>span,.feature-block.lm-box-shimmer .location-qr-frame,.feature-block.lm-box-shimmer .location-map-embed,.feature-block.lm-box-shimmer .canvas-form,.feature-block.lm-box-drift .gift-account-card,.feature-block.lm-box-drift .love-story-item,.feature-block.lm-box-drift .credit-meta,.feature-block.lm-box-drift .image-layout-frame,.feature-block.lm-box-drift .greeting-list article,.feature-block.lm-box-drift .live-button,.feature-block.lm-box-drift .countdown-feature>div>span,.feature-block.lm-box-drift .location-qr-frame,.feature-block.lm-box-drift .location-map-embed,.feature-block.lm-box-drift .canvas-form,.feature-block.lm-title-fade .editable-title,.feature-block.lm-title-float .editable-title,.feature-block.lm-title-sway .editable-title,.feature-block.lm-title-pulse .editable-title,.feature-block.lm-title-shimmer .editable-title,.feature-block.lm-title-drift .editable-title,.feature-block.lm-body-fade .editable-body,.feature-block.lm-body-float .editable-body,.feature-block.lm-body-sway .editable-body,.feature-block.lm-body-pulse .editable-body,.feature-block.lm-body-shimmer .editable-body,.feature-block.lm-body-drift .editable-body{animation:none!important}}
+/* TC-243 Layer 1 */
+.layer-one-heading{display:flex;flex-direction:column;align-items:flex-start;gap:2px;margin-top:12px}
+.layer-one-heading small{font-size:10px;color:#7c8a84}
+.upload-control.layer-one-video{margin-top:8px}
+/* TC-242 Desktop 70/30 */
+.desktop-column-stage{--col-gap:7%}
+.desktop-column-stage.ratio-7030{--col-gap:0px}
+.desktop-column-stage.ratio-7030.align-right>.desktop-column{margin-inline:auto 0}
+.desktop-column-stage.ratio-7030.align-left>.desktop-column{margin-inline:0 auto}
+.desktop-side-panel{position:sticky;top:0;z-index:0;height:var(--site-viewport-h,100vh);margin-bottom:calc(-1 * var(--site-viewport-h,100vh));pointer-events:none}
+.desktop-side-area{position:absolute;top:0;bottom:0;left:0;right:calc(var(--desktop-column-w,430px) + var(--col-gap));overflow:hidden;display:flex;align-items:center;justify-content:center}
+.align-left>.desktop-side-panel>.desktop-side-area{left:calc(var(--desktop-column-w,430px) + var(--col-gap));right:0}
+.align-center>.desktop-side-panel>.desktop-side-area{right:calc(50% + var(--desktop-column-w,430px) / 2)}
+.desktop-side-media{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background-size:cover;background-position:center}
+.desktop-side-slide{opacity:0;transition:opacity 1.2s ease}
+.desktop-side-slide.is-active{opacity:1}
+.desktop-side-text{position:relative;z-index:1;max-width:80%;text-align:center;color:#fff;padding:24px}
+.desktop-side-text.on-media{text-shadow:0 2px 18px rgba(0,0,0,.45)}
+.desktop-side-text h2{margin:0 0 10px;font-size:clamp(28px,4vw,64px);line-height:1.1;font-family:var(--title-font,'Playfair Display',Georgia,serif);font-weight:500}
+.desktop-side-text p{margin:0;font-size:clamp(13px,1.3vw,18px);white-space:pre-wrap;opacity:.9}
+.desktop-side-editor{display:grid;gap:8px;border-top:1px solid #e3e8e5;padding-top:10px;margin-top:4px}
+.desktop-side-editor textarea{width:100%;resize:vertical}
+.desktop-side-thumbs{display:flex;flex-wrap:wrap;gap:6px}
+.desktop-side-thumbs span{position:relative;width:48px;height:48px;border-radius:6px;background-size:cover;background-position:center}
+.desktop-side-thumbs button{position:absolute;top:-6px;right:-6px;width:18px;height:18px;border-radius:50%;border:0;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.25);display:grid;place-items:center;padding:0;cursor:pointer}
+/* TC-244 — preview Desktop diskalakan agar pas lebar layar (kecil maupun besar). */
+.preview-full-stage.desktop{overflow-x:hidden}
+.preview-full-stage.desktop .preview-content{width:var(--design-width,1050px)!important;max-width:none;zoom:var(--preview-zoom,1);margin:0 auto;box-shadow:0 15px 50px rgba(18,48,39,.14)}
+/* TC-226 nama pengirim */
+.cs-message-sender{display:block;font-size:10px;font-weight:700;margin-bottom:3px;color:inherit}
+.cs-message-sender small{font-weight:500;opacity:.7;font-size:9px}
+.cover-slide-track .cover-slide-knob{position:absolute!important;left:4px;top:4px;bottom:4px;width:46px;height:auto!important;min-height:0!important;border:0!important;border-radius:inherit;background:rgba(255,255,255,.94)!important;color:#102f27!important;display:flex!important;align-items:center;justify-content:center;padding:0!important;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.cover-slide-track .cover-slide-knob svg{display:block;color:#102f27}
+/* Revisi 21 Okt — preview Desktop selebar layar; tata letak Kolom tanpa skala. */
+.preview-full-stage.desktop.full-bleed .preview-content{width:100%!important;zoom:1;box-shadow:none}
+.preview-full-stage.desktop .preview-content{box-shadow:none}
+/* Revisi 21 Okt — padding atas/bawah di kontainer gulir membuat background
+   sticky menempel 22 px di bawah tepi atas, sehingga saat di-scroll muncul
+   pita putih di atas undangan Mobile. Padding vertikal dihapus. */
+.preview-full-stage.mobile{padding:0 22px}
+/* Revisi 21 Okt — tombol "Simpan Tanggal" terpotong di Save The Date: aturan
+   kotak hitung mundur `.countdown-feature>div` (grid 4 kolom, border,
+   latar blur) ikut mengenai wadah tombol kalender karena keduanya anak
+   langsung .countdown-feature. Wadah kalender dikembalikan ke baris flex. */
+.countdown-feature>.calendar-buttons{display:flex;grid-template-columns:none;max-width:none;width:auto;margin:16px auto 0;border:0;background:none!important;backdrop-filter:none;-webkit-backdrop-filter:none;animation:none}
+.calendar-button{white-space:nowrap;flex:0 0 auto}
+.calendar-ics{white-space:nowrap}
+/* Revisi 21 Okt — isi kartu ucapan rata kiri: nama & tanggal dulu ikut
+   text-align:center milik fitur sehingga tidak sejajar dengan pesannya. */
+.greeting-list article>div:last-child{flex:1;text-align:left}
+.greeting-list article strong,.greeting-list article small{display:block}
+.greetings-widget.align-center .greeting-list article>div:last-child{text-align:center}
+.greetings-widget.align-right .greeting-list article>div:last-child{text-align:right}
+/* Revisi 21 Okt — color picker dengan "Tidak ada warna" & Reset */
+.color-input{display:flex!important;align-items:center;gap:6px;width:100%;margin-left:0!important;flex-direction:row!important}
+.color-swatch{position:relative;flex:0 0 auto;width:38px;height:30px;border:1px solid #d5ddd9;border-radius:7px;overflow:hidden;background:#fff}
+.color-swatch input[type=color]{position:absolute;inset:-4px;width:calc(100% + 8px)!important;height:calc(100% + 8px)!important;padding:0!important;border:0;cursor:pointer;opacity:1}
+.color-input.is-none .color-swatch input[type=color]{opacity:0}
+.color-none-mark{position:absolute;inset:0;pointer-events:none;background:repeating-conic-gradient(#e6ebe8 0 25%,#fff 0 50%) 0 0/10px 10px}
+.color-none-mark::after{content:"";position:absolute;left:-4px;right:-4px;top:50%;height:2px;background:#c0392b;transform:rotate(-36deg)}
+.color-value{flex:1;min-width:0;font-size:9px;color:#5f716a;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0!important;display:block!important}
+.color-input.is-none .color-value{color:#93a09a;font-style:italic}
+.color-action{flex:0 0 auto;width:26px;height:26px;display:grid;place-items:center;border:1px solid #dfe6e2;background:#fff;border-radius:6px;color:#5f716a;cursor:pointer;padding:0}
+.color-action:hover{background:#f4e4e3;color:#a44b45;border-color:#ecd0cd}
+/* Revisi 21 Okt — bottom navigation bar undangan */
+.wedding-site.has-bottom-nav{overflow:clip}
+.has-bottom-nav .site-credit-footer,.has-bottom-nav:not(:has(.site-credit-footer)) .canvas-section:nth-last-child(1 of .canvas-section){padding-bottom:calc(var(--bn-space,0px) + 84px)}
+.bottom-nav-dock{position:sticky;bottom:12px;height:0;z-index:60;pointer-events:none}
+.bottom-nav{--bn-bg:#ffffff;--bn-fg:#7a8781;--bn-active:#125946;position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:min(440px,calc(100% - 24px));display:flex;align-items:stretch;justify-content:space-around;gap:2px;padding:6px;background:var(--bn-bg);color:var(--bn-fg);box-shadow:0 10px 30px rgba(15,40,32,.18);pointer-events:auto;font-family:inherit}
+.bottom-nav-item{flex:1;min-width:0;border:0;background:none;color:inherit;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:7px 2px;border-radius:12px;cursor:pointer;font:inherit;position:relative;transition:color .2s,background .2s,transform .2s}
+.bottom-nav-icon{display:grid;place-items:center;transition:inherit}
+.bottom-nav-label{font-size:10px;line-height:1.1;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.bottom-nav-item.is-active{color:var(--bn-active)}
+.bottom-nav-item:focus-visible{outline:2px solid var(--bn-active);outline-offset:2px}
+/* 1. Klasik */
+.bottom-nav.style-classic{border-radius:0;width:100%;bottom:-12px;padding-bottom:calc(6px + env(safe-area-inset-bottom,0px))}
+.bottom-nav.style-classic .bottom-nav-item.is-active .bottom-nav-label{font-weight:700}
+/* 2. Kapsul melayang: item aktif menjadi kapsul berlabel */
+.bottom-nav.style-floating-pill{border-radius:999px;padding:7px}
+.bottom-nav.style-floating-pill .bottom-nav-item{flex-direction:row;gap:7px;border-radius:999px;flex:0 1 auto;padding:10px 12px}
+.bottom-nav.style-floating-pill .bottom-nav-label{display:none}
+.bottom-nav.style-floating-pill .bottom-nav-item.is-active{background:var(--bn-active);color:#fff;padding:10px 16px}
+.bottom-nav.style-floating-pill .bottom-nav-item.is-active .bottom-nav-label{display:block;font-size:12px;font-weight:600}
+/* 3. Tombol tengah menonjol */
+.bottom-nav.style-center-raised{border-radius:18px;overflow:visible}
+.bottom-nav.style-center-raised .bottom-nav-item.is-center{margin-top:-28px}
+.bottom-nav.style-center-raised .bottom-nav-item.is-center .bottom-nav-icon{width:54px;height:54px;border-radius:50%;background:var(--bn-active);color:#fff;box-shadow:0 0 0 5px var(--bn-bg),0 8px 18px rgba(15,40,32,.25)}
+.bottom-nav.style-center-raised .bottom-nav-item.is-center .bottom-nav-label{margin-top:2px}
+/* 4. Titik aktif */
+.bottom-nav.style-notch-dot{border-radius:16px}
+.bottom-nav.style-notch-dot .bottom-nav-item.is-active::before{content:"";position:absolute;top:-2px;left:50%;width:7px;height:7px;margin-left:-3.5px;border-radius:50%;background:var(--bn-active)}
+.bottom-nav.style-notch-dot .bottom-nav-item.is-active .bottom-nav-icon{transform:translateY(1px)}
+/* 5. Kotak aktif */
+.bottom-nav.style-active-square{border-radius:16px}
+.bottom-nav.style-active-square .bottom-nav-item.is-active .bottom-nav-icon{width:42px;height:42px;border-radius:12px;background:var(--bn-active);color:#fff;box-shadow:0 6px 14px rgba(15,40,32,.22)}
+.bottom-nav.style-active-square .bottom-nav-item.is-active .bottom-nav-label{display:none}
+/* 6. Ikon saja */
+.bottom-nav.style-icon-only{border-radius:999px;width:min(340px,calc(100% - 24px))}
+.bottom-nav.style-icon-only .bottom-nav-item{padding:11px 2px}
+.bottom-nav.style-icon-only .bottom-nav-item.is-active .bottom-nav-icon{transform:scale(1.15)}
+@media (prefers-reduced-motion:reduce){.bottom-nav-item,.bottom-nav-icon{transition:none}}
+/* Panel editor */
+.bottom-nav-panel{margin-top:10px}
+.bottom-nav-style-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.bottom-nav-style-grid button{border:1px solid #dfe6e2;background:#fff;border-radius:9px;padding:8px 4px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;color:#4d6159}
+.bottom-nav-style-grid button.active{border-color:#1d8863;background:#eef6f2;box-shadow:0 0 0 1px #1d8863}
+.bottom-nav-style-grid small{font-size:8px;line-height:1.25;text-align:center}
+.bottom-nav-mini{display:flex;align-items:center;justify-content:space-around;width:100%;height:18px;background:#fff;border:1px solid #d5ddd9;border-radius:5px;padding:0 4px;position:relative}
+.bottom-nav-mini i{width:5px;height:5px;border-radius:50%;background:#b9c4bf}
+.bottom-nav-mini i.on{background:#125946}
+.bottom-nav-mini.style-floating-pill,.bottom-nav-mini.style-icon-only{border-radius:999px}
+.bottom-nav-mini.style-floating-pill i.on{width:16px;border-radius:999px}
+.bottom-nav-mini.style-center-raised i:nth-child(3){width:10px;height:10px;margin-top:-10px;background:#125946}
+.bottom-nav-mini.style-notch-dot i.on{box-shadow:0 -6px 0 -1px #125946}
+.bottom-nav-mini.style-active-square i.on{width:9px;height:9px;border-radius:2px}
+.bottom-nav-mini.style-classic{border-radius:0}
+.bottom-nav-items{display:grid;gap:6px;margin-top:4px}
+.bottom-nav-items>strong{font-size:9px;display:flex;justify-content:space-between}
+.bottom-nav-items>strong small{font-weight:500;color:#81908a}
+.bottom-nav-row{border:1px solid #e3e8e5;border-radius:8px;padding:7px 8px;background:#fff}
+.bottom-nav-row.is-on{border-color:#9ac3b3;background:#f6fbf9}
+.bottom-nav-check{display:flex!important;flex-direction:row!important;align-items:flex-start;gap:8px;margin:0!important;cursor:pointer}
+.bottom-nav-check input{margin-top:2px;width:auto!important}
+.bottom-nav-check span{display:flex!important;flex-direction:column;font-size:9px;font-weight:600;margin:0!important;color:#284b40}
+.bottom-nav-check small{font-weight:400;color:#8a9893;font-size:8px;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:200px}
+.bottom-nav-item-edit{display:grid;grid-template-columns:1fr 96px;gap:6px;margin-top:7px}
+.bottom-nav-item-edit input,.bottom-nav-item-edit select{width:100%;min-width:0}
+.bottom-nav-features{display:grid;gap:4px;margin:7px 0 0 18px;padding-left:8px;border-left:2px solid #e3ebe7;max-height:260px;overflow:auto}
+.bottom-nav-feature{padding:4px 2px;border-radius:6px}
+.bottom-nav-feature.is-on{background:#eef6f2;padding:6px}
+
+/* Panel bottom nav: ikut ukuran panel Page Structure, tidak melebar. */
+.bottom-nav-panel{font-size:11px;color:#46625a;min-width:0;overflow:hidden}
+.bottom-nav-panel>label,.bottom-nav-panel .two-inputs>label{display:grid;gap:4px;font-size:11px;min-width:0}
+.bottom-nav-panel select,.bottom-nav-panel input:not([type=checkbox]):not([type=color]){width:100%;min-width:0;font-size:11px}
+.bottom-nav-panel .two-inputs{display:grid;grid-template-columns:1fr;gap:8px}
+.bottom-nav-style-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+.bottom-nav-item-edit{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.bottom-nav-row,.bottom-nav-feature{min-width:0}
+/* Revisi 22 Okt — ikon upload pada bottom navigation */
+.bottom-nav-img{width:22px;height:22px;object-fit:contain;display:block}
+.bottom-nav.style-center-raised .bottom-nav-item.is-center .bottom-nav-img,.bottom-nav.style-active-square .bottom-nav-item.is-active .bottom-nav-img{width:24px;height:24px}
+.bottom-nav-icon-upload{grid-column:1/-1;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.bottom-nav-icon-upload img,.bottom-nav-icon-preview{width:26px;height:26px;object-fit:contain;border:1px solid #dfe6e2;border-radius:6px;background:#fff;display:grid;place-items:center;color:#4d6159;padding:2px}
+.bottom-nav-icon-pick{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:5px;font-size:10px!important;padding:5px 9px!important;cursor:pointer;margin:0!important}
+.bottom-nav-icon-upload .text-button{font-size:10px}
