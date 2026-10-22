@@ -72,12 +72,20 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
     }
   });
   const base = `http://127.0.0.1:${port}`;
-  for (let i = 0; i < 100; i++) {
+  // Tunggu server siap. Dulu batasnya 3 detik (100 × 30 ms); di Windows
+  // startup server (migrasi skema + bcrypt akun bootstrap) bisa lebih lama,
+  // sehingga suite gagal di baris ini dengan pesan kosong. Kini hingga 20
+  // detik, dan langsung gagal dengan log server bila prosesnya berhenti.
+  const deadline = Date.now() + 20_000;
+  for (;;) {
     try {
       if ((await fetch(base + "/api/health")).ok) break;
     } catch {}
-    await new Promise((r) => setTimeout(r, 30));
-    if (i === 99) throw new Error(logs);
+    if (child.exitCode !== null)
+      throw new Error(`Server berhenti sebelum siap (exit ${child.exitCode}):\n${logs}`);
+    if (Date.now() > deadline)
+      throw new Error(`Server belum siap setelah 20 detik:\n${logs || "(tanpa log)"}`);
+    await new Promise((r) => setTimeout(r, 100));
   }
   db = new DatabaseSync(env.DB_FILE);
   const call = async (method, url, body, token, headers = {}) => {
