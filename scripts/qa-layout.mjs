@@ -1196,3 +1196,10 @@ test("Revisi 24 Okt: kartu desain publik tanpa label CMS dan canvas memenuhi kar
   assert.match(appTsx, /holderHeight \/ contentHeight/);
   assert.match(appCss, /\.actual-design-preview\.is-bare\{height:100%;/);
 });
+
+test("Revisi 24 Okt: layar Buka Undangan memakai versi device aktif (editor = preview)", () => {
+  assert.match(appTsx, /function InvitationCover\(\{\n\s*section: rawSection,\n\s*feature: rawFeature,/);
+  assert.match(appTsx, /const section = resolveSection\(rawSection, device\);\n\s*const feature = resolveFeature\(rawFeature, device\);/);
+  assert.match(appTsx, /const cover = rawCover \? resolveFeature\(rawCover, device\) : undefined;/);
+  assert.match(appTsx, /\.map\(\(item\) => resolveFeature\(item, device\)\)/);
+});

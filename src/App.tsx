@@ -18190,7 +18190,11 @@ function WeddingCanvasBody({
                 setOpened(true);
                 setOpening(false);
               },
-              Math.max(150, coverEntry.feature.coverExitDuration ?? 700),
+              Math.max(
+                150,
+                resolveFeature(coverEntry.feature, device).coverExitDuration ??
+                  700,
+              ),
             );
           }}
         />
@@ -18721,8 +18725,8 @@ function WeddingCanvasBody({
 }
 
 function InvitationCover({
-  section,
-  feature,
+  section: rawSection,
+  feature: rawFeature,
   inviteeName,
   onOpen,
   opening = false,
@@ -18733,6 +18737,14 @@ function InvitationCover({
   onOpen: () => void;
   opening?: boolean;
 }) {
+  // Revisi 24 Okt — layar cover memakai versi device yang aktif, sama seperti
+  // FeatureBlock di editor. Dulu data mentah (versi Desktop) yang dipakai:
+  // pada tata letak Kolom / 70/30 isi undangan diedit sebagai Mobile, jadi
+  // editor menampilkan judul & background versi Mobile sementara Preview dan
+  // undangan live menampilkan nilai bawaan ("Chyntia & Rian", tanpa gambar).
+  const device = useContext(DeviceContext);
+  const section = resolveSection(rawSection, device);
+  const feature = resolveFeature(rawFeature, device);
   const exitEffect = feature.coverExitEffect || "fade";
   return (
     <section
@@ -18767,15 +18779,18 @@ function InvitationCover({
         className={`invitation-cover-grid columns-${section.columns.length}`}
       >
         {section.columns.map((column, columnIndex) => {
-          const cover = column.features.find(
+          const rawCover = column.features.find(
             (item) => item.type === "invitation-cover",
           );
-          const companions = column.features.filter(
-            (item) =>
-              item.type !== "invitation-cover" &&
-              item.type !== "sound" &&
-              !(item.freePosition && item.positionScope === "canvas"),
-          );
+          const cover = rawCover ? resolveFeature(rawCover, device) : undefined;
+          const companions = column.features
+            .map((item) => resolveFeature(item, device))
+            .filter(
+              (item) =>
+                item.type !== "invitation-cover" &&
+                item.type !== "sound" &&
+                !(item.freePosition && item.positionScope === "canvas"),
+            );
           const active = cover || (columnIndex === 0 ? feature : undefined);
           return (
             <div
