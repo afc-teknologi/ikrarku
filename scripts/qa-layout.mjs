@@ -498,7 +498,7 @@ test("Retest-2b: tinggi kotak preview mengikuti tinggi canvas, bukan rasio tetap
   );
   assert.match(
     appTsx,
-    /className="actual-render-viewport" style=\{\{ height: viewportHeight \}\}/,
+    /className="actual-render-viewport"\n\s*style=\{\{ height: bare \? "100%" : viewportHeight \}\}/,
   );
   assert.equal(
     /className="actual-render-viewport" style=\{\{ height: width \* 1\.25 \}\}/.test(
@@ -1183,4 +1183,16 @@ test("Revisi 24 Okt: feature bisa di-drag di Page Structure dan disisipkan di ca
   assert.match(appTsx, /moveFeature\(\n\s*draggedId,\n\s*section\.id,\n\s*column\.id,\n\s*feature\.id,\n\s*\);/);
   assert.match(appTsx, /moveFeature\(featureId, sectionId, columnId, beforeId\);/);
   assert.match(appCss, /\.tree-row\.feature-node\.drop-before::before\{/);
+});
+
+test("Revisi 24 Okt: button slide tidak melebihi lebar kolom", () => {
+  assert.match(appTsx, /style=\{\{ \.\.\.style, padding: undefined \}\}/);
+  assert.match(appCss, /\.cover-slide-track\{box-sizing:border-box;width:min\(320px,100%\);max-width:100%;/);
+});
+
+test("Revisi 24 Okt: kartu desain publik tanpa label CMS dan canvas memenuhi kartu", () => {
+  assert.match(appTsx, /\{!bare && \(\n\s*<div className="template-browser">/);
+  assert.equal((appTsx.match(/sections=\{template\.canvasSections(?: \|\| \[\])?\}\n\s*bare\n/g) || []).length, 2);
+  assert.match(appTsx, /holderHeight \/ contentHeight/);
+  assert.match(appCss, /\.actual-design-preview\.is-bare\{height:100%;/);
 });

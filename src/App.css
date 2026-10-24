@@ -2183,3 +2183,9 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .tree-row.feature-node.is-dragging{opacity:.45}
 .tree-row.feature-node.drop-before::before{content:"";position:absolute;left:6px;right:6px;top:-2px;height:3px;border-radius:2px;background:#1d8863}
 .tree-features{min-height:8px}
+/* Revisi 24 Okt — button slide tidak melebihi lebar kolomnya. */
+.cover-slide-track{box-sizing:border-box;width:min(320px,100%);max-width:100%;padding:4px!important;align-self:center}
+.cover-slide-label{padding-left:54px;padding-right:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;box-sizing:border-box}
+/* Revisi 24 Okt — pratinjau canvas di kartu publik memenuhi kartu, tanpa bilah CMS. */
+.actual-design-preview.is-bare{height:100%;background:#0f1f1a!important}
+.actual-design-preview.is-bare .actual-render-viewport{flex:1;min-height:0;overflow:hidden;position:relative}

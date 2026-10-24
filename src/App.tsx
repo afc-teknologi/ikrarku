@@ -6022,6 +6022,7 @@ function AllDesignsPage({
                     template={template}
                     title={template.name}
                     sections={template.canvasSections}
+                    bare
                   />
                 ) : (
                   <div
@@ -6264,6 +6265,7 @@ function LandingPage(props: {
           template={template}
           title={template.name}
           sections={template.canvasSections || []}
+          bare
         />
       )}
     />
@@ -9520,18 +9522,25 @@ function WebsiteTemplatePreview({
   template,
   title,
   sections,
+  bare = false,
 }: {
   template?: Template;
   title: string;
   sections: CanvasSection[];
+  /** Revisi 24 Okt — kartu publik (landing, katalog desain): tanpa bilah
+   *  "Canvas 01 · actual saved preview" milik CMS, dan canvas memenuhi
+   *  seluruh kartu (cover) alih-alih menyisakan area abu-abu. */
+  bare?: boolean;
 }) {
   const holder = useRef<HTMLDivElement>(null),
-    [width, setWidth] = useState(320);
+    [width, setWidth] = useState(320),
+    [holderHeight, setHolderHeight] = useState(0);
   useEffect(() => {
     if (!holder.current) return;
-    const observer = new ResizeObserver((entries) =>
-      setWidth(entries[0].contentRect.width),
-    );
+    const observer = new ResizeObserver((entries) => {
+      setWidth(entries[0].contentRect.width);
+      setHolderHeight(entries[0].contentRect.height);
+    });
     observer.observe(holder.current);
     return () => observer.disconnect();
   }, []);
@@ -9579,21 +9588,41 @@ function WebsiteTemplatePreview({
     preset: "classic",
   };
   return (
-    <div className="actual-design-preview" ref={holder}>
-      <div className="template-browser">
-        <span />
-        <span />
-        <span />
-        <em>Canvas 01 · actual saved preview</em>
-      </div>
-      <div className="actual-render-viewport" style={{ height: viewportHeight }}>
+    <div
+      className={`actual-design-preview ${bare ? "is-bare" : ""}`}
+      ref={holder}
+    >
+      {!bare && (
+        <div className="template-browser">
+          <span />
+          <span />
+          <span />
+          <em>Canvas 01 · actual saved preview</em>
+        </div>
+      )}
+      <div
+        className="actual-render-viewport"
+        style={{ height: bare ? "100%" : viewportHeight }}
+      >
         <div
           className="actual-render-content"
           ref={content}
           inert
           style={{
             width: 800,
-            transform: `scale(${width / 800})`,
+            // Mode bare: skala "cover" — penuhi lebar dan tinggi kartu,
+            // dipusatkan horizontal bila canvas lebih pendek dari kartu.
+            ...(bare && contentHeight && holderHeight
+              ? (() => {
+                  const scale = Math.max(
+                    width / 800,
+                    holderHeight / contentHeight,
+                  );
+                  return {
+                    transform: `translateX(${(width - 800 * scale) / 2}px) scale(${scale})`,
+                  };
+                })()
+              : { transform: `scale(${width / 800})` }),
             transformOrigin: "top left",
           }}
         >
@@ -19721,7 +19750,10 @@ function SlideToOpen({
     <div
       ref={trackRef}
       className={`cover-slide-track ${done ? "is-done" : ""}`}
-      style={style}
+      // Revisi 24 Okt — padding tombol klik (mis. 15px 30px) tidak dipakai
+      // pada slider: dulu ditambahkan di luar lebar 320 px sehingga slider
+      // melebar keluar kolom sempit (tata letak 70/30 / Mobile) dan terpotong.
+      style={{ ...style, padding: undefined }}
     >
       <span className="cover-slide-label">{label}</span>
       <button
