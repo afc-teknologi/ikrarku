@@ -1157,3 +1157,15 @@ test("Revisi 24 Okt: header landing, preview template penuh, sampul tanpa gambar
   assert.match(serverMjs, /SET \$\{column\}=NULL WHERE \$\{column\} IN \$\{refs\} AND id NOT IN \$\{builtins\}/);
   assert.match(appTsx, /function TemplateCoverArt\(/);
 });
+
+test("Revisi 24 Okt: Buka Undangan di preview setinggi kotak preview, tanpa sisa abu-abu", () => {
+  assert.match(appCss, /\.template-dialog-actual-preview\.live\{container-type:size\}/);
+  assert.match(appCss, /\.invitation-locked\{height:calc\(100cqh \/ var\(--preview-zoom,1\)\)\}/);
+  assert.match(appCss, /\{min-height:calc\(100cqh \/ var\(--preview-zoom,1\)\)\}/);
+  assert.match(appTsx, /"--preview-zoom": zoom,\n\s*\} as React\.CSSProperties\)/);
+});
+
+test("Revisi 24 Okt: status di kartu My Order setinggi teks", () => {
+  assert.match(appCss, /\.project-order-card>header\{align-items:flex-start\}/);
+  assert.match(appCss, /\.project-order-card>header>\.status\{align-self:flex-start;/);
+});

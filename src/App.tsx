@@ -9498,6 +9498,7 @@ function FitDesktop({
               ? ({
                   width: DESKTOP_DESIGN_WIDTH,
                   zoom,
+                  "--preview-zoom": zoom,
                 } as React.CSSProperties)
               : undefined
           }

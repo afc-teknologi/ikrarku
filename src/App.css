@@ -2142,3 +2142,26 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .template-status-thumb,.upsell-thumb{position:relative;overflow:hidden}
 .template-status-thumb .thumb-empty{position:absolute;left:10px;bottom:10px;z-index:1}
 .actual-template-preview-shell.device-desktop .journey-preview-window{width:100%;height:100%;min-height:calc(100vh - 70px);border-radius:0;box-shadow:none}
+/* Revisi 24 Okt — ruang kosong di bawah layar Buka Undangan saat Preview.
+   Cover & halaman terkunci memakai 100vh = tinggi JENDELA, bukan tinggi kotak
+   preview (yang 62 px lebih pendek karena header preview). Saat preview
+   Desktop diskalakan (zoom), 100vh ikut dikalikan skala sehingga cover jauh
+   lebih tinggi dari kotaknya; isi terlihat terpotong dan sisa latar abu-abu
+   muncul di bawah. Di dalam kotak preview, tinggi "satu layar" kini diambil
+   dari tinggi kotak itu sendiri (container query) dibagi skala. */
+.preview-full-stage,
+.actual-template-preview-shell,
+.template-dialog-actual-preview.live{container-type:size}
+:is(.preview-full-stage,.actual-template-preview-shell,.template-dialog-actual-preview.live) .invitation-locked{height:calc(100cqh / var(--preview-zoom,1))}
+:is(.preview-full-stage,.actual-template-preview-shell,.template-dialog-actual-preview.live) :is(.invitation-cover-screen,.invitation-cover-grid,.invitation-cover-column,.cover-content){min-height:calc(100cqh / var(--preview-zoom,1))}
+/* Kotak preview kini memakai size containment, jadi dialog perlu tinggi tetap. */
+.template-preview-dialog.wide{height:92vh}
+.template-dialog-actual-preview.live{min-height:0}
+:is(.preview-full-stage,.actual-template-preview-shell,.template-dialog-actual-preview.live) :is(.invitation-cover-screen,.invitation-cover-grid,.invitation-cover-column,.cover-content){box-sizing:border-box}
+/* Bila isi cover (setelah diskalakan) lebih tinggi dari kotak preview, cover
+   bisa digulir di dalam kotak itu, bukan terpotong. */
+:is(.preview-full-stage,.actual-template-preview-shell,.template-dialog-actual-preview.live) .invitation-locked{overflow-y:auto;overflow-x:hidden}
+/* Revisi 24 Okt — status pembayaran di kartu My Order setinggi teksnya
+   (dulu ikut meregang setinggi judul karena align-items:stretch). */
+.project-order-card>header{align-items:flex-start}
+.project-order-card>header>.status{align-self:flex-start;flex:0 0 auto;height:auto;min-height:0;display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.3;white-space:nowrap}
