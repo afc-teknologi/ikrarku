@@ -2165,3 +2165,21 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
    (dulu ikut meregang setinggi judul karena align-items:stretch). */
 .project-order-card>header{align-items:flex-start}
 .project-order-card>header>.status{align-self:flex-start;flex:0 0 auto;height:auto;min-height:0;display:inline-flex;align-items:center;padding:5px 11px;border-radius:999px;font-size:11px;font-weight:600;line-height:1.3;white-space:nowrap}
+/* Revisi 24 Okt — preview "gerak-gerak zoom in-zoom out". Elemen yang melebar
+   (ornamen, layer, pemutar musik) memunculkan scrollbar horizontal; tinggi
+   kotak berkurang, tinggi cover ikut berubah, scrollbar vertikal muncul/hilang,
+   lebar kotak berubah, skala dihitung ulang — berulang tanpa henti. Kotak
+   preview kini tidak bisa digulir ke samping dan selalu menyediakan ruang
+   scrollbar, sehingga lebarnya tetap. */
+.preview-full-stage,
+.actual-template-preview-shell,
+.template-dialog-actual-preview.live{overflow-x:hidden;scrollbar-gutter:stable}
+.fit-desktop{overflow-x:clip}
+:is(.preview-full-stage,.actual-template-preview-shell,.template-dialog-actual-preview.live) .invitation-locked>.invitation-cover-screen{min-height:100%}
+/* Revisi 24 Okt — drag & drop feature di Page Structure */
+.tree-row.feature-node{cursor:grab;user-select:none;-webkit-user-select:none;position:relative}
+.tree-row.feature-node:active{cursor:grabbing}
+.tree-row.feature-node .tree-drag-grip{color:#a7b3ae;flex:0 0 auto}
+.tree-row.feature-node.is-dragging{opacity:.45}
+.tree-row.feature-node.drop-before::before{content:"";position:absolute;left:6px;right:6px;top:-2px;height:3px;border-radius:2px;background:#1d8863}
+.tree-features{min-height:8px}

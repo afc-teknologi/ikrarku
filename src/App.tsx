@@ -9354,7 +9354,13 @@ function useFitZoom(
       // Selalu tepat selebar layar: diperkecil di layar sempit, diperbesar
       // di layar lebar — tidak ada ruang abu-abu di kiri-kanan.
       const next = Math.min(maxZoom, Math.max(0.35, available / designWidth));
-      setZoom(Math.round(next * 1000) / 1000);
+      const rounded = Math.floor(next * 1000) / 1000;
+      // Abaikan perubahan sangat kecil (< 0,5%): scrollbar yang muncul /
+      // hilang mengubah lebar beberapa px, dan tanpa ambang ini skala bisa
+      // bolak-balik terus ("zoom in-zoom out").
+      setZoom((current) =>
+        Math.abs(current - rounded) < 0.005 ? current : rounded,
+      );
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -11338,7 +11344,10 @@ function Editor({
     featureId: string,
     targetSectionId: string,
     targetColumnId: string,
+    /** Revisi 24 Okt — sisipkan sebelum feature ini (drag di Page Structure). */
+    beforeFeatureId?: string,
   ) => {
+    if (beforeFeatureId === featureId) return;
     let moved: Feature | undefined;
     const without = sections.map((section) => ({
       ...section,
@@ -11371,7 +11380,14 @@ function Editor({
                 column.id === targetColumnId
                   ? {
                       ...column,
-                      features: [...column.features, moved as Feature],
+                      features: (() => {
+                        const list = [...column.features];
+                        const at = beforeFeatureId
+                          ? list.findIndex((item) => item.id === beforeFeatureId)
+                          : -1;
+                        list.splice(at < 0 ? list.length : at, 0, moved as Feature);
+                        return list;
+                      })(),
                     }
                   : column,
               ),
@@ -11395,7 +11411,29 @@ function Editor({
       "application/x-ikrarku-feature",
     );
     if (widgetType) addFeature(widgetType, sectionId, columnId);
-    else if (featureId) moveFeature(featureId, sectionId, columnId);
+    else if (featureId) {
+      // Revisi 24 Okt — dijatuhkan di atas feature lain: sisipkan di atas
+      // atau di bawahnya (menurut separuh tinggi blok), bukan selalu di akhir.
+      const over = (event.target as HTMLElement | null)?.closest?.(
+        '[id^="feature-"]',
+      ) as HTMLElement | null;
+      let beforeId: string | undefined;
+      if (over) {
+        const overId = over.id.slice("feature-".length);
+        const rect = over.getBoundingClientRect();
+        if (event.clientY < rect.top + rect.height / 2) beforeId = overId;
+        else {
+          const list =
+            sections
+              .find((section) => section.id === sectionId)
+              ?.columns.find((column) => column.id === columnId)
+              ?.features.filter((feature) => feature.id !== featureId) || [];
+          const index = list.findIndex((feature) => feature.id === overId);
+          beforeId = index >= 0 ? list[index + 1]?.id : undefined;
+        }
+      }
+      moveFeature(featureId, sectionId, columnId, beforeId);
+    }
   };
 
   const moveSection = (sectionId: string, direction: -1 | 1) => {
@@ -12043,12 +12081,13 @@ function Editor({
                       key={column.id}
                       /* QA TC-111: column dapat di-drag ke canvas lain. */
                       onDragOver={(event) => {
+                        const types = event.dataTransfer.types;
                         if (
-                          event.dataTransfer.types.includes(
-                            "application/x-ikrarku-column",
-                          )
+                          types.includes("application/x-ikrarku-column") ||
+                          types.includes("application/x-ikrarku-feature")
                         ) {
                           event.preventDefault();
+                          event.stopPropagation();
                           event.currentTarget.classList.add("column-drop-ready");
                         }
                       }}
@@ -12057,6 +12096,18 @@ function Editor({
                       }
                       onDrop={(event) => {
                         event.currentTarget.classList.remove("column-drop-ready");
+                        // Revisi 24 Okt — feature dari Page Structure dijatuhkan
+                        // di area column (bukan di atas feature lain): taruh di
+                        // paling bawah column itu.
+                        const featureId = event.dataTransfer.getData(
+                          "application/x-ikrarku-feature",
+                        );
+                        if (featureId) {
+                          event.preventDefault();
+                          event.stopPropagation();
+                          moveFeature(featureId, section.id, column.id);
+                          return;
+                        }
                         const payload = event.dataTransfer.getData(
                           "application/x-ikrarku-column",
                         );
@@ -12093,7 +12144,55 @@ function Editor({
                               selectFeature(section.id, column.id, feature.id)
                             }
                             key={feature.id}
+                            // Revisi 24 Okt — feature bisa di-drag di Page
+                            // Structure: urutkan ulang dalam column, atau pindah
+                            // ke column/canvas lain. Jatuhkan di atas feature
+                            // lain = disisipkan sebelum feature itu.
+                            draggable
+                            title="Drag untuk mengubah urutan atau memindahkan feature"
+                            onDragStart={(event) => {
+                              event.stopPropagation();
+                              event.dataTransfer.setData(
+                                "application/x-ikrarku-feature",
+                                feature.id,
+                              );
+                              event.dataTransfer.effectAllowed = "move";
+                              event.currentTarget.classList.add("is-dragging");
+                            }}
+                            onDragEnd={(event) =>
+                              event.currentTarget.classList.remove("is-dragging")
+                            }
+                            onDragOver={(event) => {
+                              if (
+                                !event.dataTransfer.types.includes(
+                                  "application/x-ikrarku-feature",
+                                )
+                              )
+                                return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              event.currentTarget.classList.add("drop-before");
+                            }}
+                            onDragLeave={(event) =>
+                              event.currentTarget.classList.remove("drop-before")
+                            }
+                            onDrop={(event) => {
+                              event.currentTarget.classList.remove("drop-before");
+                              const draggedId = event.dataTransfer.getData(
+                                "application/x-ikrarku-feature",
+                              );
+                              if (!draggedId) return;
+                              event.preventDefault();
+                              event.stopPropagation();
+                              moveFeature(
+                                draggedId,
+                                section.id,
+                                column.id,
+                                feature.id,
+                              );
+                            }}
                           >
+                            <GripVertical size={11} className="tree-drag-grip" />
                             <FeatureIcon type={feature.type} />
                             <span>{feature.title || feature.type}</span>
                             <div className="tree-feature-actions">

@@ -1169,3 +1169,18 @@ test("Revisi 24 Okt: status di kartu My Order setinggi teks", () => {
   assert.match(appCss, /\.project-order-card>header\{align-items:flex-start\}/);
   assert.match(appCss, /\.project-order-card>header>\.status\{align-self:flex-start;/);
 });
+
+test("Revisi 24 Okt: skala preview stabil (tidak zoom in-zoom out)", () => {
+  assert.match(appTsx, /const rounded = Math\.floor\(next \* 1000\) \/ 1000;/);
+  assert.match(appTsx, /Math\.abs\(current - rounded\) < 0\.005 \? current : rounded/);
+  assert.match(appCss, /\.template-dialog-actual-preview\.live\{overflow-x:hidden;scrollbar-gutter:stable\}/);
+  assert.match(appCss, /\.fit-desktop\{overflow-x:clip\}/);
+});
+
+test("Revisi 24 Okt: feature bisa di-drag di Page Structure dan disisipkan di canvas", () => {
+  assert.match(appTsx, /beforeFeatureId\?: string,\n\s*\) => \{/);
+  assert.match(appTsx, /title="Drag untuk mengubah urutan atau memindahkan feature"/);
+  assert.match(appTsx, /moveFeature\(\n\s*draggedId,\n\s*section\.id,\n\s*column\.id,\n\s*feature\.id,\n\s*\);/);
+  assert.match(appTsx, /moveFeature\(featureId, sectionId, columnId, beforeId\);/);
+  assert.match(appCss, /\.tree-row\.feature-node\.drop-before::before\{/);
+});
