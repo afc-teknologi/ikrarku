@@ -611,14 +611,24 @@ function initDb() {
     for (const row of rows)
       insert.run(...row, "user_admin", "user_admin", "[]", now(), now());
   }
-  // Backfill preview images for any existing templates that have none (existing staging DBs).
+  // Gambar referensi bawaan hanya untuk tiga template contoh. Dulu backfill
+  // ini mengisi SEMUA template tanpa gambar setiap kali server start, sehingga
+  // template baru buatan Web Designer otomatis "punya" gambar sample
+  // Chyntia & Rian padahal belum pernah diunggah (revisi 24 Okt). Template
+  // lain tanpa gambar kini tampil dengan sampul warna aksen-nya sendiri.
   try {
+    const builtins = "('split-serenity','cinematic-story','storybook-magic')";
     db.prepare(
-      `UPDATE templates SET preview_url='/themes/cover-reference.png' WHERE (preview_url IS NULL OR preview_url='') AND preset IN ('cinematic','classic')`,
+      `UPDATE templates SET preview_url='/themes/cover-reference.png' WHERE (preview_url IS NULL OR preview_url='') AND id IN ${builtins} AND preset IN ('cinematic','classic')`,
     ).run();
     db.prepare(
-      `UPDATE templates SET preview_url='/themes/split-reference.png' WHERE (preview_url IS NULL OR preview_url='')`,
+      `UPDATE templates SET preview_url='/themes/split-reference.png' WHERE (preview_url IS NULL OR preview_url='') AND id IN ${builtins}`,
     ).run();
+    const refs = "('/themes/cover-reference.png','/themes/split-reference.png')";
+    for (const column of ["preview_url", "sample_image_url", "header_image_url"])
+      db.prepare(
+        `UPDATE templates SET ${column}=NULL WHERE ${column} IN ${refs} AND id NOT IN ${builtins}`,
+      ).run();
   } catch {
     /* ignore */
   }

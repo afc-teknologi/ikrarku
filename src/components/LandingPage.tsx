@@ -11,6 +11,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Star,
+  LogIn,
+  UserRound,
+  Globe,
 } from "lucide-react";
 import type { Template, ArticleItem, View } from "../App";
 import "./LandingPage.css";
@@ -503,6 +506,23 @@ export default function LandingPage({
     });
     return () => observer.disconnect();
   }, []);
+  const langSwitch = (variant: string) => (
+    <div className={`ikr-lang ${variant}`} role="group" aria-label={tx.langLabel}>
+      <Globe size={14} aria-hidden />
+      {(["id", "en"] as const).map((code) => (
+        <button
+          key={code}
+          type="button"
+          lang={code}
+          aria-pressed={lang === code}
+          className={lang === code ? "is-active" : ""}
+          onClick={() => setLang(code)}
+        >
+          {code.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
   const nav = (id: string) => {
     setMenu(false);
     scrollToSection(id);
@@ -548,22 +568,13 @@ export default function LandingPage({
           >
             {tx.navJournal}
           </a>
+          {langSwitch("ikr-lang-menu")}
         </nav>
+        {/* Revisi 24 Okt (2) — pilihan bahasa, Masuk, dan CTA satu baris
+            sejajar dengan logo & menu. Di ponsel pilihan bahasa pindah ke
+            menu agar targetnya bisa 48 px tanpa membuat header sesak. */}
         <div className="ikr-nav-actions">
-          <div className="ikr-lang" role="group" aria-label={tx.langLabel}>
-            {(["id", "en"] as const).map((code) => (
-              <button
-                key={code}
-                type="button"
-                lang={code}
-                aria-pressed={lang === code}
-                className={lang === code ? "is-active" : ""}
-                onClick={() => setLang(code)}
-              >
-                {code.toUpperCase()}
-              </button>
-            ))}
-          </div>
+          {langSwitch("ikr-lang-header")}
           {/* Pengunjung yang sudah login melihat namanya, dan klik namanya
               membawa langsung ke workspace. */}
           {accountName ? (
@@ -572,11 +583,13 @@ export default function LandingPage({
               onClick={() => onOpenWorkspace?.()}
               title={tx.workspace}
             >
-              {accountName}
+              <UserRound size={15} />
+              <span>{accountName}</span>
             </button>
           ) : (
             <button className="ikr-login" onClick={() => setView("login")}>
-              {tx.login}
+              <LogIn size={15} />
+              <span>{tx.login}</span>
             </button>
           )}
           <button

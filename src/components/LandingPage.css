@@ -768,3 +768,31 @@
 .ikr-lang button:focus-visible{outline:2px solid #b68a48;outline-offset:2px}
 .ikr-login{white-space:nowrap}
 @media (max-width:420px){.ikr-nav-actions{gap:10px}.ikr-lang button{padding:5px 8px}}
+/* Revisi 24 Okt — header kanan: Masuk (berbingkai) + CTA sejajar,
+   pilihan bahasa kecil di bawahnya. */
+.ikr-nav-actions{flex-direction:column;align-items:flex-end;justify-content:center;gap:6px}
+.ikr-nav-buttons{display:flex;align-items:center;gap:10px}
+.ikr-login{display:inline-flex;align-items:center;gap:7px;min-height:42px;padding:0 16px;border:1px solid rgba(23,63,52,.35)!important;border-radius:6px;background:transparent;color:var(--forest,#173f34);font-size:12px;font-weight:600;cursor:pointer;transition:background .2s,border-color .2s}
+.ikr-login:hover{background:rgba(23,63,52,.06);border-color:var(--forest,#173f34)!important}
+.ikr-login.is-account span{max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.ikr-nav .ikr-btn.ikr-nav-cta{min-height:42px}
+.ikr-lang{gap:1px;padding:2px 3px 2px 7px;border-color:rgba(23,63,52,.14);background:transparent;color:#5b7068}
+.ikr-lang svg{margin-right:2px;opacity:.7}
+.ikr-lang button{font-size:10px;padding:2px 8px;min-height:20px;letter-spacing:.6px}
+@media (max-width:760px){
+  .ikr-nav-buttons{gap:8px}
+  .ikr-login{min-height:38px;padding:0 12px}
+  .ikr-lang button{padding:2px 7px}
+}
+/* Revisi 24 Okt (2) — satu baris sejajar logo & menu; target bahasa cukup besar. */
+.ikr-nav-actions{flex-direction:row;align-items:center;gap:12px}
+.ikr-lang{gap:2px;padding:3px 3px 3px 10px;border:1px solid rgba(23,63,52,.18);border-radius:999px;background:rgba(255,255,255,.6);color:#4d655c;min-height:42px;box-sizing:border-box}
+.ikr-lang svg{margin-right:4px;opacity:.75}
+.ikr-lang button{font-size:12px;font-weight:700;letter-spacing:.5px;min-width:40px;min-height:34px;padding:0 10px;border-radius:999px}
+.ikr-lang-menu{display:none}
+@media (max-width:760px){
+  .ikr-lang-header{display:none}
+  .ikr-nav nav .ikr-lang-menu{display:inline-flex;align-self:flex-start;margin-top:8px;padding:4px 4px 4px 12px;gap:8px}
+  .ikr-lang-menu button{min-width:56px;min-height:48px;font-size:14px}
+}
+.ikr-nav .ikr-login,.ikr-nav .ikr-login span{font-size:12px;font-weight:600;line-height:1}

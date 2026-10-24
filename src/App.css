@@ -2126,3 +2126,19 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .bottom-nav-icon-upload img,.bottom-nav-icon-preview{width:26px;height:26px;object-fit:contain;border:1px solid #dfe6e2;border-radius:6px;background:#fff;display:grid;place-items:center;color:#4d6159;padding:2px}
 .bottom-nav-icon-pick{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:5px;font-size:10px!important;padding:5px 9px!important;cursor:pointer;margin:0!important}
 .bottom-nav-icon-upload .text-button{font-size:10px}
+/* Revisi 24 Okt — preview Desktop template selebar kotak preview. */
+.fit-desktop{width:100%;min-width:0}
+.fit-desktop.is-full>.fit-desktop-inner{width:100%}
+.fit-desktop-inner>.wedding-site,.fit-desktop-inner>.desktop-column-stage{width:100%!important;max-width:none!important;margin:0!important;box-shadow:none}
+.template-dialog-actual-preview.live.device-desktop{padding:0}
+/* Revisi 24 Okt — sampul template tanpa gambar sample (seperti Create Template). */
+.template-cover-art{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:14px;text-align:center;color:#fff;background:linear-gradient(145deg,var(--template-accent,#125946),#102d25)}
+.template-cover-art small{font-size:9px;letter-spacing:2.5px;opacity:.85}
+.template-cover-art strong{font-family:'Playfair Display',Georgia,serif;font-size:26px;line-height:1.15;font-weight:600}
+.template-cover-art em{font-style:normal;font-size:12px;opacity:.9}
+.template-cover-art.compact strong{font-size:17px}
+.template-cover-art.compact small{font-size:7px}
+.template-cover-art.compact em{font-size:10px}
+.template-status-thumb,.upsell-thumb{position:relative;overflow:hidden}
+.template-status-thumb .thumb-empty{position:absolute;left:10px;bottom:10px;z-index:1}
+.actual-template-preview-shell.device-desktop .journey-preview-window{width:100%;height:100%;min-height:calc(100vh - 70px);border-radius:0;box-shadow:none}

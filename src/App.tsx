@@ -6920,15 +6920,17 @@ function TemplateJourneyPage({
             className={`actual-template-preview-shell device-${journeyDevice}`}
           >
             {template.canvasSections?.length ? (
-              <WeddingCanvas
-                page="pages"
-                sections={journeySections}
-                selectedTemplate={template}
-                greetings={[]}
-                addGreeting={() => undefined}
-                guests={[]}
-                addGuest={() => undefined}
-              />
+              <FitDesktop device={journeyDevice} sections={journeySections}>
+                <WeddingCanvas
+                  page="pages"
+                  sections={journeySections}
+                  selectedTemplate={template}
+                  greetings={[]}
+                  addGreeting={() => undefined}
+                  guests={[]}
+                  addGuest={() => undefined}
+                />
+              </FitDesktop>
             ) : (
               <div
                 className={`journey-preview-window preset-${template.preset || "classic"}`}
@@ -9337,6 +9339,7 @@ function useFitZoom(
   ref: React.RefObject<HTMLElement | null>,
   designWidth: number,
   enabled: boolean,
+  maxZoom = 4,
 ) {
   const [zoom, setZoom] = useState(1);
   useEffect(() => {
@@ -9350,14 +9353,14 @@ function useFitZoom(
       if (!available || !designWidth) return;
       // Selalu tepat selebar layar: diperkecil di layar sempit, diperbesar
       // di layar lebar — tidak ada ruang abu-abu di kiri-kanan.
-      const next = Math.min(4, Math.max(0.35, available / designWidth));
+      const next = Math.min(maxZoom, Math.max(0.35, available / designWidth));
       setZoom(Math.round(next * 1000) / 1000);
     };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [ref, designWidth, enabled]);
+  }, [ref, designWidth, enabled, maxZoom]);
   return zoom;
 }
 
@@ -9419,16 +9422,19 @@ const TemplateLivePreview = memo(function TemplateLivePreview({
     () => hydrateSections(template.canvasSections || []),
     [template.canvasSections],
   );
+  const device = useContext(DeviceContext);
   return template.canvasSections?.length ? (
-    <WeddingCanvas
-      page="pages"
-      sections={sections}
-      selectedTemplate={template}
-      greetings={[]}
-      addGreeting={noop}
-      guests={[]}
-      addGuest={noop}
-    />
+    <FitDesktop device={device} sections={sections}>
+      <WeddingCanvas
+        page="pages"
+        sections={sections}
+        selectedTemplate={template}
+        greetings={[]}
+        addGreeting={noop}
+        guests={[]}
+        addGuest={noop}
+      />
+    </FitDesktop>
   ) : (
     <WebsiteTemplatePreview
       template={template}
@@ -9438,6 +9444,70 @@ const TemplateLivePreview = memo(function TemplateLivePreview({
   );
 });
 const noop = () => undefined;
+
+/** Revisi 24 Okt — sampul template yang belum punya gambar sample: sama
+ *  dengan pratinjau saat Create Template (gradien warna aksen, kategori,
+ *  nama, harga), bukan foto contoh bawaan. */
+function TemplateCoverArt({
+  template,
+  compact = false,
+}: {
+  template: Pick<Template, "name" | "category" | "accent" | "price">;
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={`template-cover-art ${compact ? "compact" : ""}`}
+      style={{ "--template-accent": template.accent || "#125946" } as React.CSSProperties}
+      role="img"
+      aria-label={`Sampul ${template.name}`}
+    >
+      <small>{(template.category || "Wedding").toUpperCase()}</small>
+      <strong>{template.name}</strong>
+      <em>
+        {template.price ? formatRupiah(template.price) : "Harga menyusul"}
+      </em>
+    </div>
+  );
+}
+
+/** Revisi 24 Okt — preview Desktop template selebar layar (landing, Safe
+ *  Preview, review Approve). Tata letak Kolom/70-30 responsif, jadi dirender
+ *  apa adanya; desain penuh ditata pada DESKTOP_DESIGN_WIDTH lalu diskalakan
+ *  pas lebar kotak preview sehingga tidak ada ruang kosong kiri-kanan. */
+function FitDesktop({
+  device,
+  sections,
+  children,
+}: {
+  device: DeviceMode;
+  sections?: CanvasSection[];
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const column = usesDesktopColumn(sections || []);
+  const enabled = device === "desktop" && !column;
+  const zoom = useFitZoom(ref, DESKTOP_DESIGN_WIDTH, enabled, 4);
+  return (
+    <div ref={ref} className={`fit-desktop ${enabled ? "is-scaled" : "is-full"}`}>
+      <PreviewZoomContext value={enabled ? zoom : 1}>
+        <div
+          className="fit-desktop-inner"
+          style={
+            enabled
+              ? ({
+                  width: DESKTOP_DESIGN_WIDTH,
+                  zoom,
+                } as React.CSSProperties)
+              : undefined
+          }
+        >
+          {children}
+        </div>
+      </PreviewZoomContext>
+    </div>
+  );
+}
 
 function WebsiteTemplatePreview({
   template,
@@ -9797,6 +9867,15 @@ function Templates({
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
+  const [safePreviewDevice, setSafePreviewDevice] =
+    useState<DeviceMode>("desktop");
+  const safePreviewStageRef = useRef<HTMLDivElement | null>(null);
+  useScrollResetOnOpen(
+    safePreviewStageRef,
+    Boolean(previewTemplate),
+    previewTemplate?.id,
+    safePreviewDevice,
+  );
   const filtered = templateCatalog.filter(
     (template) =>
       (filter === "All" || template.category === filter) &&
@@ -10024,9 +10103,12 @@ function Templates({
                         ? {
                             backgroundImage: `url(${assetUrl(template.preview || template.sampleImage || "")})`,
                           }
-                        : { background: template.bg }
+                        : undefined
                     }
                   >
+                    {!(template.preview || template.sampleImage) && (
+                      <TemplateCoverArt template={template} compact />
+                    )}
                     {template.recommended && (
                       <em>
                         <Star size={11} /> Rekomendasi
@@ -10110,11 +10192,11 @@ function Templates({
             key={template.id}
           >
             <div
-              className="template-preview"
+              className={`template-preview ${template.preview ? "" : "no-sample"}`}
               style={{
                 background: template.preview
                   ? `linear-gradient(rgba(4,18,14,.18),rgba(4,18,14,.28)), url(${template.preview}) center/cover`
-                  : template.bg,
+                  : `linear-gradient(145deg, ${template.accent || "#125946"}, #102d25)`,
               }}
             >
               <div className="template-browser">
@@ -10126,7 +10208,9 @@ function Templates({
                 className="template-art"
                 style={{
                   color:
-                    template.preset === "cinematic" ? "#fff" : template.accent,
+                    template.preset === "cinematic" || !template.preview
+                      ? "#fff"
+                      : template.accent,
                 }}
               >
                 {template.preset === "cinematic" ? (
@@ -10205,23 +10289,53 @@ function Templates({
       )}
       {previewTemplate && (
         <div className="dialog-overlay template-quick-preview">
-          <div className="template-preview-dialog">
+          {/* Revisi 24 Okt — Safe Preview kini sama dengan Template Preview:
+              preview penuh yang bisa di-scroll, dengan pilihan Desktop/Mobile,
+              bukan cuplikan canvas pertama. */}
+          <div className="template-preview-dialog wide">
             <header>
               <div>
-                <span>SAFE PREVIEW</span>
+                <span>TEMPLATE PREVIEW</span>
                 <h2>{previewTemplate.name}</h2>
+                <small>
+                  {previewTemplate.category} ·{" "}
+                  {formatRupiah(previewTemplate.price || 0)}
+                </small>
               </div>
-              <button onClick={() => setPreviewTemplate(null)}>
-                <X size={18} />
-              </button>
+              <div className="preview-header-actions">
+                <div className="journey-device-switch">
+                  <button
+                    className={safePreviewDevice === "desktop" ? "active" : ""}
+                    onClick={() => setSafePreviewDevice("desktop")}
+                  >
+                    <Monitor size={15} /> Desktop
+                  </button>
+                  <button
+                    className={safePreviewDevice === "mobile" ? "active" : ""}
+                    onClick={() => setSafePreviewDevice("mobile")}
+                  >
+                    <Smartphone size={15} /> Mobile
+                  </button>
+                </div>
+                <button
+                  className="preview-close-btn"
+                  aria-label="Tutup preview"
+                  onClick={() => setPreviewTemplate(null)}
+                >
+                  <X size={18} />
+                </button>
+              </div>
             </header>
-            <div className="template-dialog-actual-preview">
-              <WebsiteTemplatePreview
-                template={previewTemplate}
-                title={previewTemplate.name}
-                sections={previewTemplate.canvasSections || []}
-              />
+            <DeviceContext value={safePreviewDevice}>
+            <PreviewSurfaceContext value={true}>
+            <div
+              ref={safePreviewStageRef}
+              className={`template-dialog-actual-preview live device-${safePreviewDevice}`}
+            >
+              <TemplateLivePreview template={previewTemplate} />
             </div>
+            </PreviewSurfaceContext>
+            </DeviceContext>
             <footer>
               <button
                 className="secondary-btn"
@@ -28154,14 +28268,17 @@ function TemplateApprovalManager({
                   ? {
                       backgroundImage: `url(${template.preview || template.sampleImage})`,
                     }
-                  : { background: template.bg }
+                  : undefined
               }
             >
               {!(template.preview || template.sampleImage) && (
-                <span className="thumb-empty">
-                  <ImageIcon size={18} />
-                  Belum ada thumbnail
-                </span>
+                <>
+                  <TemplateCoverArt template={template} />
+                  <span className="thumb-empty">
+                    <ImageIcon size={13} />
+                    Belum ada gambar sample
+                  </span>
+                </>
               )}
             </div>
             <div className="template-status-meta">

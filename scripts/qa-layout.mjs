@@ -315,6 +315,7 @@ const serverMjs = readFileSync(
   new URL("../server/index.mjs", import.meta.url),
   "utf8",
 );
+const landingCss = readFileSync(new URL("../src/components/LandingPage.css", import.meta.url), "utf8");
 const landingTsx = readFileSync(
   new URL("../src/components/LandingPage.tsx", import.meta.url),
   "utf8",
@@ -944,7 +945,8 @@ test("QC #2: preview penuh ringan — tanpa blur latar, canvas dimemo", () => {
   assert.match(appTsx, /const TemplateLivePreview = memo\(function TemplateLivePreview\(/);
   // Tidak ada lagi hydrateSections() langsung di JSX preview penuh.
   assert.doesNotMatch(appTsx, /sections=\{hydrateSections\((previewTemplate|preview|template)\.canvasSections\)\}/);
-  assert.equal((appTsx.match(/<TemplateLivePreview template=/g) || []).length, 2);
+  // Revisi 24 Okt: Safe Preview memakai preview penuh yang sama (3 dialog).
+  assert.equal((appTsx.match(/<TemplateLivePreview template=/g) || []).length, 3);
 });
 
 test("Serein: tata letak desktop Kolom — isi Mobile di kolom sempit, backdrop penuh", () => {
@@ -1081,7 +1083,7 @@ test("QA10 TC-239/242/243/244: live motion elemen, 70/30, video layer 1, preview
   // Revisi 21 Okt: selebar layar — Kolom/70-30 tanpa skala, desain penuh diskalakan.
   assert.match(appTsx, /const columnLayout = usesDesktopColumn\(sections\);/);
   assert.match(appTsx, /mode === "desktop" && !columnLayout,/);
-  assert.match(appTsx, /Math\.min\(4, Math\.max\(0\.35, available \/ designWidth\)\)/);
+  assert.match(appTsx, /Math\.min\(maxZoom, Math\.max\(0\.35, available \/ designWidth\)\)/);
   assert.match(appCss, /\.preview-full-stage\.desktop\.full-bleed \.preview-content\{width:100%!important;zoom:1/);
   // Pita putih Mobile: kontainer gulir tanpa padding vertikal.
   assert.match(appCss, /\.preview-full-stage\.mobile\{padding:0 22px\}/);
@@ -1091,7 +1093,7 @@ test("QA10 TC-239/242/243/244: live motion elemen, 70/30, video layer 1, preview
 test("QA10 TC-226/246: nama pengirim catatan internal, landing ID/EN", () => {
   assert.match(serverMjs, /sender_name, r\.name sender_role FROM messages m/);
   assert.match(appTsx, /className="cs-message-sender"/);
-  assert.match(landingTsx, /className="ikr-lang" role="group"/);
+  assert.match(landingTsx, /className={`ikr-lang \${variant}`} role="group"/);
   assert.match(landingTsx, /heroLines: \["A promise\.", "A story\.", "An invitation\."\]/);
 });
 
@@ -1135,4 +1137,23 @@ test("Revisi 22 Okt: ikon bottom navigation bisa diupload per menu", () => {
   assert.match(appTsx, /uploadToServer\(file, "nav-icon"\)/);
   assert.match(appTsx, /className="bottom-nav-img"/);
   assert.match(appTsx, /uploadIcon=\{uploadNavIcon\}/);
+});
+
+test("Revisi 24 Okt: header landing, preview template penuh, sampul tanpa gambar sample", () => {
+  // 1. Bahasa, Masuk, CTA satu baris sejajar logo & menu; di ponsel bahasa
+  //    pindah ke menu dengan target 48 px (web.dev: ±48 px, jarak 8 px).
+  assert.match(landingTsx, /\{langSwitch\("ikr-lang-header"\)\}/);
+  assert.match(landingTsx, /\{langSwitch\("ikr-lang-menu"\)\}/);
+  assert.match(landingCss, /\.ikr-lang button\{font-size:12px;font-weight:700;letter-spacing:\.5px;min-width:40px;min-height:34px;/);
+  assert.match(landingCss, /\.ikr-lang-menu button\{min-width:56px;min-height:48px;/);
+  // 2 & 4. Preview template (landing, Safe Preview, review) selebar kotak preview.
+  assert.match(appTsx, /function FitDesktop\(/);
+  assert.match(appTsx, /<FitDesktop device=\{journeyDevice\} sections=\{journeySections\}>/);
+  assert.match(appTsx, /<FitDesktop device=\{device\} sections=\{sections\}>/);
+  assert.match(appTsx, /ref=\{safePreviewStageRef\}/);
+  assert.doesNotMatch(appTsx, /<span>SAFE PREVIEW<\/span>/);
+  // 3. Gambar referensi hanya untuk template contoh; lainnya sampul aksen.
+  assert.match(serverMjs, /AND id IN \$\{builtins\} AND preset IN/);
+  assert.match(serverMjs, /SET \$\{column\}=NULL WHERE \$\{column\} IN \$\{refs\} AND id NOT IN \$\{builtins\}/);
+  assert.match(appTsx, /function TemplateCoverArt\(/);
 });
