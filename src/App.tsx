@@ -1474,6 +1474,9 @@ const defaultFeatureStyle = {
 // Desktop; `mobile` hanya berisi field yang sengaja dioverride untuk mobile.
 type DeviceMode = "desktop" | "mobile";
 const DeviceContext = createContext<DeviceMode>("desktop");
+/** Layar "Buka Undangan" di preview/live dirender memakai canvas yang sama
+ *  dengan editor; tombolnya membuka undangan lewat context ini. */
+const CoverOpenContext = createContext<(() => void) | null>(null);
 function resolveFeature(feature: Feature, device: DeviceMode): Feature {
   if (device !== "mobile" || !feature.mobile) return feature;
   const override = { ...feature.mobile } as Partial<Feature>;
@@ -18704,7 +18707,7 @@ function WeddingCanvasBody({
   }, [editable, soundFeature, hasCover, startSound]);
   // Di Canvas Editor disc backsound melayang di pojok kiri bawah dan menutupi
   // daftar section. Backsound tetap bisa diuji lewat Preview / Buka Undangan.
-  const soundNode = soundFeature && !editable ? (
+  const soundPlayer = soundFeature && !editable ? (
     <ControlledSoundPlayer
       feature={soundFeature}
       playing={soundPlaying}
@@ -18712,6 +18715,17 @@ function WeddingCanvasBody({
       contained={previewSurface}
     />
   ) : null;
+  // Revisi 27 Okt — di kotak preview player dulu sticky di dalam alur
+  // halaman, sehingga menambah ±90 px ruang kosong di bawah canvas terakhir
+  // (dan di bawah layar cover). Kini ditaruh di "dock" setinggi 0 px: tetap
+  // menempel di layar, tanpa menambah tinggi halaman.
+  const soundVpos = soundFeature?.soundVerticalAlign || "bottom";
+  const soundNode =
+    soundPlayer && previewSurface ? (
+      <div className={`sound-dock dock-${soundVpos}`}>{soundPlayer}</div>
+    ) : (
+      soundPlayer
+    );
 
   // QA TC-091: animasi berjalan saat scroll pada seluruh section, bukan hanya halaman opening.
   const revealRootRef = useRef<HTMLDivElement | null>(null);
@@ -18780,40 +18794,28 @@ function WeddingCanvasBody({
   }, [fixedBackdrop, opened, previewZoom]);
   if (page === "rsvp-page")
     return <RsvpPage guests={guests} addGuest={addGuest} />;
-  if (!editable && coverEntry && !opened) {
-    // QA TC-094: nama tamu diambil dari link personal (?to=), fallback ke entri pertama.
-    const invitee = guestName || coverEntry.section.invitees[0]?.name;
-    return (
-      <div
-        // device-* agar aturan Mobile (mis. skala ornamen) sama dengan canvas.
-        className={`wedding-site invitation-locked device-${device}`}
-        style={{ "--accent": selectedTemplate.accent } as React.CSSProperties}
-      >
-        <InvitationCover
-          section={coverEntry.section}
-          feature={coverEntry.feature}
-          inviteeName={invitee}
-          opening={opening}
-          onOpen={() => {
-            setOpening(true);
-            startSound();
-            window.setTimeout(
-              () => {
-                setOpened(true);
-                setOpening(false);
-              },
-              Math.max(
-                150,
-                resolveFeature(coverEntry.feature, device).coverExitDuration ??
-                  700,
-              ),
-            );
-          }}
-        />
-        {soundNode}
-      </div>
+  // Revisi 27 Okt — layar Buka Undangan = Canvas cover apa adanya. Dulu
+  // dirender oleh komponen terpisah (InvitationCover) dengan susunan sendiri:
+  // urutan lapisan, ukuran, dan posisi teks berbeda dari canvas editor (teks
+  // tertutup layer, kotak bisa digulir dan menampilkan ruang kosong). Kini
+  // canvas cover dirender oleh kode yang sama dengan editor, hanya tombolnya
+  // yang membuka undangan.
+  const lockedCover = !editable && Boolean(coverEntry) && !opened;
+  const coverExit = coverEntry
+    ? resolveFeature(coverEntry.feature, device)
+    : undefined;
+  const openCover = () => {
+    if (opening) return;
+    setOpening(true);
+    startSound();
+    window.setTimeout(
+      () => {
+        setOpened(true);
+        setOpening(false);
+      },
+      Math.max(150, coverExit?.coverExitDuration ?? 700),
     );
-  }
+  };
   const prepareSection = (rawSection: CanvasSection) =>
     fixedBackdrop
       ? withoutSharedBackdrop(
@@ -18867,9 +18869,22 @@ function WeddingCanvasBody({
   return (
     <div
       ref={revealRootRef}
-      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${showBottomNav ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}`}
-      style={{ "--accent": selectedTemplate.accent } as React.CSSProperties}
+      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${showBottomNav && !lockedCover ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}${lockedCover ? ` invitation-locked cover-as-canvas${opening ? ` cover-opening cover-exit-${coverExit?.coverExitEffect || "fade"}` : ""}` : ""}`}
+      style={
+        {
+          "--accent": selectedTemplate.accent,
+          ...(lockedCover
+            ? {
+                "--cover-exit-duration": `${coverExit?.coverExitDuration ?? 700}ms`,
+                "--cover-exit-easing": coverExit?.coverExitEasing || "ease",
+              }
+            : {}),
+        } as React.CSSProperties
+      }
     >
+      <CoverOpenContext value={lockedCover ? openCover : null}>
+      {soundVpos !== "bottom" && soundNode}
+      {!lockedCover && (
       <nav>
         <Brand />
         <div>
@@ -18879,6 +18894,7 @@ function WeddingCanvasBody({
           <a>RSVP</a>
         </div>
       </nav>
+      )}
       {fixedBackdrop && (
         <FixedBackdrop
           source={fixedBackdrop}
@@ -18886,6 +18902,8 @@ function WeddingCanvasBody({
         />
       )}
       {sections.map((rawSection) => {
+        if (lockedCover && rawSection.id !== coverEntry?.section.id)
+          return null;
         const section = prepareSection(rawSection);
         // QA TC-112: nilai section mengikuti device aktif (Desktop / Mobile).
         // QA TC-146: bila mode background global aktif, seluruh canvas memakai
@@ -18911,7 +18929,8 @@ function WeddingCanvasBody({
         // feature langsung dibuang, sehingga Web Designer yang mengunggah
         // desain utuh sebagai background melihat canvasnya hilang di Live
         // Preview dan di undangan publik.
-        const hasVisibleFeatures = liveSectionVisible(section, editable);
+        const hasVisibleFeatures =
+          lockedCover || liveSectionVisible(section, editable);
         if (!hasVisibleFeatures) return null;
         return (
           <section
@@ -18967,7 +18986,9 @@ function WeddingCanvasBody({
                 minHeight:
                   section.backgroundFollowAspect && section.backgroundAspect
                     ? 0
-                    : section.minHeight,
+                    : lockedCover
+                      ? `max(${section.minHeight}px, 100%)`
+                      : section.minHeight,
                 paddingTop:
                   section.layoutMode !== "standard" ? 0 : section.paddingY,
                 paddingBottom:
@@ -19202,7 +19223,18 @@ function WeddingCanvasBody({
                     )
                     .map(
                       (feature) =>
+                        // Layar cover: kolom yang memuat cover hanya
+                        // menampilkan cover; fitur lain di kolom itu tampil
+                        // setelah undangan dibuka (seperti sebelumnya).
+                        !(
+                          lockedCover &&
+                          feature.type !== "invitation-cover" &&
+                          column.features.some(
+                            (item) => item.type === "invitation-cover",
+                          )
+                        ) &&
                         (editable ||
+                          (lockedCover && feature.type === "invitation-cover") ||
                           (feature.type !== "invitation-cover" &&
                             feature.type !== "sound" &&
                             !isPinnedCredit(feature))) && (
@@ -19267,15 +19299,16 @@ function WeddingCanvasBody({
                   )),
               )}
             </div>
-            {section.id === lastVisibleSectionId && creditFooter}
+            {!lockedCover && section.id === lastVisibleSectionId && creditFooter}
           </section>
         );
       })}
-      {!editable && !lastVisibleSectionId && creditFooter}
-      {showBottomNav && bottomNav && (
+      {!editable && !lockedCover && !lastVisibleSectionId && creditFooter}
+      {showBottomNav && bottomNav && !lockedCover && (
         <BottomNavBar config={bottomNav} rootRef={revealRootRef} />
       )}
-      {soundNode}
+      {soundVpos === "bottom" && soundNode}
+      </CoverOpenContext>
     </div>
   );
 }
@@ -19373,390 +19406,6 @@ function SectionDecorations({
   );
 }
 
-function InvitationCover({
-  section: rawSection,
-  feature: rawFeature,
-  inviteeName,
-  onOpen,
-  opening = false,
-}: {
-  section: CanvasSection;
-  feature: Feature;
-  inviteeName?: string;
-  onOpen: () => void;
-  opening?: boolean;
-}) {
-  // Revisi 24 Okt — layar cover memakai versi device yang aktif, sama seperti
-  // FeatureBlock di editor. Dulu data mentah (versi Desktop) yang dipakai:
-  // pada tata letak Kolom / 70/30 isi undangan diedit sebagai Mobile, jadi
-  // editor menampilkan judul & background versi Mobile sementara Preview dan
-  // undangan live menampilkan nilai bawaan ("Chyntia & Rian", tanpa gambar).
-  const device = useContext(DeviceContext);
-  const section = resolveSection(rawSection, device);
-  const feature = resolveFeature(rawFeature, device);
-  const exitEffect = feature.coverExitEffect || "fade";
-  return (
-    <section
-      className={`invitation-cover-screen columns-${section.columns.length} ${opening ? `opening cover-exit-${exitEffect}` : ""}`}
-      style={
-        {
-          background: getGradientBackground(
-            section.backgroundGradientEnabled,
-            section.backgroundGradientFrom,
-            section.backgroundGradientTo,
-            section.backgroundGradientAngle,
-            section.backgroundColor,
-          ),
-          "--cover-exit-duration": `${feature.coverExitDuration ?? 700}ms`,
-          "--cover-exit-easing": feature.coverExitEasing || "ease",
-        } as React.CSSProperties
-      }
-    >
-      <div
-        className={`invitation-section-bg ${getBackgroundMotionClass(section.backgroundMotion)}`}
-        style={{
-          backgroundImage: section.backgroundUrl
-            ? `url(${assetUrl(section.backgroundUrl)})`
-            : undefined,
-          backgroundPosition: section.backgroundPosition,
-          backgroundRepeat: section.backgroundRepeat,
-          backgroundSize: "cover",
-          filter: getBackgroundFilter(section.backgroundEffect),
-        }}
-      />
-      <div
-        className={`invitation-cover-grid columns-${section.columns.length}`}
-      >
-        {/* TC-250 — layer & ornamen milik canvas cover. Dulu tidak dirender
-            di layar cover sama sekali: tampil di editor, hilang di preview.
-            Dalam konteks grid: di atas latar & overlay kolom, di bawah isi. */}
-        {(section.backgroundLayers || []).map((layer) => (
-          <div
-            key={layer.id}
-            className="background-extra-layer cover-extra-layer"
-            aria-hidden
-            style={{
-              backgroundImage: layer.url
-                ? `url(${assetUrl(layer.url)})`
-                : undefined,
-              backgroundSize: layer.size,
-              backgroundPosition: `${layer.offsetX ?? 50}% ${layer.offsetY ?? 50}%`,
-              backgroundRepeat: layer.repeat,
-              opacity: (layer.opacity ?? 100) / 100,
-              mixBlendMode:
-                (layer.blend as React.CSSProperties["mixBlendMode"]) ||
-                "normal",
-              transform:
-                layer.scale && layer.scale !== 100
-                  ? `scale(${layer.scale / 100})`
-                  : undefined,
-              ...layerBoxStyle(layer),
-              zIndex: 2,
-            }}
-          />
-        ))}
-        <SectionDecorations decorations={section.decorations} />
-        {section.columns.map((column, columnIndex) => {
-          const rawCover = column.features.find(
-            (item) => item.type === "invitation-cover",
-          );
-          const cover = rawCover ? resolveFeature(rawCover, device) : undefined;
-          const companions = column.features
-            .map((item) => resolveFeature(item, device))
-            .filter(
-              (item) =>
-                item.type !== "invitation-cover" &&
-                item.type !== "sound" &&
-                !(item.freePosition && item.positionScope === "canvas"),
-            );
-          const active = cover || (columnIndex === 0 ? feature : undefined);
-          return (
-            <div
-              className="invitation-cover-column"
-              key={column.id}
-              style={
-                active
-                  ? {
-                      background: getGradientBackground(
-                        active.backgroundGradientEnabled,
-                        active.backgroundGradientFrom,
-                        active.backgroundGradientTo,
-                        active.backgroundGradientAngle,
-                        active.backgroundColor,
-                      ),
-                    }
-                  : undefined
-              }
-            >
-              {active && (
-                <>
-                  <div
-                    className={`invitation-column-bg ${getBackgroundMotionClass(active.backgroundMotion)}`}
-                    style={{
-                      backgroundImage: active.mediaUrl
-                        ? `url(${active.mediaUrl})`
-                        : undefined,
-                      backgroundPosition: active.backgroundPosition || "center",
-                      backgroundRepeat: active.backgroundRepeat || "no-repeat",
-                      backgroundSize: active.backgroundSize || "cover",
-                      filter: getBackgroundFilter(active.backgroundEffect),
-                    }}
-                  />
-                  <div
-                    className="invitation-column-overlay"
-                    style={{ opacity: (active.overlayOpacity ?? 45) / 100 }}
-                  />
-                  <div
-                    className="cover-content"
-                    style={{
-                      ...getCoverContentObjectStyle(active),
-                      fontFamily: active.fontFamily,
-                      color: active.textColor,
-                      textAlign: active.align,
-                      alignItems: getCoverContentAlignment(active.align),
-                      justifyContent: getCoverVerticalJustify(
-                        active.coverVerticalAlign,
-                      ),
-                      padding: active.padding,
-                      marginTop: active.margin,
-                      marginBottom: active.margin,
-                      lineHeight: active.lineHeight,
-                      fontWeight: (active.bodyBold ?? active.bold) ? 700 : 400,
-                      fontStyle: active.italic ? "italic" : "normal",
-                      textDecoration: active.underline ? "underline" : "none",
-                    }}
-                  >
-                    {/* Warna per Elemen: Heading mewarnai judul + eyebrow,
-                        Supporting mewarnai label tamu, nama tamu, dan body.
-                        Tanpa ini seluruh teks cover terkunci ke textColor. */}
-                    <small
-                      data-custom-color={active.titleColor ? "true" : undefined}
-                      style={{
-                        ...(active.titleColor
-                          ? { color: active.titleColor }
-                          : {}),
-                        ...(active.eyebrowFontSize
-                          ? { fontSize: active.eyebrowFontSize }
-                          : {}),
-                      }}
-                    >
-                      {active.eyebrowText || "UNDANGAN PERNIKAHAN"}
-                    </small>
-                    <h1
-                      data-custom-color={active.titleColor ? "true" : undefined}
-                      style={{
-                        fontSize: Math.min(
-                          active.fontSize,
-                          section.columns.length > 1 ? 58 : 82,
-                        ),
-                        // TC-199 — .cover-content h1 mengunci line-height:1.05,
-                        // sehingga slider Line spacing tidak berefek di cover.
-                        lineHeight: active.lineHeight ?? undefined,
-                        ...(active.titleBold !== undefined
-                          ? { fontWeight: active.titleBold ? 700 : 400 }
-                          : {}),
-                        ...(active.titleColor
-                          ? { color: active.titleColor }
-                          : {}),
-                      }}
-                    >
-                      {active.title}
-                    </h1>
-                    <p
-                      data-custom-color={active.bodyColor ? "true" : undefined}
-                      style={{
-                        ...(active.bodyColor ? { color: active.bodyColor } : {}),
-                        ...(active.guestLabelFontSize
-                          ? { fontSize: active.guestLabelFontSize }
-                          : {}),
-                      }}
-                    >
-                      {active.guestLabelText ||
-                        "Kepada Yth. Bapak/Ibu/Saudara/i"}
-                    </p>
-                    <strong
-                      data-custom-color={active.bodyColor ? "true" : undefined}
-                      style={{
-                        ...(active.bodyColor ? { color: active.bodyColor } : {}),
-                        ...(active.guestNameFontSize
-                          ? { fontSize: active.guestNameFontSize }
-                          : {}),
-                      }}
-                    >
-                      {inviteeName || active.guestNameText || "Tamu Terhormat"}
-                    </strong>
-                    <span
-                      data-custom-color={active.bodyColor ? "true" : undefined}
-                      style={{
-                        ...(active.bodyColor ? { color: active.bodyColor } : {}),
-                        // WYSIWYG: editor memakai bodyFontSize lewat
-                        // editableText(), live sebelumnya tidak sama sekali.
-                        ...(active.bodyFontSize
-                          ? { fontSize: active.bodyFontSize }
-                          : {}),
-                      }}
-                    >
-                      {active.body ||
-                        "Dengan penuh kebahagiaan kami mengundang Anda"}
-                    </span>
-                    {/* TC-118 lanjutan — di editor cover dirender lewat
-                        FeatureBlock, yang memasang blok Heading 2 /
-                        Supporting Text 2. Di live & preview cover dirender
-                        oleh komponen ini, dan dulu kedua teks itu tidak ada
-                        sama sekali: terlihat saat mengedit, hilang saat
-                        dipreview. */}
-                    {(active.showTitle2 || active.showBody2) && (
-                      <div className="secondary-text-stack cover-secondary">
-                        {active.showTitle2 && (
-                          <div
-                            className="editable-title editable-title-2"
-                            data-custom-color={
-                              active.title2Color ? "true" : undefined
-                            }
-                            style={{
-                              whiteSpace: "pre-wrap",
-                              ...(active.title2FontSize
-                                ? { fontSize: active.title2FontSize }
-                                : {}),
-                              ...(active.title2Color
-                                ? { color: active.title2Color }
-                                : {}),
-                            }}
-                          >
-                            {active.title2}
-                          </div>
-                        )}
-                        {active.showBody2 && (
-                          <div
-                            className="editable-body editable-body-2"
-                            data-custom-color={
-                              active.body2Color ? "true" : undefined
-                            }
-                            style={{
-                              whiteSpace: "pre-wrap",
-                              ...(active.body2FontSize
-                                ? { fontSize: active.body2FontSize }
-                                : {}),
-                              ...(active.body2Color
-                                ? { color: active.body2Color }
-                                : {}),
-                            }}
-                          >
-                            {active.body2}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {active.coverButtonMode === "slide" ? (
-                      <SlideToOpen
-                        label={active.buttonLabel || "Buka Undangan"}
-                        style={coverButtonStyle(active)}
-                        onOpen={onOpen}
-                      />
-                    ) : (
-                    <button
-                      className={`cover-open-button icon-${active.coverIconPosition || "left"}`}
-                      onClick={onOpen}
-                      style={coverButtonStyle(active)}
-                    >
-                      {active.coverIconPosition === "top" && (
-                        <CoverIconGlyph
-                          name={active.coverIcon}
-                          size={active.coverIconSize}
-                        />
-                      )}{" "}
-                      {active.coverIconPosition !== "top" &&
-                        active.coverIconPosition !== "right" && (
-                          <CoverIconGlyph
-                            name={active.coverIcon}
-                            size={active.coverIconSize}
-                          />
-                        )}
-                      <span>{active.buttonLabel || "Buka Undangan"}</span>
-                      {active.coverIconPosition === "right" && (
-                        <CoverIconGlyph
-                          name={active.coverIcon}
-                          size={active.coverIconSize}
-                        />
-                      )}
-                    </button>
-                    )}
-                    <em>
-                      *Mohon maaf jika terdapat kesalahan dalam penulisan nama &
-                      gelar
-                    </em>
-                  </div>
-                </>
-              )}
-              {!active && (
-                <div className="cover-companion">
-                  <small>OUR WEDDING STORY</small>
-                  {companions.map((item) => (
-                    <div key={item.id}>
-                      <FeatureIcon type={item.type} />
-                      <strong>{item.title}</strong>
-                      <p>{item.body}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {active && companions.length > 0 && (
-                <div className="cover-companion-floating">
-                  {companions.slice(0, 2).map((item) => (
-                    <div key={item.id}>
-                      <FeatureIcon type={item.type} />
-                      <span>{item.title}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div
-        className="canvas-decoration-layer"
-        aria-hidden="true"
-        style={{ pointerEvents: "none" }}
-      >
-        {section.columns.flatMap((column) =>
-          column.features
-            .filter(
-              (item) =>
-                item.freePosition &&
-                item.positionScope === "canvas" &&
-                [
-                  "image",
-                  "icon",
-                  "text",
-                  "heading",
-                  "spacer",
-                  "divider",
-                ].includes(item.type),
-            )
-            .map((item) => (
-              <FeatureBlock
-                key={item.id}
-                feature={item}
-                editable={false}
-                selected={false}
-                onSelect={() => {}}
-                onUpdate={() => {}}
-                greetings={[]}
-                addGreeting={() => {}}
-                guests={[]}
-                addGuest={() => {}}
-                canvasId={section.id}
-              />
-            )),
-        )}
-      </div>
-      <div className="cover-orb one" />
-      <div className="cover-orb two" />
-    </section>
-  );
-}
-
 function FeatureBlock({
   feature: rawFeature,
   editable,
@@ -19787,6 +19436,7 @@ function FeatureBlock({
   inviteeName?: string;
   canvasId: string;
 }) {
+  const coverOpen = useContext(CoverOpenContext);
   // QA TC-112: pada mode Mobile, nilai yang dipakai adalah override mobile.
   const device = useContext(DeviceContext);
   const feature = resolveFeature(rawFeature, device);
@@ -20164,12 +19814,27 @@ function FeatureBlock({
               {inviteeName || feature.guestNameText || "Tamu Terhormat"}
             </strong>
             {editableText("body", "editable-body")}
+            {feature.coverButtonMode === "slide" && !editable ? (
+              <SlideToOpen
+                label={feature.buttonLabel || "Buka Undangan"}
+                style={coverButtonStyle(feature)}
+                onOpen={() => coverOpen?.()}
+              />
+            ) : (
             <button
               type="button"
               className={`cover-open-button icon-${feature.coverIconPosition || "left"}${feature.coverButtonMode === "slide" ? " is-slide-preview" : ""}`}
               // TC-253 — sama persis dengan button di preview & undangan live
               // (bentuk outline/ghost/underline dulu diabaikan di editor).
               style={coverButtonStyle(feature)}
+              onClick={
+                editable
+                  ? undefined
+                  : (event) => {
+                      event.stopPropagation();
+                      coverOpen?.();
+                    }
+              }
             >
               {feature.coverIconPosition === "top" && (
                 <CoverIconGlyph
@@ -20202,6 +19867,7 @@ function FeatureBlock({
                 />
               )}
             </button>
+            )}
           </div>
         </div>
       )}

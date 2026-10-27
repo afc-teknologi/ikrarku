@@ -2266,3 +2266,38 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .editor-top-left{min-width:0}
 .doc-name{min-width:0;max-width:300px}
 .doc-title-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Revisi 27 Okt — layar Buka Undangan = canvas cover apa adanya (lihat
+   WeddingCanvasBody, lockedCover). Kotaknya setinggi layar/preview, canvas
+   cover minimal setinggi kotak itu sehingga tidak ada ruang kosong. */
+.wedding-site.cover-as-canvas{overflow-x:hidden;overflow-y:auto;scrollbar-width:none}
+.wedding-site.cover-as-canvas::-webkit-scrollbar{display:none}
+.wedding-site.cover-as-canvas>.canvas-section{box-sizing:border-box}
+.cover-as-canvas.cover-opening>.canvas-section{animation:coverCanvasFade var(--cover-exit-duration,700ms) var(--cover-exit-easing,ease) both;pointer-events:none}
+.cover-as-canvas.cover-opening.cover-exit-slide-up>.canvas-section{animation-name:coverCanvasUp}
+.cover-as-canvas.cover-opening.cover-exit-slide-down>.canvas-section{animation-name:coverCanvasDown}
+.cover-as-canvas.cover-opening.cover-exit-slide-left>.canvas-section{animation-name:coverCanvasLeft}
+.cover-as-canvas.cover-opening.cover-exit-slide-right>.canvas-section{animation-name:coverCanvasRight}
+.cover-as-canvas.cover-opening.cover-exit-zoom>.canvas-section{animation-name:coverCanvasZoom}
+.cover-as-canvas.cover-opening.cover-exit-dissolve>.canvas-section{animation-name:coverCanvasDissolve}
+.cover-as-canvas.cover-opening.cover-exit-curtain>.canvas-section,.cover-as-canvas.cover-opening.cover-exit-split>.canvas-section{animation-name:coverCanvasCurtain}
+@keyframes coverCanvasFade{to{opacity:0}}
+@keyframes coverCanvasUp{to{transform:translateY(-100%);opacity:.2}}
+@keyframes coverCanvasDown{to{transform:translateY(100%);opacity:.2}}
+@keyframes coverCanvasLeft{to{transform:translateX(-100%);opacity:.2}}
+@keyframes coverCanvasRight{to{transform:translateX(100%);opacity:.2}}
+@keyframes coverCanvasZoom{to{transform:scale(1.15);opacity:0}}
+@keyframes coverCanvasDissolve{to{opacity:0;filter:blur(8px)}}
+@keyframes coverCanvasCurtain{to{clip-path:inset(0 50% 0 50%)}}
+/* Revisi 27 Okt — dock player musik di kotak preview: tinggi 0 px agar tidak
+   menambah ruang kosong di bawah canvas terakhir / layar cover. */
+.sound-dock{position:sticky;left:0;right:0;height:0;z-index:20;pointer-events:none}
+.sound-dock.dock-bottom{bottom:0}
+.sound-dock.dock-top,.sound-dock.dock-center{top:0}
+.sound-dock>.fixed-sound-disc.is-contained{position:absolute!important;margin:0!important;pointer-events:auto;left:var(--sound-offset-x,22px);right:auto;top:auto;bottom:var(--sound-offset-y,22px);transform:none}
+.sound-dock.dock-top>.fixed-sound-disc.is-contained{top:var(--sound-offset-y,22px);bottom:auto}
+.sound-dock.dock-center>.fixed-sound-disc.is-contained{top:calc(var(--site-viewport-h,100vh) / 2);bottom:auto;transform:translateY(-50%)}
+.sound-dock>.fixed-sound-disc.is-contained.sound-pos-right{left:auto;right:var(--sound-offset-x,22px)}
+.sound-dock>.fixed-sound-disc.is-contained.sound-pos-center{left:50%;transform:translateX(-50%)}
+.sound-dock.dock-center>.fixed-sound-disc.is-contained.sound-pos-center{transform:translate(-50%,-50%)}
+/* Garis bantu cover hanya untuk editor, tidak tampil di preview/live. */
+.cover-as-canvas .cover-feature-editor{border-color:transparent!important}

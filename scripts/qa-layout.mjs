@@ -130,8 +130,8 @@ test("Warna per Elemen Buka Undangan tidak dikunci !important", () => {
         false,
         `${selector} masih memaksa color:inherit!important`,
       );
-  assert.match(appTsx, /active\.titleColor\s*\?\s*\{\s*color:\s*active\.titleColor/);
-  assert.match(appTsx, /active\.bodyColor\s*\?\s*\{\s*color:\s*active\.bodyColor/);
+  // Revisi 27 Okt — layar cover memakai renderer editor (FeatureBlock).
+  assert.match(appTsx, /feature\.titleColor \? \{ color: feature\.titleColor \} : \{\}/);
 });
 
 test("Ornamen pojok tetap di atas semua background layer, di bawah konten", () => {
@@ -239,10 +239,7 @@ test("TC-193 ukuran eyebrow / label tamu / nama tamu bisa diatur", () => {
   ])
     assert.match(appTsx, new RegExp(`${field}\\?: number`), `${field} belum ada`);
   // Dipasang di renderer live DAN editor, supaya WYSIWYG.
-  assert.match(appTsx, /active\.eyebrowFontSize\s*\?\s*\{ fontSize: active\.eyebrowFontSize \}/);
   assert.match(appTsx, /feature\.eyebrowFontSize\s*\n?\s*\?\s*\{ fontSize: feature\.eyebrowFontSize \}/);
-  // Live sebelumnya tidak memakai bodyFontSize sama sekali.
-  assert.match(appTsx, /active\.bodyFontSize\s*\n?\s*\?\s*\{ fontSize: active\.bodyFontSize \}/);
 });
 
 test("TC-194 upload background memberi konfirmasi dan bisa dihapus", () => {
@@ -281,8 +278,6 @@ test("TC-199 Line spacing tahan terhadap desain lama tanpa lineHeight", () => {
     "pembacaan lineHeight kembali tanpa pengaman",
   );
   assert.match(appTsx, /lineHeight: feature\.lineHeight \?\? defaultFeatureStyle\.lineHeight/);
-  // Cover mengunci line-height:1.05 di CSS, jadi nilainya dipasang inline.
-  assert.match(appTsx, /lineHeight: active\.lineHeight \?\? undefined/);
 });
 
 test("TC-200 durasi siklus tidak menghapus efek background", () => {
@@ -510,27 +505,10 @@ test("Retest-2b: tinggi kotak preview mengikuti tinggi canvas, bukan rasio tetap
 });
 
 test("Retest-3: Heading 2 & Supporting Text 2 ikut dirender cover live", () => {
-  // Di editor cover lewat FeatureBlock (punya secondaryTexts); di live &
-  // preview lewat InvitationCover, yang dulu tidak merender keduanya.
-  const cover = appTsx.slice(
-    appTsx.indexOf("function InvitationCover({"),
-    appTsx.indexOf("function FeatureBlock({"),
-  );
-  assert.ok(cover.length > 0, "InvitationCover tidak ditemukan");
-  assert.match(cover, /active\.showTitle2 \|\| active\.showBody2/);
-  assert.match(cover, /\{active\.title2\}/);
-  assert.match(cover, /\{active\.body2\}/);
-  // Ukuran & warna per-elemen harus sama dengan jalur editor.
-  for (const field of [
-    "title2FontSize",
-    "body2FontSize",
-    "title2Color",
-    "body2Color",
-  ])
-    assert.ok(cover.includes(field), `cover live tidak memakai ${field}`);
-  // Kelasnya sama dengan editor supaya tampilannya tidak berbeda.
-  assert.match(cover, /editable-title editable-title-2/);
-  assert.match(cover, /editable-body editable-body-2/);
+  // Revisi 27 Okt — layar cover live/preview kini dirender oleh FeatureBlock
+  // yang sama dengan editor; renderer terpisah (InvitationCover) dihapus.
+  assert.equal(appTsx.includes("function InvitationCover({"), false);
+  assert.match(appTsx, /\(lockedCover && feature\.type === "invitation-cover"\)/);
 });
 
 test("Retest-4: Animasi Layer Background benar-benar menggerakkan layer", () => {
@@ -1067,7 +1045,7 @@ test("QA10 TC-235/237/240/241: live streaming, button slide, alamat kado, gift r
   assert.match(appTsx, /function liveStreamInfo\(/);
   assert.match(appTsx, /https:\/\/www\.youtube\.com\/embed\//);
   assert.match(appTsx, /coverButtonMode\?: "click" \| "slide";/);
-  assert.match(appTsx, /active\.coverButtonMode === "slide" \? \(\n\s*<SlideToOpen/);
+  assert.match(appTsx, /feature\.coverButtonMode === "slide" && !editable \? \(\n\s*<SlideToOpen/);
   assert.match(appTsx, /function GiftAddressCard\(/);
   assert.match(appTsx, /<GiftReveal feature=\{feature\} editable=\{editable\} \/>/);
   assert.match(appTsx, /feature\.giftRevealLabel \|\| "Lihat Rekening"/);
@@ -1198,10 +1176,10 @@ test("Revisi 24 Okt: kartu desain publik tanpa label CMS dan canvas memenuhi kar
 });
 
 test("Revisi 24 Okt: layar Buka Undangan memakai versi device aktif (editor = preview)", () => {
-  assert.match(appTsx, /function InvitationCover\(\{\n\s*section: rawSection,\n\s*feature: rawFeature,/);
-  assert.match(appTsx, /const section = resolveSection\(rawSection, device\);\n\s*const feature = resolveFeature\(rawFeature, device\);/);
-  assert.match(appTsx, /const cover = rawCover \? resolveFeature\(rawCover, device\) : undefined;/);
-  assert.match(appTsx, /\.map\(\(item\) => resolveFeature\(item, device\)\)/);
+  // Canvas cover dirender lewat prepareSection (resolveSection per device)
+  // dan FeatureBlock (resolveFeature per device), sama dengan editor.
+  assert.match(appTsx, /const lockedCover = !editable && Boolean\(coverEntry\) && !opened;/);
+  assert.match(appTsx, /if \(lockedCover && rawSection\.id !== coverEntry\?\.section\.id\)/);
 });
 
 // ---- QA 26 Okt (TC-247..TC-277) ----
@@ -1219,9 +1197,12 @@ test("TC-249: gaya header & supporting text sisi 70%", () => {
     assert.ok(appTsx.includes(`first.${key}`), key);
 });
 test("TC-250: layar cover merender ornamen & layer canvasnya", () => {
-  assert.match(appTsx, /className="background-extra-layer cover-extra-layer"/);
-  assert.equal((appTsx.match(/<SectionDecorations decorations=\{section\.decorations\} \/>/g) || []).length, 2);
-  assert.match(appTsx, /className=\{`wedding-site invitation-locked device-\$\{device\}`\}/);
+  // Layar cover = canvas cover apa adanya: ornamen, layer, urutan lapisan,
+  // dan tombol sama dengan editor; tombolnya membuka undangan.
+  assert.match(appTsx, /const CoverOpenContext = createContext<\(\(\) => void\) \| null>\(null\);/);
+  assert.match(appTsx, /<CoverOpenContext value=\{lockedCover \? openCover : null\}>/);
+  assert.match(appTsx, /invitation-locked cover-as-canvas/);
+  assert.match(appTsx, /\? `max\(\$\{section\.minHeight\}px, 100%\)`/);
 });
 test("TC-252: ornamen tengah dipusatkan dengan left:50%", () => {
   assert.match(appTsx, /"--deco-w": `\$\{decoration\.size\}px`/);
@@ -1243,7 +1224,7 @@ test("TC-256/268: padding, margin, dan transparansi dalam bingkai layer", () => 
   assert.match(appTsx, /function layerBoxStyle\(layer: BackgroundLayer\)/);
   assert.match(appTsx, /\["padX", "Padding horizontal", 0, 200\]/);
   assert.match(appTsx, /Transparansi dalam bingkai<b>/);
-  assert.equal((appTsx.match(/\.\.\.layerBoxStyle\(layer\)/g) || []).length, 3);
+  assert.equal((appTsx.match(/\.\.\.layerBoxStyle\(layer\)/g) || []).length, 2);
 });
 test("TC-257/258/262: padding 0 sampai pojok & tempel antar fitur", () => {
   assert.match(appTsx, /\(section\.paddingX \?\? 32\) === 0 \? " pad-x-0" : ""/);
@@ -1267,7 +1248,7 @@ test("TC-265..267: font, ukuran, latar kolom ucapan", () => {
   assert.match(appTsx, /Font kolom ucapan/);
 });
 test("TC-269/273: credit dirender di dalam section terakhir", () => {
-  assert.match(appTsx, /\{section\.id === lastVisibleSectionId && creditFooter\}/);
+  assert.match(appTsx, /\{!lockedCover && section\.id === lastVisibleSectionId && creditFooter\}/);
   assert.match(appTsx, /function liveSectionVisible\(section: CanvasSection, editable: boolean\)/);
 });
 test("TC-270: pembungkus preview Mobile memakai overflow:clip", () => {
@@ -1284,4 +1265,9 @@ test("TC-274..276: titik peletakan & bold terpisah", () => {
 test("TC-277: bagikan template + link langsung", () => {
   assert.match(appTsx, /\/templates\?t=\$\{encodeURIComponent\(template\.id\)\}/);
   assert.match(appTsx, /const sharedTemplateId = initialSearchParams\.get\("t"\);/);
+});
+
+test("Revisi 27 Okt: player musik preview tidak menambah ruang kosong", () => {
+  assert.match(appTsx, /<div className=\{`sound-dock dock-\$\{soundVpos\}`\}>\{soundPlayer\}<\/div>/);
+  assert.match(appCss, /\.sound-dock\{position:sticky;left:0;right:0;height:0;/);
 });
