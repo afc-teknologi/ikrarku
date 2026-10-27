@@ -1779,8 +1779,8 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .desktop-column{position:relative;z-index:1;width:min(var(--desktop-column-w,430px),100%);margin-inline:auto;box-shadow:0 0 70px rgba(0,0,0,.38)}
 .desktop-column-stage.align-right>.desktop-column{margin-inline:auto 7%}
 .desktop-column-stage.align-left>.desktop-column{margin-inline:7% auto}
-.desktop-column>.wedding-site{width:100%;min-height:var(--site-viewport-h,100vh);margin:0;box-shadow:none}
-.desktop-column>.wedding-site.invitation-locked{height:var(--site-viewport-h,100vh)}
+.desktop-column-inner>.wedding-site{width:100%;min-height:var(--site-viewport-h,100vh);margin:0;box-shadow:none}
+.desktop-column-inner>.wedding-site.invitation-locked{height:var(--site-viewport-h,100vh)}
 .actual-template-preview-shell.device-desktop>.desktop-column-stage,
 .template-dialog-actual-preview.live.device-desktop>.desktop-column-stage{width:min(var(--design-width,1050px),100%);margin-inline:auto}
 .desktop-layout-panel{margin:10px 14px 0;border:1px solid #e3e8e5;border-radius:10px;padding:9px 11px;background:#fafcfb;display:grid;gap:8px}
@@ -2189,3 +2189,80 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 /* Revisi 24 Okt — pratinjau canvas di kartu publik memenuhi kartu, tanpa bilah CMS. */
 .actual-design-preview.is-bare{height:100%;background:#0f1f1a!important}
 .actual-design-preview.is-bare .actual-render-viewport{flex:1;min-height:0;overflow:hidden;position:relative}
+/* QA 26 Okt — TC-252: ornamen "atas/bawah tengah" dipusatkan dengan left:50%
+   + margin negatif setengah lebarnya. Dulu left:0;right:0;margin-inline:auto,
+   yang gagal begitu ornamen lebih lebar dari kolom (mis. kolom Mobile 390 px):
+   margin auto jatuh ke 0 dan ornamen menjorok ke kanan. */
+.section-decoration.corner-top-center,.section-decoration.corner-bottom-center{left:50%;right:auto;margin-inline:0;margin-left:calc(var(--deco-w,120px) / -2)}
+/* TC-269 / TC-273 — credit "paling bawah" kini di dalam section terakhir,
+   di atas background & layer section itu (layer maks z-index 3). */
+.canvas-section>.site-credit-footer{z-index:5}
+/* TC-270 — preview Mobile (dialog Preview template di akun Administrator):
+   pembungkus 390 px memakai overflow:hidden untuk sudut membulat. hidden
+   membuat kotak gulir sendiri, sehingga lapisan sticky Background tetap
+   menempel ke pembungkus itu — bukan ke area yang digulir — dan ikut
+   tergulung habis. clip memotong sama persis tanpa membuat kotak gulir. */
+.template-dialog-actual-preview.live.device-mobile>*,.actual-template-preview-shell.device-mobile{overflow:clip}
+/* TC-248 — kolom lebar tetap (px) rata kiri/kanan menempel ke pojok layar,
+   tidak lagi menggantung 7% dan menyisakan background utama di sisi luar. */
+.desktop-column-stage{--col-gap:0px}
+.desktop-column-stage.align-right>.desktop-column{margin-inline:auto 0}
+.desktop-column-stage.align-left>.desktop-column{margin-inline:0 auto}
+.desktop-side-style{display:flex;flex-direction:column;gap:8px;margin:6px 0 10px;padding:10px;border:1px solid var(--line);border-radius:9px;background:#fafcfb}
+.desktop-side-style-head{font-size:9px;font-weight:700;color:#205444;margin-top:2px}
+/* TC-257 / TC-258 — padding canvas 0 px benar-benar sampai pojok. Dulu jarak
+   luar fitur (margin 8 px) dan bingkai fitur media (padding 12 px) tetap
+   tersisa sehingga selalu ada "space kecil". */
+.canvas-section.pad-y-0 .canvas-column>.feature-block:not(.feature-block~.feature-block){margin-top:0!important}
+.canvas-section.pad-y-0 .canvas-column>.feature-block:not(:has(~.feature-block)){margin-bottom:0!important}
+.canvas-section.pad-y-0 .canvas-column>:is(.feature-image,.feature-video,.feature-gallery):not(.feature-block~.feature-block){padding-top:0!important}
+.canvas-section.pad-y-0 .canvas-column>:is(.feature-image,.feature-video,.feature-gallery):not(:has(~.feature-block)){padding-bottom:0!important}
+.canvas-section.pad-x-0 .canvas-column>:is(.feature-image,.feature-video,.feature-gallery){padding-left:0!important;padding-right:0!important}
+.canvas-section.pad-x-0 .canvas-columns{column-gap:0}
+.canvas-section.pad-y-0 .canvas-column{min-height:0}
+/* TC-262 — fitur ditempel atas-bawah tanpa jarak. */
+.canvas-section.stack-features .canvas-column>.feature-block{margin-top:0!important;margin-bottom:0!important}
+/* TC-260 — ubah nama template dari editor. */
+.doc-title-row{display:flex;align-items:center;gap:6px}
+.doc-rename-btn{border:1px solid var(--line);background:#fff;border-radius:6px;width:22px;height:22px;display:grid;place-items:center;color:#285e4f;padding:0}
+.doc-rename-btn:hover{background:#e8f1ed}
+.doc-rename{display:flex;align-items:center;gap:4px}
+.doc-rename input{height:26px;border:1px solid #8db5a6;border-radius:6px;padding:0 8px;font-size:11px;font-weight:700;width:200px}
+.doc-rename button{width:26px;height:26px;border:1px solid var(--line);border-radius:6px;background:#fff;display:grid;place-items:center;color:#285e4f;padding:0}
+/* TC-264 — teks Lihat Rekening rata tengah: [ikon][teks][penyeimbang]. */
+.gift-reveal-button{display:inline-grid!important;grid-template-columns:14px auto 14px;align-items:center;justify-items:center;column-gap:8px;text-align:center}
+.gift-reveal-button .gift-reveal-balance{display:block;width:14px;height:14px}
+.gift-reveal-button .gift-reveal-label{line-height:1.2}
+/* TC-275 / TC-276 — bold header terpisah dari teks biasa. */
+.feature-block.has-title-weight :is([class*="editable-title"],.greetings-heading strong,.love-story-item strong,.location-feature h3,.countdown-feature h3,.cover-feature-editor h1,.cover-content h1){font-weight:var(--title-weight)!important}
+.toolbar-row button.bold-split{width:auto;padding:0 9px;display:inline-flex;gap:4px;align-items:center}
+.toolbar-row button.bold-split small{font-size:8px;font-weight:600}
+/* TC-265..267 — kolom ucapan Greetings: font, ukuran teks, latar kotak. */
+.greetings-widget.has-greet-font :is(form,form input,form textarea,form button,.greeting-list,.greeting-list strong,.greeting-list p,.greeting-list small,.greeting-empty,.greeting-count){font-family:var(--greet-font)!important}
+.greetings-widget.has-greet-size :is(form input,form textarea,.greeting-list strong,.greeting-list p,.greeting-empty,.greeting-count){font-size:var(--greet-size)!important}
+.greetings-widget.has-greet-size .greeting-list small{font-size:calc(var(--greet-size) * .8)!important}
+.greetings-widget.has-greet-box :is(form,.greeting-empty){background:var(--greet-box)!important}
+/* TC-274 — titik peletakan fitur: atas (default), tengah, bawah canvas. */
+.canvas-section:has(>.canvas-columns>.canvas-column>.feature-block:is(.place-center,.place-bottom)){display:flex;flex-direction:column}
+.canvas-section:has(>.canvas-columns>.canvas-column>.feature-block:is(.place-center,.place-bottom))>.canvas-columns{flex:1 1 auto}
+.canvas-column:has(>.feature-block.place-center){display:flex;flex-direction:column;justify-content:center}
+.canvas-column:has(>.feature-block.place-bottom){display:flex;flex-direction:column;justify-content:flex-end}
+.placement-row button{width:auto;flex:1}
+.placement-row button small{font-size:8px;font-weight:600}
+/* TC-277 — tombol bagikan template di halaman detail. */
+.journey-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+/* TC-272 — di canvas editor, fitur yang disembunyikan untuk device yang
+   sedang diedit tetap terlihat (transparan + label), bukan hilang total.
+   Dulu display:none membuat fitur yang sudah dimasukkan "tidak muncul" dan
+   tidak bisa dipilih. Preview & undangan live tetap menyembunyikannya. */
+@container (min-width:561px){
+  .canvas-frame .feature-block.designer-hide-desktop{display:block!important;opacity:.4;outline:1px dashed #b4533f;outline-offset:2px}
+  .canvas-frame .feature-block.designer-hide-desktop::after{content:"Disembunyikan di Desktop";position:absolute;top:2px;left:2px;z-index:31;background:#b4533f;color:#fff;font-size:7px;padding:2px 6px;border-radius:4px;pointer-events:none}
+}
+@container (max-width:560px){
+  .canvas-frame .feature-block.designer-hide-mobile{display:block!important;opacity:.4;outline:1px dashed #b4533f;outline-offset:2px}
+  .canvas-frame .feature-block.designer-hide-mobile::after{content:"Disembunyikan di Mobile";position:absolute;top:2px;left:2px;z-index:31;background:#b4533f;color:#fff;font-size:7px;padding:2px 6px;border-radius:4px;pointer-events:none}
+}
+.editor-top-left{min-width:0}
+.doc-name{min-width:0;max-width:300px}
+.doc-title-text{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

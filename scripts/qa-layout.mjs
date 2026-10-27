@@ -257,7 +257,7 @@ test("TC-194 upload background memberi konfirmasi dan bisa dihapus", () => {
 test("TC-197 Background Utama canvas digambar di atas background global", () => {
   assert.match(
     appTsx,
-    /backgroundLayers: \[\s*\n\s*\.\.\.\(source\.backgroundLayers \|\| \[\]\),\s*\n\s*\.\.\.\(section\.backgroundLayers \|\| \[\]\),/,
+    /backgroundLayers: \[\s*\n\s*\.\.\.\(source\.backgroundLayers \|\| \[\]\)\.filter\(\s*\n\s*\(layer\) => layer\.inFixedBackdrop === true,\s*\n\s*\),\s*\n\s*\.\.\.\(section\.backgroundLayers \|\| \[\]\),/,
   );
 });
 
@@ -647,7 +647,7 @@ test("Retest-7: background global tidak menimpa animasi layer milik canvas", () 
   // ini berhak punya animasinya sendiri.
   assert.match(
     fn,
-    /backgroundLayers: \[\n\s*\.\.\.\(source\.backgroundLayers \|\| \[\]\),\n\s*\.\.\.\(section\.backgroundLayers \|\| \[\]\),\n\s*\]/,
+    /backgroundLayers: \[\n\s*\.\.\.\(source\.backgroundLayers \|\| \[\]\)\.filter\(\n\s*\(layer\) => layer\.inFixedBackdrop === true,\n\s*\),\n\s*\.\.\.\(section\.backgroundLayers \|\| \[\]\),\n\s*\]/,
   );
 });
 
@@ -843,7 +843,7 @@ test("TC-197: Background tetap memakai satu lapisan sticky, bukan attachment:fix
   // Section tidak melukis ulang background bersama.
   assert.match(appTsx, /\? withoutSharedBackdrop\(\n\s*resolveSection\(rawSection, device\),/);
   // Layer Canvas 1 sudah masuk backdrop; tidak boleh tampil dua kali.
-  assert.match(appTsx, /backgroundLayers: isSource \? \[\] : section\.backgroundLayers,/);
+  assert.match(appTsx, /backgroundLayers: isSource\n\s*\? \(section\.backgroundLayers \|\| \[\]\)\.filter\(\n\s*\(layer\) => layer\.inFixedBackdrop !== true,\n\s*\)\n\s*: section\.backgroundLayers,/);
   assert.match(appCss, /\.site-fixed-backdrop\{position:sticky;top:0;/);
   // overflow:hidden bawaan .wedding-site mematahkan sticky. Terukur: dengan
   // hidden backdrop tergulir -440 px; dengan clip menempel di 0 px.
@@ -1202,4 +1202,86 @@ test("Revisi 24 Okt: layar Buka Undangan memakai versi device aktif (editor = pr
   assert.match(appTsx, /const section = resolveSection\(rawSection, device\);\n\s*const feature = resolveFeature\(rawFeature, device\);/);
   assert.match(appTsx, /const cover = rawCover \? resolveFeature\(rawCover, device\) : undefined;/);
   assert.match(appTsx, /\.map\(\(item\) => resolveFeature\(item, device\)\)/);
+});
+
+// ---- QA 26 Okt (TC-247..TC-277) ----
+test("TC-247/251/261: kolom 70/30 ditata selebar Mobile lalu diskalakan", () => {
+  assert.match(appTsx, /const columnZoom = useFitZoom\(columnRef, MOBILE_PREVIEW_WIDTH, column\);/);
+  assert.match(appTsx, /className="desktop-column-inner"[\s\S]{0,200}width: MOBILE_PREVIEW_WIDTH,\n\s*zoom: columnZoom,/);
+  assert.match(appTsx, /<PreviewZoomContext value=\{previewZoom \* columnZoom\}>/);
+  assert.match(appCss, /\.desktop-column-inner>\.wedding-site\{width:100%;/);
+});
+test("TC-248: kolom lebar tetap menempel ke pojok", () => {
+  assert.match(appCss, /\.desktop-column-stage\{--col-gap:0px\}\n\.desktop-column-stage\.align-right>\.desktop-column\{margin-inline:auto 0\}/);
+});
+test("TC-249: gaya header & supporting text sisi 70%", () => {
+  for (const key of ["desktopSideTitleFont", "desktopSideTitleSize", "desktopSideTitleColor", "desktopSideBodyFont", "desktopSideBodySize", "desktopSideBodyColor"])
+    assert.ok(appTsx.includes(`first.${key}`), key);
+});
+test("TC-250: layar cover merender ornamen & layer canvasnya", () => {
+  assert.match(appTsx, /className="background-extra-layer cover-extra-layer"/);
+  assert.equal((appTsx.match(/<SectionDecorations decorations=\{section\.decorations\} \/>/g) || []).length, 2);
+  assert.match(appTsx, /className=\{`wedding-site invitation-locked device-\$\{device\}`\}/);
+});
+test("TC-252: ornamen tengah dipusatkan dengan left:50%", () => {
+  assert.match(appTsx, /"--deco-w": `\$\{decoration\.size\}px`/);
+  assert.match(appCss, /corner-top-center,\.section-decoration\.corner-bottom-center\{left:50%;right:auto;margin-inline:0;margin-left:calc\(var\(--deco-w,120px\) \/ -2\)\}/);
+});
+test("TC-253: ukuran teks button Buka Undangan, editor = live", () => {
+  assert.match(appTsx, /fontSize: feature\.coverButtonFontSize \?\? 12,/);
+  assert.match(appTsx, /style=\{coverButtonStyle\(feature\)\}/);
+});
+test("TC-254: layer Canvas 1 ikut Background tetap hanya bila dipilih", () => {
+  assert.match(appTsx, /\.filter\(\(layer\) => layer\.inFixedBackdrop === true\)/);
+  assert.match(appTsx, /aria-label="Ikut Background tetap"/);
+});
+test("TC-255: duplikat canvas memberi id baru & tidak menggandakan layer backdrop", () => {
+  assert.match(appTsx, /!\(fixedSource && layer\.inFixedBackdrop === true\)/);
+  assert.match(appTsx, /id: uid\("bglayer"\)/);
+});
+test("TC-256/268: padding, margin, dan transparansi dalam bingkai layer", () => {
+  assert.match(appTsx, /function layerBoxStyle\(layer: BackgroundLayer\)/);
+  assert.match(appTsx, /\["padX", "Padding horizontal", 0, 200\]/);
+  assert.match(appTsx, /Transparansi dalam bingkai<b>/);
+  assert.equal((appTsx.match(/\.\.\.layerBoxStyle\(layer\)/g) || []).length, 3);
+});
+test("TC-257/258/262: padding 0 sampai pojok & tempel antar fitur", () => {
+  assert.match(appTsx, /\(section\.paddingX \?\? 32\) === 0 \? " pad-x-0" : ""/);
+  assert.match(appCss, /\.canvas-section\.pad-y-0 \.canvas-column>\.feature-block:not\(\.feature-block~\.feature-block\)\{margin-top:0!important\}/);
+  assert.match(appCss, /\.canvas-section\.stack-features \.canvas-column>\.feature-block\{margin-top:0!important;margin-bottom:0!important\}/);
+});
+test("TC-259: header kecil Save The Date bisa dihapus/custom", () => {
+  assert.match(appTsx, /\{feature\.countdownEyebrow \?\? "SAVE THE DATE"\}/);
+  assert.match(appTsx, /countdownEyebrowHidden: !feature\.countdownEyebrowHidden/);
+});
+test("TC-260: tombol ubah nama template", () => {
+  assert.match(appTsx, /aria-label="Ubah nama template"/);
+  assert.match(appTsx, /setSiteTitle\(next\);/);
+});
+test("TC-263/264: jarak & teks tengah tombol Lihat Rekening", () => {
+  assert.match(appTsx, /style=\{\{ marginTop: feature\.giftRevealGap \?\? 18 \}\}/);
+  assert.match(appCss, /\.gift-reveal-button\{display:inline-grid!important;grid-template-columns:14px auto 14px;/);
+});
+test("TC-265..267: font, ukuran, latar kolom ucapan", () => {
+  assert.match(appCss, /\.greetings-widget\.has-greet-box :is\(form,\.greeting-empty\)\{background:var\(--greet-box\)!important\}/);
+  assert.match(appTsx, /Font kolom ucapan/);
+});
+test("TC-269/273: credit dirender di dalam section terakhir", () => {
+  assert.match(appTsx, /\{section\.id === lastVisibleSectionId && creditFooter\}/);
+  assert.match(appTsx, /function liveSectionVisible\(section: CanvasSection, editable: boolean\)/);
+});
+test("TC-270: pembungkus preview Mobile memakai overflow:clip", () => {
+  assert.match(appCss, /\.template-dialog-actual-preview\.live\.device-mobile>\*,\.actual-template-preview-shell\.device-mobile\{overflow:clip\}/);
+});
+test("TC-272: fitur tersembunyi tetap terlihat di canvas editor", () => {
+  assert.match(appCss, /\.canvas-frame \.feature-block\.designer-hide-mobile\{display:block!important;opacity:\.4;/);
+});
+test("TC-274..276: titik peletakan & bold terpisah", () => {
+  assert.match(appCss, /\.canvas-column:has\(>\.feature-block\.place-center\)\{display:flex;flex-direction:column;justify-content:center\}/);
+  assert.match(appTsx, /aria-label="Bold header"/);
+  assert.match(appCss, /\.feature-block\.has-title-weight :is\(\[class\*="editable-title"\],\.greetings-heading strong/);
+});
+test("TC-277: bagikan template + link langsung", () => {
+  assert.match(appTsx, /\/templates\?t=\$\{encodeURIComponent\(template\.id\)\}/);
+  assert.match(appTsx, /const sharedTemplateId = initialSearchParams\.get\("t"\);/);
 });
