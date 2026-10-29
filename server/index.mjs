@@ -4565,6 +4565,107 @@ app.post("/api/webhooks/mayar", async (req, res) => {
     res.status(error.status || 500).json({ error: error.message });
   }
 });
+
+// Revisi 29 Okt — customer sudah membayar di Mayar tetapi status order tetap
+// "Menunggu pembayaran". Webhook bisa tidak pernah datang (URL webhook belum
+// didaftarkan di dashboard Mayar, token tidak sama, server sedang restart),
+// jadi status juga dicek AKTIF ke Mayar lewat GET /invoice/{id}:
+//   - tombol "Cek status pembayaran" di My Order;
+//   - otomatis setiap kali My Order dibuka / customer kembali dari Mayar;
+//   - rekonsiliasi berkala di server untuk order Mayar yang masih pending.
+// Hanya status "paid" dari Mayar + nominal yang sama yang memenuhi order.
+const MAYAR_PAID_STATUSES = new Set(["paid", "settled", "success", "completed"]);
+async function checkMayarPayment(order) {
+  if (order.payment_status === "Paid") return { status: "Paid", changed: false };
+  const key = process.env.MAYAR_API_KEY;
+  if (process.env.PAYMENT_MODE !== "mayar" || !key || !order.gateway_ref)
+    return { status: order.payment_status, changed: false, reason: "no-invoice" };
+  const base = (
+    process.env.MAYAR_API_BASE || "https://api.mayar.id/hl/v1"
+  ).replace(/\/$/, "");
+  let response;
+  try {
+    response = await fetch(
+      `${base}/invoice/${encodeURIComponent(order.gateway_ref)}`,
+      {
+        headers: { Authorization: `Bearer ${key}` },
+        signal: AbortSignal.timeout(Number(process.env.MAYAR_TIMEOUT_MS || 15000)),
+      },
+    );
+  } catch (error) {
+    console.warn(
+      `[mayar] cek status tidak menjawab · order=${order.order_no} · ${error.name}`,
+    );
+    return { status: order.payment_status, changed: false, reason: "unreachable" };
+  }
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    console.warn(
+      `[mayar] cek status GAGAL · order=${order.order_no} · HTTP ${response.status}`,
+    );
+    return { status: order.payment_status, changed: false, reason: `http-${response.status}` };
+  }
+  const invoice = data?.data || {};
+  const invoiceStatus = String(invoice.status || "").toLowerCase();
+  if (!MAYAR_PAID_STATUSES.has(invoiceStatus))
+    return { status: order.payment_status, changed: false, gatewayStatus: invoiceStatus || "unknown" };
+  const paidAmount = Number(invoice.amount);
+  if (Number.isFinite(paidAmount) && paidAmount !== Number(order.amount)) {
+    console.warn(
+      `[mayar] cek status: nominal tidak sama · order=${order.order_no} · invoice=${paidAmount} · order=${order.amount}`,
+    );
+    return { status: order.payment_status, changed: false, reason: "amount-mismatch" };
+  }
+  await fulfillPaidOrder(order, order.payment_method || "MAYAR");
+  auditLog(null, "order.paid.reconciled", "order", order.id, { via: "mayar-invoice-status" });
+  return { status: "Paid", changed: true };
+}
+app.post(
+  "/api/orders/:id/check-payment",
+  rateLimit("payment-check", 30, 60000),
+  async (req, res) => {
+    const order = db
+      .prepare("SELECT * FROM orders WHERE id=? OR order_no=?")
+      .get(req.params.id, req.params.id);
+    if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+    const viewer = optionalUser(req);
+    if (
+      !(viewer && (order.user_id === viewer.id || hasPermission(viewer, "*"))) &&
+      (!order.guest_token || req.body?.guestToken !== order.guest_token)
+    )
+      return res.status(403).json({ error: "Order tidak dapat diakses" });
+    try {
+      const result = await checkMayarPayment(order);
+      res.json({ ok: true, ...result });
+    } catch (error) {
+      res
+        .status(error.status || 500)
+        .json({ error: error.message || "Gagal mengecek pembayaran." });
+    }
+  },
+);
+let mayarReconcileRunning = false;
+async function reconcileMayarOrders() {
+  if (mayarReconcileRunning || process.env.PAYMENT_MODE !== "mayar") return;
+  mayarReconcileRunning = true;
+  try {
+    const since = new Date(Date.now() - 3 * 24 * 3600_000).toISOString();
+    const pending = db
+      .prepare(
+        "SELECT * FROM orders WHERE payment_status<>'Paid' AND gateway_ref IS NOT NULL AND created_at>=? ORDER BY created_at DESC LIMIT 25",
+      )
+      .all(since);
+    for (const order of pending) {
+      try {
+        await checkMayarPayment(order);
+      } catch (error) {
+        console.warn(`[mayar] rekonsiliasi gagal · order=${order.order_no} · ${error.message}`);
+      }
+    }
+  } finally {
+    mayarReconcileRunning = false;
+  }
+}
 app.get("/api/me/orders", auth, (req, res) => {
   const rows = db
     .prepare(
@@ -5554,6 +5655,12 @@ app.use((err, _req, res, _next) => {
 });
 drainEditorQueue();
 retryPendingEmails();
+// Jaring pengaman bila webhook Mayar tidak datang: cek order pending berkala.
+setInterval(
+  () => reconcileMayarOrders().catch(() => {}),
+  Math.max(30_000, Number(process.env.MAYAR_RECONCILE_MS || 120_000)),
+).unref();
+setTimeout(() => reconcileMayarOrders().catch(() => {}), 15_000).unref();
 app.listen(PORT, () =>
   console.log(`ikrarku v0.15 API listening on http://localhost:${PORT}`),
 );

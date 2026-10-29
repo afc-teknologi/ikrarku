@@ -347,6 +347,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ paymentMethod, guestToken }),
     }),
+  // Cek status invoice langsung ke Mayar (jaring pengaman bila webhook tidak datang).
+  checkPayment: (id: string, guestToken?: string) =>
+    request<{ ok: boolean; status: string; changed: boolean; reason?: string; gatewayStatus?: string }>(
+      `/orders/${encodeURIComponent(id)}/check-payment`,
+      { method: "POST", body: JSON.stringify({ guestToken }) },
+    ),
   order: (id: string) => request<any>(`/orders/${id}`),
   myOrders: () => request<any[]>("/me/orders"),
   // MoM A6 — CS/Admin membuatkan akun customer dari order lunas.

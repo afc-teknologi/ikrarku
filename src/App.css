@@ -2358,3 +2358,11 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .event-item-editor-actions{display:flex;gap:4px}
 .event-item-editor-actions button{border:0;background:none;color:#7d8a85;padding:2px}
 .event-items-editor .secondary-btn{margin-top:6px}
+/* 29 Okt — catatan order belum dibayar + cek status Mayar */
+.order-pay-note{margin:14px 0 4px;padding:12px 14px;border:1px solid #f0dfbf;background:#fdf8ee;border-radius:12px;color:#5d4a26;font-size:13px;line-height:1.5}
+.order-pay-note p{margin:0 0 6px}
+.order-pay-note p:last-of-type{margin-bottom:10px}
+.order-pay-note p:only-child{margin:0}
+.order-pay-note strong{color:#3f3216}
+.order-check-payment{display:inline-flex;align-items:center;gap:6px;border:1px solid #125946;background:#125946;color:#fff;border-radius:9px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}
+.order-check-payment:disabled{opacity:.65;cursor:wait}

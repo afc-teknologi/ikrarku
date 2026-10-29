@@ -124,6 +124,7 @@ import {
   WalletCards,
   ClipboardList,
   ReceiptText,
+  RefreshCw,
   CheckCircle,
   KeyRound,
   Headphones,
@@ -3121,7 +3122,11 @@ function App() {
                 : fallbackView;
             // Membuka root berarti pengunjung memang ingin landing page,
             // jadi view tersimpan tidak dipulihkan di sana.
-            if (pathSlug)
+            if (pathSlug === "pembayaran-berhasil")
+              // Kembali dari halaman Mayar: tampilkan My Order, yang langsung
+              // mengecek status pembayaran ke Mayar.
+              setView(mappedRole === "User" ? "my-orders" : protectedView);
+            else if (pathSlug)
               setView((previous) =>
                 previous === "landing" ? protectedView : previous,
               );
@@ -5610,7 +5615,18 @@ function App() {
           />
         )}
         {view === "my-orders" && (
-          <MyOrdersPage orders={myOrders} setView={setView} />
+          <MyOrdersPage
+            orders={myOrders}
+            setView={setView}
+            onReload={async () => {
+              try {
+                setMyOrders(await api.myOrders());
+              } catch {
+                /* biarkan data lama */
+              }
+            }}
+            flash={flash}
+          />
         )}
         {view === "invitee-management" && (
           <div className="page">
@@ -24213,10 +24229,81 @@ function CustomerServiceDatabase({
 function MyOrdersPage({
   orders,
   setView,
+  onReload,
+  flash,
 }: {
   orders: any[];
   setView: (view: View) => void;
+  onReload?: () => Promise<void>;
+  flash?: (message: string) => void;
 }) {
+  // Revisi 29 Okt — status dibayar di Mayar tidak berubah otomatis bila
+  // webhook tidak datang. Order pending yang sudah punya invoice Mayar dicek
+  // langsung ke Mayar: saat halaman dibuka, tiap 20 detik selama masih ada
+  // yang pending (maks. 15 menit), saat tab kembali aktif, dan lewat tombol.
+  const [checkingId, setCheckingId] = useState("");
+  const pendingInvoiceIds = orders
+    .filter((order) => order.payment_status !== "Paid" && order.gateway_ref)
+    .map((order) => order.id)
+    .join(",");
+  const reloadRef = useRef(onReload);
+  reloadRef.current = onReload;
+  useEffect(() => {
+    if (!pendingInvoiceIds) return;
+    const ids = pendingInvoiceIds.split(",");
+    let stopped = false;
+    const startedAt = Date.now();
+    const run = async () => {
+      if (stopped || document.hidden) return;
+      let changed = false;
+      for (const orderId of ids) {
+        try {
+          const result = await api.checkPayment(orderId);
+          if (result.changed || result.status === "Paid") changed = true;
+        } catch {
+          /* dicoba lagi pada putaran berikutnya */
+        }
+      }
+      if (changed && !stopped) await reloadRef.current?.();
+    };
+    run();
+    const timer = window.setInterval(() => {
+      if (Date.now() - startedAt > 15 * 60_000) window.clearInterval(timer);
+      else run();
+    }, 20_000);
+    const onVisible = () => {
+      if (!document.hidden) run();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [pendingInvoiceIds]);
+  const checkNow = async (order: any) => {
+    setCheckingId(order.id);
+    try {
+      const result = await api.checkPayment(order.id);
+      if (result.status === "Paid") {
+        flash?.("Pembayaran diterima. Order Anda sedang diproses.");
+        await onReload?.();
+      } else if (result.reason === "no-invoice")
+        flash?.(
+          "Order ini belum punya tagihan Mayar. Lanjutkan pembayaran dari halaman checkout atau hubungi support.",
+        );
+      else
+        flash?.(
+          "Pembayaran belum terkonfirmasi oleh Mayar. Bila baru saja membayar, tunggu 1–2 menit lalu cek lagi.",
+        );
+    } catch (error) {
+      flash?.(
+        error instanceof Error ? error.message : "Gagal mengecek pembayaran.",
+      );
+    } finally {
+      setCheckingId("");
+    }
+  };
   if (!orders.length)
     return (
       <div className="page">
@@ -24376,6 +24463,41 @@ function MyOrdersPage({
                 <dd>{formatRupiah(order.amount)}</dd>
               </div>
             </dl>
+            {!paid && (
+              <div className="order-pay-note">
+                {Number(order.amount) > 0 ? (
+                  <>
+                    <p>
+                      <strong>Belum dibayar?</strong> Silakan cek email{" "}
+                      <b>{order.email}</b> (termasuk folder Spam/Promosi) untuk
+                      tagihan dari Mayar, lalu selesaikan pembayaran lewat
+                      link di email tersebut.
+                    </p>
+                    <p>
+                      <strong>Sudah bayar?</strong> Status diperbarui otomatis
+                      dalam beberapa menit. Klik tombol di bawah untuk mengecek
+                      sekarang.
+                    </p>
+                    <button
+                      type="button"
+                      className="order-check-payment"
+                      disabled={checkingId === order.id}
+                      onClick={() => checkNow(order)}
+                    >
+                      <RefreshCw size={14} />
+                      {checkingId === order.id
+                        ? "Mengecek pembayaran…"
+                        : "Cek status pembayaran"}
+                    </button>
+                  </>
+                ) : (
+                  <p>
+                    <strong>Harga template belum ditetapkan.</strong> Order ini
+                    belum bisa dibayar. Hubungi support ikrarku lewat Live Chat.
+                  </p>
+                )}
+              </div>
+            )}
             <div className="project-timeline">
               {(order.tasks || []).map((task: any, index: number) => (
                 <div

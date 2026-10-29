@@ -1297,8 +1297,15 @@ test("TC-157: diskusi internal per tiket CS & Web Designer", () => {
 });
 test("TC-073: SMTP port 465 otomatis TLS, email tertahan dikirim ulang", () => {
   assert.match(serverMjs, /secure: port === 465 \|\| String\(process\.env\.SMTP_SECURE\) === "true"/);
-  assert.match(serverMjs, /retryPendingEmails\(\);\napp\.listen/);
+  assert.match(serverMjs, /retryPendingEmails\(\);\n[\s\S]{0,500}app\.listen/);
 });
 test("TC-270: preview Mobile dialog tanpa padding vertikal", () => {
   assert.match(appCss, /\.template-dialog-actual-preview\.live\.device-mobile\{padding-top:0;padding-bottom:0\}/);
+});
+test("Mayar: status bayar dicek aktif bila webhook tidak datang", () => {
+  assert.match(serverMjs, /fetch\(\s*`\$\{base\}\/invoice\/\$\{encodeURIComponent\(order\.gateway_ref\)\}`/);
+  assert.match(serverMjs, /app\.post\(\s*"\/api\/orders\/:id\/check-payment"/);
+  assert.match(serverMjs, /setInterval\(\s*\(\) => reconcileMayarOrders\(\)/);
+  assert.match(appTsx, /Belum dibayar\?<\/strong> Silakan cek email/);
+  assert.match(appTsx, /Cek status pembayaran/);
 });
