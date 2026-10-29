@@ -1258,7 +1258,7 @@ test("TC-272: fitur tersembunyi tetap terlihat di canvas editor", () => {
   assert.match(appCss, /\.canvas-frame \.feature-block\.designer-hide-mobile\{display:block!important;opacity:\.4;/);
 });
 test("TC-274..276: titik peletakan & bold terpisah", () => {
-  assert.match(appCss, /\.canvas-column:has\(>\.feature-block\.place-center\)\{display:flex;flex-direction:column;justify-content:center\}/);
+  assert.match(appCss, /\.canvas-column>\.feature-block\.place-center\{margin-top:auto!important;margin-bottom:auto!important\}/);
   assert.match(appTsx, /aria-label="Bold header"/);
   assert.match(appCss, /\.feature-block\.has-title-weight :is\(\[class\*="editable-title"\],\.greetings-heading strong/);
 });
@@ -1270,4 +1270,35 @@ test("TC-277: bagikan template + link langsung", () => {
 test("Revisi 27 Okt: player musik preview tidak menambah ruang kosong", () => {
   assert.match(appTsx, /<div className=\{`sound-dock dock-\$\{soundVpos\}`\}>\{soundPlayer\}<\/div>/);
   assert.match(appCss, /\.sound-dock\{position:sticky;left:0;right:0;height:0;/);
+});
+
+test("Revisi 27 Okt: revisi template live terlihat menunggu approval & bisa di-approve dari kartu", () => {
+  assert.match(appTsx, /Revisi menunggu approval/);
+  assert.match(appTsx, /void onReviewRevision\(template\.id, "Approved"\)/);
+  assert.match(appTsx, /Revisi disimpan dan menunggu approval Administrator\./);
+});
+
+// ---- QA 29 Okt (UPDATE_QA_IKRARKU.ID_12) ----
+test("Revisi 29 Okt: payload Mayar dinormalkan (HP, deskripsi, nominal)", () => {
+  assert.match(serverMjs, /if \(digits\.startsWith\("62"\)\) digits = "0" \+ digits\.slice\(2\);/);
+  assert.match(serverMjs, /Harga template ini belum ditetapkan, jadi belum bisa dibayar/);
+  assert.match(serverMjs, /Mayar menolak pembayaran \(HTTP \$\{response\.status\}\): \$\{reason\}/);
+  assert.match(appTsx, /className="checkout-pay-error" role="alert"/);
+});
+test("Revisi 29 Okt: daftar acara Akad & Resepsi pada fitur Event", () => {
+  assert.match(appTsx, /function EventItemsList\(/);
+  assert.match(appTsx, /Isi contoh Akad & Resepsi/);
+  assert.match(appCss, /\.event-items\.layout-columns\{display:grid;/);
+});
+test("TC-157: diskusi internal per tiket CS & Web Designer", () => {
+  assert.match(serverMjs, /app\.get\("\/api\/tasks\/:id\/notes"/);
+  assert.match(serverMjs, /app\.post\("\/api\/tasks\/:id\/notes"/);
+  assert.match(appTsx, /\{task\.order_id && <TaskDiscussion taskId=\{task\.id\} \/>\}/);
+});
+test("TC-073: SMTP port 465 otomatis TLS, email tertahan dikirim ulang", () => {
+  assert.match(serverMjs, /secure: port === 465 \|\| String\(process\.env\.SMTP_SECURE\) === "true"/);
+  assert.match(serverMjs, /retryPendingEmails\(\);\napp\.listen/);
+});
+test("TC-270: preview Mobile dialog tanpa padding vertikal", () => {
+  assert.match(appCss, /\.template-dialog-actual-preview\.live\.device-mobile\{padding-top:0;padding-bottom:0\}/);
 });

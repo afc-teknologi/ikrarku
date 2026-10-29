@@ -26,6 +26,7 @@ import {
   Radio,
   Wallet,
   Anchor,
+  ArrowUp,
   Share2,
   Rows3,
   CalendarDays,
@@ -299,6 +300,18 @@ type SocialIconName =
   | "camera"
   | "star";
 // TC-108 / TC-127: layer background tambahan di atas background utama.
+/** Revisi 29 Okt — satu acara dalam fitur Event (mis. Akad Nikah, Resepsi). */
+type EventItem = {
+  id: string;
+  name: string;
+  dateText?: string;
+  timeText?: string;
+  venue?: string;
+  address?: string;
+  mapUrl?: string;
+  /** Tanggal & jam untuk tombol Simpan Tanggal (datetime-local). */
+  datetime?: string;
+};
 type BackgroundLayer = {
   id: string;
   url?: string;
@@ -562,6 +575,11 @@ type Feature = DesignerLayout & {
   greetingsPerPage?: number;
   eventMapUrl?: string; // TC-086
   eventButtonLabel?: string; // TC-086
+  /** Revisi 29 Okt — daftar acara (Akad, Resepsi, …) dalam satu fitur Event. */
+  eventItems?: EventItem[];
+  eventLayout?: "stack" | "columns";
+  eventDivider?: "dashed" | "solid" | "none";
+  eventItemTitleSize?: number;
   giftAccounts?: GiftAccount[]; // TC-088
   soundPersist?: boolean; // TC-089
   icons?: IconItem[]; // TC-095
@@ -4852,7 +4870,9 @@ function App() {
       setSelectedTemplate({ ...updated, canvasSections: cleanSections });
       setSaved(true);
       flash(
-        updated.pendingReview || updated.status === "Pending"
+        updated.pendingReview && updated.status !== "Pending"
+          ? "Revisi disimpan dan menunggu approval Administrator. Landing page masih menampilkan versi live sampai revisi disetujui."
+          : updated.pendingReview || updated.status === "Pending"
           ? "Draft template disimpan. Approval tetap Pending."
           : "Template berhasil disimpan.",
       );
@@ -4960,7 +4980,9 @@ function App() {
       setView("payment-success");
       return true;
     } catch (error) {
-      flash(error instanceof Error ? error.message : "Pembayaran gagal.");
+      lastPaymentError =
+        error instanceof Error ? error.message : "Pembayaran gagal.";
+      flash(lastPaymentError);
       return false;
     }
   };
@@ -5508,6 +5530,9 @@ function App() {
             onToggleRecommended={toggleTemplateRecommended}
             onSetPrice={
               hasPermission("templates.approve") ? setTemplatePrice : undefined
+            }
+            onReviewRevision={
+              hasPermission("templates.approve") ? approveTemplate : undefined
             }
             onEditTemplate={openTemplateCanvas}
             canvasOrders={canvasOrderOptions}
@@ -7130,6 +7155,7 @@ function CheckoutPage({
   const [phone, setPhone] = useState(String(draft.phone || ""));
   const [method, setMethod] = useState(paymentMethods[0]?.code || "");
   const [working, setWorking] = useState(false);
+  const [payError, setPayError] = useState("");
   useEffect(() => {
     sessionStorage.setItem(
       "ikrarku-checkout-draft",
@@ -7331,13 +7357,26 @@ function CheckoutPage({
                 disabled={!method || working}
                 onClick={async () => {
                   setWorking(true);
-                  await payOrder(method);
+                  setPayError("");
+                  const ok = await payOrder(method);
+                  if (!ok)
+                    setPayError(
+                      lastPaymentError ||
+                        "Pembayaran belum bisa diproses. Coba lagi beberapa saat.",
+                    );
                   setWorking(false);
                 }}
               >
                 {working ? "Memproses pembayaran..." : "Lanjutkan Pembayaran"}
                 <CheckCircle size={16} />
               </button>
+              {/* Revisi 29 Okt — alasan gagal bayar dari gateway tampil tetap,
+                  bukan hanya toast 2 detik, agar mudah dilaporkan. */}
+              {payError && (
+                <div className="checkout-pay-error" role="alert">
+                  {payError}
+                </div>
+              )}
             </>
           )}
         </section>
@@ -7762,9 +7801,16 @@ function TasksPage({
               </div>
               {task.assigned_user_name && (
                 <div className="task-owner">
-                  <UserCog size={13} /> Web Designer: {task.assigned_user_name}
+                  <UserCog size={13} />{" "}
+                  {task.assigned_role_id === "role_cs"
+                    ? "Customer Service"
+                    : task.assigned_role_id === "role_editor"
+                      ? "Web Designer"
+                      : "PIC"}
+                  : {task.assigned_user_name}
                 </div>
               )}
+              {task.order_id && <TaskDiscussion taskId={task.id} />}
               {/* Preview template yang dibeli customer, langsung dari kartu task. */}
               {(() => {
                 const taskTemplate = templates.find(
@@ -9992,6 +10038,7 @@ function Templates({
   onEditTemplate,
   onToggleRecommended,
   onSetPrice,
+  onReviewRevision,
   canvasOrders = [],
   onOpenCanvasOrder,
   canvasOrderBusy = false,
@@ -10026,6 +10073,11 @@ function Templates({
   onEditTemplate?: (template: Template) => void;
   onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
   onSetPrice?: (templateId: string, price: number) => Promise<void>;
+  onReviewRevision?: (
+    templateId: string,
+    status: "Approved" | "Rejected",
+    feedback?: string,
+  ) => Promise<void>;
   canvasOrders?: CanvasOrderOption[];
   onOpenCanvasOrder?: (option: CanvasOrderOption) => void;
   canvasOrderBusy?: boolean;
@@ -10319,6 +10371,7 @@ function Templates({
           onEditTemplate={onEditTemplate}
           onToggleRecommended={onToggleRecommended}
           onSetPrice={onSetPrice}
+          onReviewRevision={onReviewRevision}
         />
       )}
       {/* QA TC-177: customer tidak lagi browse seluruh katalog dari sini —
@@ -13898,25 +13951,34 @@ function FeatureInspector({
           </label>
         )}
         {feature.type === "event" && (
+          <EventItemsEditor feature={feature} update={update} />
+        )}
+        {feature.type === "event" && (
           <>
-            <label>
-              Link lokasi acara (Google Maps)
-              <input
-                value={feature.eventMapUrl || ""}
-                onChange={(event) =>
-                  update({ eventMapUrl: event.target.value })
-                }
-                placeholder="https://maps.google.com/..."
-              />
-            </label>
-            <label>
-              Tanggal & waktu acara (untuk Simpan Tanggal)
-              <input
-                type="datetime-local"
-                value={feature.eventDate || ""}
-                onChange={(event) => update({ eventDate: event.target.value })}
-              />
-            </label>
+            {!feature.eventItems?.length && (
+              <>
+                <label>
+                  Link lokasi acara (Google Maps)
+                  <input
+                    value={feature.eventMapUrl || ""}
+                    onChange={(event) =>
+                      update({ eventMapUrl: event.target.value })
+                    }
+                    placeholder="https://maps.google.com/..."
+                  />
+                </label>
+                <label>
+                  Tanggal & waktu acara (untuk Simpan Tanggal)
+                  <input
+                    type="datetime-local"
+                    value={feature.eventDate || ""}
+                    onChange={(event) =>
+                      update({ eventDate: event.target.value })
+                    }
+                  />
+                </label>
+              </>
+            )}
             <CalendarButtonEditor feature={feature} update={update} />
           </>
         )}
@@ -13998,6 +14060,41 @@ function FeatureInspector({
         )}
         {feature.type === "event" && (
           <MapButtonEditor feature={feature} update={update} variant="event" />
+        )}
+        {/* TC-274 — posisi teks di dalam section (juga ada di tab Style). */}
+        {["text", "quote"].includes(feature.type) && (
+          <label>
+            Posisi teks di section
+            <div className="toolbar-row alignment placement-row">
+              {(
+                [
+                  ["top", "Atas"],
+                  ["center", "Tengah"],
+                  ["bottom", "Bawah"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  className={
+                    (feature.verticalPlacement || "top") === value
+                      ? "active"
+                      : ""
+                  }
+                  onClick={() =>
+                    update({
+                      verticalPlacement: value === "top" ? undefined : value,
+                    })
+                  }
+                >
+                  <small>{label}</small>
+                </button>
+              ))}
+            </div>
+            <span className="layout-help">
+              Atur tinggi section (Advanced → Minimum height) lebih besar dari
+              isinya agar perbedaan posisi terlihat.
+            </span>
+          </label>
         )}
         <ExtraTextEditor feature={feature} update={update} />
       </div>
@@ -19654,12 +19751,15 @@ function FeatureBlock({
         </div>
       )}
       {feature.type === "event" && (
-        <div className="event-feature">
+        <div
+          className={`event-feature ${feature.eventItems?.length ? "has-event-items" : ""}`}
+        >
           <CalendarDays size={25} />
           {editableText("title", "editable-title")}
           {editableText("body", "editable-body")}
+          <EventItemsList feature={feature} editable={editable} />
           {/* QA TC-119: button lokasi selalu tampil pada section Event. */}
-          {(() => {
+          {!feature.eventItems?.length && (() => {
             const button = mapButtonStyle(feature);
             // Belum diatur: biarkan gaya CSS bawaan, supaya Event lama tidak
             // berubah tampilan setelah pembaruan ini.
@@ -19687,7 +19787,7 @@ function FeatureBlock({
               </span>
             );
           })()}
-          <CalendarButtons feature={feature} />
+          {!feature.eventItems?.length && <CalendarButtons feature={feature} />}
         </div>
       )}
       {feature.type === "gift" && (
@@ -20667,7 +20767,13 @@ function CountdownFeature({ feature }: { feature: Feature }) {
 /** TC-236 — "Simpan Tanggal": Google Calendar (web/Android) dan berkas .ics
  *  (iPhone, Outlook, kalender lain). Tampil bila tanggal acara sudah diisi
  *  dan tidak dimatikan Web Designer. */
-function CalendarButtons({ feature }: { feature: Feature }) {
+function CalendarButtons({
+  feature,
+  hideIcs = false,
+}: {
+  feature: Feature;
+  hideIcs?: boolean;
+}) {
   if (feature.calendarButton === false || !feature.eventDate) return null;
   const start = new Date(feature.eventDate);
   if (Number.isNaN(start.getTime())) return null;
@@ -20733,6 +20839,7 @@ function CalendarButtons({ feature }: { feature: Feature }) {
       >
         <CalendarPlus size={14} /> {feature.calendarLabel || "Simpan Tanggal"}
       </a>
+      {!hideIcs && (
       <button
         type="button"
         className="calendar-ics"
@@ -20744,6 +20851,310 @@ function CalendarButtons({ feature }: { feature: Feature }) {
       >
         iPhone / Outlook (.ics)
       </button>
+      )}
+    </div>
+  );
+}
+
+/** Revisi 29 Okt — daftar acara Akad & Resepsi pada fitur Event. Tiap acara
+ *  punya tanggal, jam, tempat, alamat, tombol Simpan Tanggal, dan tombol
+ *  Navigasi Map. Tata letak: bertumpuk (pemisah garis putus) atau dua kolom
+ *  (pemisah garis tegak), seperti contoh dari customer. */
+function EventItemsList({
+  feature,
+  editable = false,
+}: {
+  feature: Feature;
+  editable?: boolean;
+}) {
+  const items = feature.eventItems || [];
+  if (!items.length) return null;
+  const layout = feature.eventLayout || "stack";
+  const divider = feature.eventDivider || "dashed";
+  const button = mapButtonStyle(feature);
+  const buttonClass = `event-map-button ${button.customized ? `shape-${button.shape}` : ""}`;
+  return (
+    <div
+      className={`event-items layout-${layout} divider-${divider}`}
+      style={
+        {
+          "--event-item-title": feature.eventItemTitleSize
+            ? `${feature.eventItemTitleSize}px`
+            : undefined,
+          "--event-columns": Math.min(items.length, 3),
+        } as React.CSSProperties
+      }
+    >
+      {items.map((item) => (
+        <div className="event-item" key={item.id}>
+          <h3 className="event-item-name">{item.name}</h3>
+          {item.dateText && <p className="event-item-date">{item.dateText}</p>}
+          {item.timeText && <p className="event-item-time">{item.timeText}</p>}
+          {item.venue && (
+            <strong className="event-item-venue">{item.venue}</strong>
+          )}
+          {item.address && (
+            <p className="event-item-address">{item.address}</p>
+          )}
+          <div className="event-item-actions">
+            {editable && !item.datetime && feature.calendarButton !== false && (
+              <span
+                className="calendar-button placeholder"
+                title="Isi Tanggal & jam untuk Simpan Tanggal di panel Content"
+              >
+                <CalendarPlus size={14} /> {feature.calendarLabel || "Simpan Tanggal"}
+              </span>
+            )}
+            <CalendarButtons
+              hideIcs
+              feature={{
+                ...feature,
+                id: `${feature.id}-${item.id}`,
+                title: item.name,
+                body: [item.venue, item.address].filter(Boolean).join(", "),
+                eventDate: item.datetime,
+                eventMapUrl: item.mapUrl,
+              }}
+            />
+            {item.mapUrl ? (
+              <a
+                className={buttonClass}
+                style={button.customized ? button.style : undefined}
+                href={item.mapUrl}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <MapButtonIcon
+                  feature={feature}
+                  size={feature.mapButtonIconSize || 14}
+                />
+                {feature.eventButtonLabel || "Navigasi Map"}
+              </a>
+            ) : editable ? (
+              <span
+                className={`${buttonClass} placeholder`}
+                style={button.customized ? button.style : undefined}
+                title="Isi Link Google Maps acara ini di panel Content"
+              >
+                <MapButtonIcon
+                  feature={feature}
+                  size={feature.mapButtonIconSize || 14}
+                />
+                {feature.eventButtonLabel || "Navigasi Map"}
+              </span>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Editor daftar acara (Akad, Resepsi, …) di panel Content fitur Event. */
+function EventItemsEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const items = feature.eventItems || [];
+  const commit = (next: EventItem[]) => update({ eventItems: next });
+  const patch = (id: string, next: Partial<EventItem>) =>
+    commit(items.map((item) => (item.id === id ? { ...item, ...next } : item)));
+  const blank = (name: string): EventItem => ({
+    id: uid("event"),
+    name,
+    dateText: "Sabtu, 28 Maret 2026",
+    timeText: "",
+    venue: "",
+    address: "",
+    mapUrl: "",
+    datetime: "",
+  });
+  return (
+    <div className="event-items-editor bank-logo-style">
+      <div className="group-heading">
+        <strong>Daftar acara (Akad & Resepsi)</strong>
+        <button onClick={() => commit([...items, blank(items.length ? "Resepsi" : "Akad Nikah")])}>
+          <Plus size={14} /> Tambah acara
+        </button>
+      </div>
+      {!items.length && (
+        <>
+          <div className="layout-help">
+            Tampilkan beberapa acara sekaligus — misalnya Akad Nikah dan
+            Resepsi — masing-masing dengan tanggal, jam, tempat, tombol Simpan
+            Tanggal, dan Navigasi Map.
+          </div>
+          <button
+            className="secondary-btn"
+            onClick={() =>
+              commit([
+                {
+                  ...blank("Akad Nikah"),
+                  timeText: "16:00 - 17:00",
+                  datetime: "2026-03-28T16:00",
+                  venue: "Nama gedung / tempat",
+                  address: "Alamat lengkap",
+                },
+                {
+                  ...blank("Resepsi"),
+                  timeText: "18:30 - 20:30",
+                  datetime: "2026-03-28T18:30",
+                  venue: "Nama gedung / tempat",
+                  address: "Alamat lengkap",
+                },
+              ])
+            }
+          >
+            Isi contoh Akad & Resepsi
+          </button>
+        </>
+      )}
+      {items.length > 0 && (
+        <div className="two-inputs">
+          <label>
+            Tata letak
+            <select
+              value={feature.eventLayout || "stack"}
+              onChange={(event) =>
+                update({
+                  eventLayout: event.target.value as Feature["eventLayout"],
+                })
+              }
+            >
+              <option value="stack">Bertumpuk (atas–bawah)</option>
+              <option value="columns">Berdampingan (kolom)</option>
+            </select>
+          </label>
+          <label>
+            Garis pemisah
+            <select
+              value={feature.eventDivider || "dashed"}
+              onChange={(event) =>
+                update({
+                  eventDivider: event.target.value as Feature["eventDivider"],
+                })
+              }
+            >
+              <option value="dashed">Putus-putus</option>
+              <option value="solid">Garis penuh</option>
+              <option value="none">Tanpa garis</option>
+            </select>
+          </label>
+        </div>
+      )}
+      {items.length > 0 && (
+        <label className="range-field">
+          <span className="range-head">
+            Ukuran nama acara<b>{feature.eventItemTitleSize || 28}px</b>
+          </span>
+          <input
+            type="range"
+            min="14"
+            max="56"
+            value={feature.eventItemTitleSize || 28}
+            onChange={(event) =>
+              update({ eventItemTitleSize: Number(event.target.value) })
+            }
+          />
+        </label>
+      )}
+      {items.map((item, index) => (
+        <div className="extra-text-row event-item-editor" key={item.id}>
+          <div className="form-spec-head">
+            <span>Acara {index + 1}</span>
+            <span className="event-item-editor-actions">
+              <button
+                disabled={index === 0}
+                title="Naikkan"
+                onClick={() => {
+                  const next = [...items];
+                  [next[index - 1], next[index]] = [next[index], next[index - 1]];
+                  commit(next);
+                }}
+              >
+                <ArrowUp size={12} />
+              </button>
+              <button
+                title="Hapus acara"
+                onClick={() => commit(items.filter((x) => x.id !== item.id))}
+              >
+                <Trash2 size={12} />
+              </button>
+            </span>
+          </div>
+          <label>
+            Nama acara
+            <input
+              value={item.name}
+              placeholder="Akad Nikah"
+              onChange={(event) => patch(item.id, { name: event.target.value })}
+            />
+          </label>
+          <div className="two-inputs">
+            <label>
+              Tanggal (teks)
+              <input
+                value={item.dateText || ""}
+                placeholder="Sabtu, 28 Maret 2026"
+                onChange={(event) =>
+                  patch(item.id, { dateText: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              Jam (teks)
+              <input
+                value={item.timeText || ""}
+                placeholder="16:00 - 17:00 WIB"
+                onChange={(event) =>
+                  patch(item.id, { timeText: event.target.value })
+                }
+              />
+            </label>
+          </div>
+          <label>
+            Tempat
+            <input
+              value={item.venue || ""}
+              placeholder="Maximo Resto & Garden"
+              onChange={(event) => patch(item.id, { venue: event.target.value })}
+            />
+          </label>
+          <label>
+            Alamat
+            <textarea
+              rows={2}
+              value={item.address || ""}
+              placeholder="Jl. Dr. Setiabudi No. 378"
+              onChange={(event) =>
+                patch(item.id, { address: event.target.value })
+              }
+            />
+          </label>
+          <label>
+            Link Google Maps (tombol Navigasi Map)
+            <input
+              value={item.mapUrl || ""}
+              placeholder="https://maps.google.com/..."
+              onChange={(event) => patch(item.id, { mapUrl: event.target.value })}
+            />
+          </label>
+          <label>
+            Tanggal & jam untuk Simpan Tanggal
+            <input
+              type="datetime-local"
+              value={item.datetime || ""}
+              onChange={(event) =>
+                patch(item.id, { datetime: event.target.value })
+              }
+            />
+          </label>
+        </div>
+      ))}
     </div>
   );
 }
@@ -21780,6 +22191,141 @@ function PreviewModal({
         </PreviewSurfaceContext>
         </DeviceContext>
       </div>
+    </div>
+  );
+}
+
+/** TC-157 — diskusi internal satu tiket antara CS dan Web Designer.
+ *  Catatan disimpan sebagai catatan internal conversation order, jadi terlihat
+ *  dari tiket CS, tiket Web Designer, dan Support Inbox; tidak pernah
+ *  terkirim ke customer. */
+function TaskDiscussion({ taskId }: { taskId: string }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState<{
+    notes: {
+      id: string;
+      body: string;
+      created_at: string;
+      sender_name?: string;
+      sender_role?: string;
+    }[];
+    related: {
+      id: string;
+      title: string;
+      status: string;
+      assigned_role_id?: string;
+      assigned_user_name?: string;
+    }[];
+    csName?: string | null;
+    editorName?: string | null;
+  } | null>(null);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const load = useCallback(async () => {
+    try {
+      setData(await api.taskNotes(taskId));
+      setError("");
+    } catch (failure) {
+      setError(
+        failure instanceof Error ? failure.message : "Gagal memuat diskusi.",
+      );
+    }
+  }, [taskId]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  useEffect(() => {
+    if (!open) return;
+    const timer = window.setInterval(() => void load(), 15000);
+    return () => window.clearInterval(timer);
+  }, [open, load]);
+  const send = async () => {
+    const body = draft.trim();
+    if (!body) return;
+    setBusy(true);
+    try {
+      await api.addTaskNote(taskId, body);
+      setDraft("");
+      await load();
+    } catch (failure) {
+      setError(
+        failure instanceof Error ? failure.message : "Gagal mengirim catatan.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  };
+  const count = data?.notes.length || 0;
+  return (
+    <div className={`task-discussion ${open ? "is-open" : ""}`}>
+      <button
+        type="button"
+        className="task-discussion-toggle"
+        onClick={() => setOpen((value) => !value)}
+        aria-expanded={open}
+      >
+        <Lock size={13} /> Diskusi internal CS & Web Designer
+        <b>{count}</b>
+      </button>
+      {open && (
+        <div className="task-discussion-body">
+          <p className="task-discussion-team">
+            CS: <strong>{data?.csName || "belum di-assign"}</strong> · Web
+            Designer: <strong>{data?.editorName || "belum di-assign"}</strong>
+          </p>
+          {data && data.related.length > 1 && (
+            <ul className="task-discussion-related">
+              {data.related.map((item) => (
+                <li key={item.id} className={item.id === taskId ? "current" : ""}>
+                  <span>{item.title}</span>
+                  <em>{item.status}</em>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="task-discussion-list">
+            {count === 0 && (
+              <span className="task-discussion-empty">
+                Belum ada catatan. Catatan di sini tidak terlihat oleh customer.
+              </span>
+            )}
+            {data?.notes.map((note) => (
+              <article key={note.id}>
+                <header>
+                  <strong>{note.sender_name || "Staff"}</strong>
+                  {note.sender_role && <span>{note.sender_role}</span>}
+                  <small>
+                    {new Date(note.created_at).toLocaleString("id-ID")}
+                  </small>
+                </header>
+                <p>{note.body}</p>
+              </article>
+            ))}
+          </div>
+          {error && <small className="password-error">{error}</small>}
+          <div className="task-discussion-compose">
+            <textarea
+              rows={2}
+              value={draft}
+              maxLength={4000}
+              placeholder="Tulis catatan internal untuk tim (tidak terkirim ke customer)…"
+              onChange={(event) => setDraft(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && (event.ctrlKey || event.metaKey))
+                  void send();
+              }}
+            />
+            <button
+              type="button"
+              disabled={busy || !draft.trim()}
+              onClick={() => void send()}
+            >
+              <Send size={13} /> {busy ? "Mengirim…" : "Kirim catatan"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -28384,6 +28930,8 @@ function CommissionWorkspace({ canApprove }: { canApprove: boolean }) {
 // menulis ulang path ke "/" selagi bootstrap berjalan, dan itu ikut membuang
 // `?token=...` dari tautan email. Nilainya dibekukan di sini, sebelum React
 // render pertama, supaya token tetap terbaca.
+/** Alasan gagal bayar terakhir, ditampilkan tetap di halaman checkout. */
+let lastPaymentError = "";
 const initialSearchParams =
   typeof window !== "undefined"
     ? new URLSearchParams(window.location.search)
@@ -28703,6 +29251,7 @@ function TemplateApprovalManager({
   onEditTemplate,
   onToggleRecommended,
   onSetPrice,
+  onReviewRevision,
 }: {
   templates: Template[];
   currentAccountId?: string;
@@ -28715,6 +29264,11 @@ function TemplateApprovalManager({
   onEditTemplate?: (template: Template) => void;
   onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
   onSetPrice?: (templateId: string, price: number) => Promise<void>;
+  onReviewRevision?: (
+    templateId: string,
+    status: "Approved" | "Rejected",
+    feedback?: string,
+  ) => Promise<void>;
 }) {
   const [takedownTarget, setTakedownTarget] = useState<Template | null>(null);
   const [reason, setReason] = useState("");
@@ -28893,6 +29447,15 @@ function TemplateApprovalManager({
               >
                 {statusLabel(template.status)}
               </em>
+              {/* Revisi 27 Okt — revisi template live dari Web Designer
+                  disimpan sebagai draft dan baru tampil di landing setelah
+                  disetujui. Dulu kartu tetap hanya "Published", sehingga
+                  perubahan (mis. ornamen) tampak "tidak tersimpan". */}
+              {template.pendingReview && template.status !== "Pending" && (
+                <em className="status-chip revision-pending">
+                  Revisi menunggu approval
+                </em>
+              )}
             </div>
             <div className="template-status-actions">
               <button onClick={() => setPreview(template)}>
@@ -28957,6 +29520,31 @@ function TemplateApprovalManager({
                   <Sparkles size={14} /> Ambil dari Canvas
                 </button>
               )}
+              {template.pendingReview &&
+                template.status !== "Pending" &&
+                onReviewRevision && (
+                  <>
+                    <button
+                      className="primary"
+                      onClick={() =>
+                        void onReviewRevision(template.id, "Approved")
+                      }
+                    >
+                      <CheckCircle2 size={14} /> Approve revisi
+                    </button>
+                    <button
+                      onClick={() =>
+                        void onReviewRevision(
+                          template.id,
+                          "Rejected",
+                          "Revisi ditolak dari Templates & Approval.",
+                        )
+                      }
+                    >
+                      <X size={14} /> Tolak revisi
+                    </button>
+                  </>
+                )}
               {["Published", "Approved"].includes(template.status || "") ? (
                 <button
                   className="danger"
@@ -28978,7 +29566,9 @@ function TemplateApprovalManager({
               )}
             </div>
             <small className="template-status-hint">
-              {statusLabel(template.status) === "Takedown"
+              {template.pendingReview && template.status !== "Pending"
+                ? "Revisi terakhir menunggu approval Administrator. Landing page dan Preview Template publik masih menampilkan versi live sebelumnya."
+                : statusLabel(template.status) === "Takedown"
                 ? "Template tidak tampil di landing page dan tidak dapat dipesan customer."
                 : template.status === "Pending"
                   ? "Menunggu approval Administrator."

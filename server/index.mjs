@@ -3573,6 +3573,42 @@ async function createReceipt(order, template) {
   });
   return { receiptNo, filepath, publicUrl: `/receipts/${filename}` };
 }
+// TC-073 — konfigurasi SMTP dipusatkan. Port 465 selalu memakai TLS langsung
+// (SMTP_SECURE=false dengan port 465 adalah salah konfigurasi paling umum:
+// koneksi menggantung lalu gagal tanpa email terkirim). Batas waktu dipasang
+// agar kegagalan cepat tercatat di email_outbox, bukan menggantung.
+function smtpTransport() {
+  const port = Number(process.env.SMTP_PORT || 587);
+  return nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port,
+    secure: port === 465 || String(process.env.SMTP_SECURE) === "true",
+    auth: process.env.SMTP_USER
+      ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
+      : undefined,
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 30000,
+  });
+}
+// Email yang tertahan karena SMTP belum diisi (atau gagal sementara) dikirim
+// ulang saat server menyala dengan SMTP aktif — mis. email aktivasi akun yang
+// dibuat sebelum SMTP dikonfigurasi. Hanya email 3 hari terakhir (maks 200)
+// supaya tidak membanjiri inbox.
+function retryPendingEmails() {
+  if (!process.env.SMTP_HOST) return;
+  const since = new Date(Date.now() - 3 * 24 * 3600_000).toISOString();
+  const rows = db
+    .prepare(
+      `SELECT id FROM email_outbox WHERE status IN ('Queued','Ready for SMTP','Failed') AND created_at>=? ORDER BY created_at LIMIT 200`,
+    )
+    .all(since);
+  rows.forEach((row, index) =>
+    setTimeout(() => void deliverEmail(row.id), 1500 + index * 400),
+  );
+  if (rows.length)
+    console.log(`[mail] mengirim ulang ${rows.length} email yang tertahan`);
+}
 async function deliverEmail(outboxId) {
   const mail = db
     .prepare("SELECT * FROM email_outbox WHERE id=?")
@@ -3582,14 +3618,7 @@ async function deliverEmail(outboxId) {
     return;
   }
   try {
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: String(process.env.SMTP_SECURE) === "true",
-      auth: process.env.SMTP_USER
-        ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS }
-        : undefined,
-    });
+    const transporter = smtpTransport();
     await transporter.sendMail({
       from: process.env.SMTP_FROM || "ikrarku Sites <noreply@ikrarku.local>",
       to: mail.to_email,
@@ -4219,11 +4248,45 @@ async function createMayarInvoice(order, template) {
   // items[].rate, masa berlaku wajib lewat expiredAt, dan URL webhook diatur
   // di dashboard Mayar, bukan per invoice.
   const expiryHours = Number(process.env.MAYAR_INVOICE_EXPIRY_HOURS || 24);
-  const description = `Template ${template?.name || order.template_id} · ${order.order_no}`;
+  // Revisi 29 Okt — pembayaran berhasil untuk satu template tetapi gagal
+  // untuk yang lain. Isi permintaan yang berbeda antar order hanya nama
+  // template (deskripsi), nominal, serta data pemesan. Semuanya kini
+  // dinormalkan ke bentuk yang pasti diterima Mayar:
+  //  - deskripsi: ASCII, tanpa simbol khusus, maks 120 karakter (nama
+  //    template panjang / ber-emoji / ber-tanda "&" tidak lagi ikut mentah);
+  //  - nominal: bilangan bulat Rupiah > 0 (template tanpa harga ditolak
+  //    dengan pesan jelas sebelum memanggil Mayar);
+  //  - nomor HP: hanya angka dengan awalan 0 (+62 812-... → 0812...);
+  //  - nama: maks 100 karakter.
+  const rate = Math.round(Number(order.amount) || 0);
+  if (!(rate > 0))
+    throw Object.assign(
+      new Error(
+        "Harga template ini belum ditetapkan, jadi belum bisa dibayar. Hubungi admin ikrarku.",
+      ),
+      { status: 400 },
+    );
+  const ascii = (value, max) =>
+    String(value || "")
+      .normalize("NFKD")
+      .replace(/[^\x20-\x7E]/g, "")
+      .replace(/[<>&"'`\\]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, max);
+  const description =
+    ascii(`Template ${template?.name || order.template_id} - ${order.order_no}`, 120) ||
+    `Order ${order.order_no}`;
+  const mobile = (() => {
+    let digits = String(order.phone || "").replace(/\D/g, "");
+    if (digits.startsWith("62")) digits = "0" + digits.slice(2);
+    else if (digits.startsWith("8")) digits = "0" + digits;
+    return digits.slice(0, 15);
+  })();
   const payload = {
-    name: order.customer_name,
-    email: order.email,
-    mobile: order.phone || "",
+    name: ascii(order.customer_name, 100) || "Customer",
+    email: String(order.email || "").trim(),
+    mobile,
     description,
     redirectUrl: `${CLIENT_ORIGIN.replace(/\/$/, "")}/pembayaran-berhasil?order=${encodeURIComponent(order.order_no)}`,
     expiredAt: new Date(
@@ -4232,7 +4295,7 @@ async function createMayarInvoice(order, template) {
     items: [
       {
         quantity: 1,
-        rate: Number(order.amount),
+        rate,
         description,
       },
     ],
@@ -4309,7 +4372,7 @@ async function createMayarInvoice(order, template) {
     );
     throw Object.assign(
       new Error(
-        data?.messages || data?.message || "Gagal membuat invoice Mayar",
+        `Mayar menolak pembayaran (HTTP ${response.status}): ${reason}`,
       ),
       { status: 502 },
     );
@@ -4650,7 +4713,7 @@ app.get("/api/orders/:id", auth, (req, res) => {
 // sebagai pesan siap baca, bukan nama status mentah.
 const TASK_STATUS_NOTICE = {
   "In Progress": (title) =>
-    `Pengerjaan "${title}" sudah dimulai oleh Web Designer kami. Kami kabari lagi begitu ada perkembangan.`,
+    `Pengerjaan "${title}" sudah dimulai oleh tim ikrarku. Kami kabari lagi begitu ada perkembangan.`,
   "Waiting Customer": (title) =>
     `Pengerjaan "${title}" menunggu konfirmasi atau materi dari Anda. Balas pesan ini kalau ada yang perlu kami bantu.`,
   Pending: (title) =>
@@ -4786,6 +4849,91 @@ app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
   res.json({ ok: true });
 });
 
+// TC-157 — diskusi internal per tiket (ala internal comment Jira). Satu
+// order punya beberapa tiket (onboarding CS, build Web Designer); diskusinya
+// disimpan sebagai catatan internal pada conversation order itu, sehingga
+// terlihat sama dari tiket CS, tiket Web Designer, dan Support Inbox — dan
+// tidak pernah terkirim ke customer.
+function taskDiscussion(task) {
+  const order = task.order_id
+    ? db
+        .prepare(
+          `SELECT o.*,ed.first_name||' '||ed.last_name editor_name,cs.first_name||' '||cs.last_name cs_name FROM orders o LEFT JOIN users ed ON ed.id=o.assigned_editor_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id WHERE o.id=?`,
+        )
+        .get(task.order_id)
+    : null;
+  const conversation = order
+    ? db
+        .prepare(
+          "SELECT * FROM conversations WHERE order_id=? ORDER BY created_at LIMIT 1",
+        )
+        .get(order.id) ||
+      db
+        .prepare(
+          "SELECT * FROM conversations WHERE lower(customer_email)=lower(?) ORDER BY updated_at DESC LIMIT 1",
+        )
+        .get(order.email)
+    : null;
+  return { order, conversation };
+}
+app.get("/api/tasks/:id/notes", auth, permit("tasks.view"), (req, res) => {
+  const task = policy.requireTask(req.user, req.params.id);
+  const { order, conversation } = taskDiscussion(task);
+  const notes = conversation
+    ? db
+        .prepare(
+          `SELECT m.id,m.body,m.created_at,trim(coalesce(u.first_name,'')||' '||coalesce(u.last_name,'')) sender_name, r.name sender_role FROM messages m LEFT JOIN users u ON u.id=m.sender_user_id LEFT JOIN roles r ON r.id=u.role_id WHERE m.conversation_id=? AND m.visibility='internal' ORDER BY m.created_at`,
+        )
+        .all(conversation.id)
+    : [];
+  const related = order
+    ? db
+        .prepare(
+          `SELECT t.id,t.title,t.status,t.assigned_role_id,trim(coalesce(u.first_name,'')||' '||coalesce(u.last_name,'')) assigned_user_name FROM tasks t LEFT JOIN users u ON u.id=t.assigned_user_id WHERE t.order_id=? ORDER BY t.created_at`,
+        )
+        .all(order.id)
+    : [];
+  res.json({
+    notes,
+    related,
+    csName: order?.cs_name?.trim() || null,
+    editorName: order?.editor_name?.trim() || null,
+  });
+});
+app.post("/api/tasks/:id/notes", auth, permit("tasks.view"), (req, res) => {
+  const task = policy.requireTask(req.user, req.params.id);
+  const body = String(req.body?.body || "").trim();
+  if (!body) return res.status(400).json({ error: "Catatan wajib diisi" });
+  if (body.length > 4000)
+    return res.status(400).json({ error: "Catatan maksimal 4000 karakter" });
+  let { order, conversation } = taskDiscussion(task);
+  if (!order)
+    return res
+      .status(400)
+      .json({ error: "Tiket ini tidak terhubung ke order customer" });
+  if (!conversation)
+    conversation = createOrFindConversation({
+      customerName: order.customer_name || "Customer",
+      customerEmail: order.email,
+      customerPhone: order.phone || "",
+      orderId: order.id,
+      assignedCsId: order.assigned_cs_id || undefined,
+      channel: "Web",
+      trusted: true,
+    });
+  const messageId = id("msg");
+  db.prepare(
+    `INSERT INTO messages(id,conversation_id,sender_type,sender_user_id,body,visibility,created_at) VALUES(?,?,?,?,?,?,?)`,
+  ).run(messageId, conversation.id, "support", req.user.id, body, "internal", now());
+  db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
+    now(),
+    conversation.id,
+  );
+  auditLog(req.user.id, "task.note", "task", task.id, {
+    conversationId: conversation.id,
+  });
+  res.status(201).json({ id: messageId });
+});
 app.get(
   "/api/conversations",
   auth,
@@ -5405,6 +5553,7 @@ app.use((err, _req, res, _next) => {
     .json({ error: err.status ? err.message : "Server error" });
 });
 drainEditorQueue();
+retryPendingEmails();
 app.listen(PORT, () =>
   console.log(`ikrarku v0.15 API listening on http://localhost:${PORT}`),
 );

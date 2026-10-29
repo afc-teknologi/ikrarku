@@ -2245,8 +2245,11 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 /* TC-274 — titik peletakan fitur: atas (default), tengah, bawah canvas. */
 .canvas-section:has(>.canvas-columns>.canvas-column>.feature-block:is(.place-center,.place-bottom)){display:flex;flex-direction:column}
 .canvas-section:has(>.canvas-columns>.canvas-column>.feature-block:is(.place-center,.place-bottom))>.canvas-columns{flex:1 1 auto}
-.canvas-column:has(>.feature-block.place-center){display:flex;flex-direction:column;justify-content:center}
-.canvas-column:has(>.feature-block.place-bottom){display:flex;flex-direction:column;justify-content:flex-end}
+.canvas-column:has(>.feature-block:is(.place-center,.place-bottom)){display:flex;flex-direction:column}
+/* Revisi 29 Okt — hanya fitur yang diatur yang berpindah; fitur lain di kolom
+   yang sama tetap di posisinya (margin auto mengambil sisa ruang). */
+.canvas-column>.feature-block.place-center{margin-top:auto!important;margin-bottom:auto!important}
+.canvas-column>.feature-block.place-bottom{margin-top:auto!important}
 .placement-row button{width:auto;flex:1}
 .placement-row button small{font-size:8px;font-weight:600}
 /* TC-277 — tombol bagikan template di halaman detail. */
@@ -2301,3 +2304,57 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .sound-dock.dock-center>.fixed-sound-disc.is-contained.sound-pos-center{transform:translate(-50%,-50%)}
 /* Garis bantu cover hanya untuk editor, tidak tampil di preview/live. */
 .cover-as-canvas .cover-feature-editor{border-color:transparent!important}
+/* Revisi 27 Okt — revisi template live yang menunggu approval. */
+.status-chip.revision-pending{background:#fff4dd;color:#8a5a00;border:1px solid #f0d49a;margin-left:6px}
+/* TC-157 — diskusi internal per tiket. */
+.task-discussion{border:1px solid #e3e8e5;border-radius:10px;background:#fbfcfb;margin:8px 0}
+.task-discussion-toggle{width:100%;display:flex;align-items:center;gap:6px;border:0;background:none;padding:8px 10px;font-size:9px;font-weight:700;color:#205444;text-align:left}
+.task-discussion-toggle b{margin-left:auto;background:#e6f0ec;color:#145844;border-radius:9px;padding:1px 7px;font-size:8px}
+.task-discussion-body{padding:0 10px 10px;display:flex;flex-direction:column;gap:8px}
+.task-discussion-team{margin:0;font-size:8px;color:#5e6f69}
+.task-discussion-related{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.task-discussion-related li{display:flex;justify-content:space-between;font-size:8px;color:#5e6f69;padding:3px 6px;border-radius:6px;background:#f1f4f2}
+.task-discussion-related li.current{background:#e6f0ec;color:#145844;font-weight:700}
+.task-discussion-related em{font-style:normal}
+.task-discussion-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow:auto}
+.task-discussion-list article{background:#fff7e6;border:1px solid #f1dfb5;border-radius:8px;padding:7px 9px}
+.task-discussion-list header{display:flex;gap:6px;align-items:baseline;font-size:8px}
+.task-discussion-list header span{color:#8a6a2a}
+.task-discussion-list header small{margin-left:auto;color:#9aa49f;font-size:7px}
+.task-discussion-list p{margin:4px 0 0;font-size:9px;white-space:pre-wrap}
+.task-discussion-empty{font-size:8px;color:#8b9792}
+.task-discussion-compose{display:flex;flex-direction:column;gap:6px}
+.task-discussion-compose textarea{border:1px solid var(--line);border-radius:8px;padding:7px 9px;font-size:9px;resize:vertical}
+.task-discussion-compose button{align-self:flex-end;display:flex;align-items:center;gap:5px;border:0;background:#125946;color:#fff;border-radius:7px;padding:6px 10px;font-size:8px}
+.task-discussion-compose button:disabled{opacity:.5}
+/* TC-270 (lanjutan) — preview Mobile di dialog Preview template (Templates &
+   Approval, review di Tasks & Tickets, Safe Preview) memakai padding 18 px di
+   atas. Lapisan sticky Background tetap menempel di bawah padding itu, jadi
+   saat digulir ada pita 18 px di atas tanpa background, dan 18 px terakhir
+   backdrop terpotong di bawah. Padding vertikal dihapus (sama seperti Live
+   Preview editor pada revisi 22 Oktober). */
+.template-dialog-actual-preview.live.device-mobile{padding-top:0;padding-bottom:0}
+.checkout-pay-error{margin-top:10px;padding:10px 12px;border-radius:9px;background:#fdecea;border:1px solid #f2c2bd;color:#8f2d22;font-size:12px;line-height:1.45}
+/* Revisi 29 Okt — daftar acara Akad & Resepsi pada fitur Event. */
+.event-feature.has-event-items>svg{margin-bottom:6px}
+.event-items{display:flex;flex-direction:column;align-items:stretch;width:100%;margin-top:18px;text-align:center}
+.event-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px 8px}
+.event-item-name{font-family:var(--title-font,inherit);font-size:var(--event-item-title,28px);font-weight:600;margin:0 0 6px;line-height:1.15}
+.event-item-date,.event-item-time,.event-item-address{margin:0;font-size:11px;opacity:.85;white-space:pre-wrap}
+.event-item-venue{font-size:13px;margin-top:2px}
+.event-item-actions{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:8px;margin-top:10px}
+.event-item-actions .calendar-buttons{margin:0;gap:8px}
+.event-item-actions .event-map-button{margin-top:0}
+.event-item-actions .calendar-button,.event-item-actions .event-map-button{font-size:11px;padding:9px 16px}
+.event-item-actions .placeholder{opacity:.55;cursor:default}
+.event-items.layout-stack.divider-dashed>.event-item+.event-item{border-top:1px dashed currentColor}
+.event-items.layout-stack.divider-solid>.event-item+.event-item{border-top:1px solid currentColor}
+.event-items.layout-stack>.event-item+.event-item{border-top-color:color-mix(in srgb,currentColor 45%,transparent)}
+.event-items.layout-columns{display:grid;grid-template-columns:repeat(var(--event-columns,2),minmax(0,1fr));align-items:stretch}
+.event-items.layout-columns.divider-dashed>.event-item+.event-item{border-left:1px dashed color-mix(in srgb,currentColor 60%,transparent)}
+.event-items.layout-columns.divider-solid>.event-item+.event-item{border-left:1px solid color-mix(in srgb,currentColor 60%,transparent)}
+.event-items.layout-columns .event-item{padding:14px 10px}
+.event-items.layout-columns .event-item-actions{flex-direction:column}
+.event-item-editor-actions{display:flex;gap:4px}
+.event-item-editor-actions button{border:0;background:none;color:#7d8a85;padding:2px}
+.event-items-editor .secondary-btn{margin-top:6px}

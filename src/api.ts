@@ -365,6 +365,13 @@ export const api = {
   tasks: () => request<any[]>("/tasks"),
   updateTask: (id: string, payload: any) =>
     request(`/tasks/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  // TC-157 — diskusi internal per tiket (tidak terlihat customer).
+  taskNotes: (id: string) => request<any>(`/tasks/${id}/notes`),
+  addTaskNote: (id: string, body: string) =>
+    request(`/tasks/${id}/notes`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
   conversations: () => request<any[]>("/conversations"),
   markConversationRead: (id: string) =>
     request(`/conversations/${id}/read`, { method: "POST" }),
