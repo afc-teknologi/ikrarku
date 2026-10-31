@@ -10,19 +10,30 @@ if [[ ! -f .env.production ]]; then
   echo "ERROR: .env.production tidak ada. Salin dari .env.production.example lalu isi."
   exit 1
 fi
-set -a
-# shellcheck disable=SC1091
-source .env.production
-set +a
+# Dibaca baris per baris, TIDAK di-`source`: nilai berisi spasi, < > atau
+# karakter khusus (password, placeholder) membuat bash error, padahal Docker
+# membaca berkas env apa adanya.
+envval() { grep -E "^$1=" .env.production | tail -n 1 | cut -d= -f2- | sed -e 's/\r$//' -e 's/^"\(.*\)"$/\1/' -e "s/^'\(.*\)'$/\1/"; }
+CLIENT_ORIGIN="$(envval CLIENT_ORIGIN)"
+ADMIN_BOOTSTRAP_PASSWORD="$(envval ADMIN_BOOTSTRAP_PASSWORD)"
+PAYMENT_MODE="$(envval PAYMENT_MODE)"
+MAYAR_API_KEY="$(envval MAYAR_API_KEY)"
+MAYAR_WEBHOOK_TOKEN="$(envval MAYAR_WEBHOOK_TOKEN)"
+SMTP_HOST="$(envval SMTP_HOST)"
+SMTP_PASS="$(envval SMTP_PASS)"
+placeholders="$(grep -E '^[A-Z_]+=(<[^>]*>|.*ISI_|.*CHANGE_ME)' .env.production | cut -d= -f1 | tr '\n' ' ' || true)"
+if [[ -n "$placeholders" ]]; then
+  echo "ERROR: masih placeholder di .env.production: $placeholders"; exit 1
+fi
 
 [[ "${CLIENT_ORIGIN:-}" == "https://ikrarku.id" ]] || { echo "ERROR: CLIENT_ORIGIN harus https://ikrarku.id"; exit 1; }
-if [[ -z "${ADMIN_BOOTSTRAP_PASSWORD:-}" || "$ADMIN_BOOTSTRAP_PASSWORD" == "admin" || "$ADMIN_BOOTSTRAP_PASSWORD" == *"<"* ]]; then
-  echo "ERROR: ADMIN_BOOTSTRAP_PASSWORD belum diisi kuat."; exit 1
+if [[ ${#ADMIN_BOOTSTRAP_PASSWORD} -lt 12 ]]; then
+  echo "ERROR: ADMIN_BOOTSTRAP_PASSWORD minimal 12 karakter."; exit 1
 fi
-if [[ "${PAYMENT_MODE:-}" != "mayar" || -z "${MAYAR_API_KEY:-}" || -z "${MAYAR_WEBHOOK_TOKEN:-}" || "$MAYAR_API_KEY" == *"<"* ]]; then
+if [[ "${PAYMENT_MODE:-}" != "mayar" || -z "${MAYAR_API_KEY:-}" || -z "${MAYAR_WEBHOOK_TOKEN:-}" ]]; then
   echo "ERROR: Production wajib PAYMENT_MODE=mayar dengan MAYAR_API_KEY dan MAYAR_WEBHOOK_TOKEN terisi."; exit 1
 fi
-if [[ -z "${SMTP_HOST:-}" || "${SMTP_PASS:-}" == *"<"* ]]; then
+if [[ -z "${SMTP_HOST:-}" || -z "${SMTP_PASS:-}" ]]; then
   echo "ERROR: SMTP belum lengkap. Customer tidak akan menerima receipt & info akun."; exit 1
 fi
 

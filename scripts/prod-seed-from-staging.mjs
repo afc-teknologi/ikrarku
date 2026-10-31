@@ -41,12 +41,15 @@ source.exec(`VACUUM INTO '${dst.replace(/'/g, "''")}'`);
 source.close();
 
 const db = new DatabaseSync(dst);
-db.exec("PRAGMA foreign_keys=ON");
+// Hapus dengan foreign key OFF, lalu rapikan SEMUA referensi yang tertinggal
+// secara generik (dibaca dari skema, bukan daftar tangan). Data staging yang
+// asli punya rujukan yang tidak muncul di data uji lokal — mis. tiket review
+// template yang diminta akun customer, atau rujukan lama yang sudah yatim —
+// dan dulu membuat seluruh proses gagal "FOREIGN KEY constraint failed".
+db.exec("PRAGMA foreign_keys=OFF");
 const tables = new Set(
   db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((row) => row.name),
 );
-const count = (table, where = "") =>
-  tables.has(table) ? db.prepare(`SELECT COUNT(*) n FROM ${table} ${where}`).get().n : 0;
 const wipe = (table, where = "") => {
   if (!tables.has(table)) return 0;
   return Number(db.prepare(`DELETE FROM ${table} ${where}`).run().changes);
@@ -55,6 +58,7 @@ const wipe = (table, where = "") => {
 const customerFilter =
   "WHERE role_id IN (SELECT id FROM roles WHERE name='User')";
 const removed = {};
+const repaired = {};
 db.exec("BEGIN");
 try {
   for (const table of [
@@ -76,14 +80,38 @@ try {
   );
   removed.customers = wipe("users", customerFilter);
   for (const table of ["email_outbox", "sessions", "audit_logs"]) removed[table] = wipe(table);
+
+  // Rujukan yatim: kolom yang boleh NULL dikosongkan, yang wajib diisi
+  // barisnya dihapus. Diulang sampai bersih karena penghapusan bisa
+  // menimbulkan yatim baru di tabel anak.
+  for (let pass = 0; pass < 10; pass += 1) {
+    const broken = db.prepare("PRAGMA foreign_key_check").all();
+    if (!broken.length) break;
+    for (const table of new Set(broken.map((row) => row.table))) {
+      const info = db.prepare(`PRAGMA table_info(${table})`).all();
+      for (const fk of db.prepare(`PRAGMA foreign_key_list(${table})`).all()) {
+        const column = info.find((col) => col.name === fk.from);
+        const orphan = `${fk.from} IS NOT NULL AND ${fk.from} NOT IN (SELECT ${fk.to || "rowid"} FROM ${fk.table})`;
+        const changes =
+          column?.notnull || column?.pk
+            ? Number(db.prepare(`DELETE FROM ${table} WHERE ${orphan}`).run().changes)
+            : Number(db.prepare(`UPDATE ${table} SET ${fk.from}=NULL WHERE ${orphan}`).run().changes);
+        if (changes) repaired[`${table}.${fk.from}`] = (repaired[`${table}.${fk.from}`] || 0) + changes;
+      }
+    }
+  }
+  const left = db.prepare("PRAGMA foreign_key_check").all();
+  if (left.length)
+    throw new Error(`masih ada ${left.length} rujukan rusak: ${[...new Set(left.map((row) => row.table))].join(", ")}`);
   db.exec("COMMIT");
 } catch (error) {
   db.exec("ROLLBACK");
   db.close();
-  fs.rmSync(dst, { force: true });
+  for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(dst + suffix, { force: true });
   console.error("✗ Gagal membersihkan data uji:", error.message);
   process.exit(1);
 }
+db.exec("PRAGMA foreign_keys=ON");
 db.exec("VACUUM");
 
 const templates = db
@@ -111,6 +139,7 @@ if (typeof process.getuid === "function" && process.getuid() === 0) {
 
 console.log("✓ Database production siap:", dst);
 console.log("  Data uji dibuang:", JSON.stringify(removed));
+if (Object.keys(repaired).length) console.log("  Rujukan yatim dirapikan:", JSON.stringify(repaired));
 console.log("  Template per status:", templates.map((t) => `${t.status} ${t.n} (berharga ${t.priced})`).join(", "));
 console.log("  Akun tim aktif:", staff.map((s) => `${s.role} ${s.n}`).join(", "));
 if (noCanvas.length) console.log("  ! Published tanpa desain canvas (sebaiknya Unpublish):", noCanvas.join(", "));
