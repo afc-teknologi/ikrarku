@@ -349,7 +349,7 @@ export const api = {
     }),
   // Cek status invoice langsung ke Mayar (jaring pengaman bila webhook tidak datang).
   checkPayment: (id: string, guestToken?: string) =>
-    request<{ ok: boolean; status: string; changed: boolean; reason?: string; gatewayStatus?: string }>(
+    request<{ ok: boolean; status: string; changed: boolean; reason?: string; gatewayStatus?: string; orderNo?: string; amount?: number; receiptUrl?: string }>(
       `/orders/${encodeURIComponent(id)}/check-payment`,
       { method: "POST", body: JSON.stringify({ guestToken }) },
     ),

@@ -2923,6 +2923,12 @@ function App() {
   const [notFound, setNotFound] = useState(false);
   const funnelPrevViewRef = useRef<View>("landing");
   const [lastPaidOrder, setLastPaidOrder] = useState<OrderResult | null>(null);
+  // Kembali dari halaman Mayar (/pembayaran-berhasil): order yang sedang
+  // dibayar disimpan sebelum diarahkan ke Mayar, supaya customer — termasuk
+  // yang checkout sebagai tamu tanpa login — langsung melihat status bayarnya.
+  const [paymentReturn, setPaymentReturn] = useState<
+    (OrderResult & { templateId?: string }) | null
+  >(null);
   const [taskItems, setTaskItems] = useState<TaskItem[]>([]);
   const [roleItems, setRoleItems] = useState<RoleItem[]>([]);
   const [databaseOnline, setDatabaseOnline] = useState(false);
@@ -3038,6 +3044,25 @@ function App() {
           if (deepArticleSlug) setArticleSlug(deepArticleSlug);
         }
         if (pathSlug === "desain") setView("designs");
+        let returningPayment = false;
+        if (pathSlug === "pembayaran-berhasil") {
+          try {
+            const pending = JSON.parse(
+              sessionStorage.getItem("ikrarku-pending-payment") || "null",
+            );
+            if (pending?.id) {
+              returningPayment = true;
+              setPaymentReturn(pending);
+              const pendingTemplate = mappedTemplates.find(
+                (item) => item.id === pending.templateId,
+              );
+              if (pendingTemplate) setSelectedPublicTemplate(pendingTemplate);
+              setView("payment-success");
+            }
+          } catch {
+            /* abaikan draft rusak */
+          }
+        }
         // TC-277 — link bagikan template: /templates?t=<id>.
         // Dibaca dari query awal: efek URL bisa sudah membersihkan alamat.
         const sharedTemplateId = initialSearchParams.get("t");
@@ -3122,7 +3147,9 @@ function App() {
                 : fallbackView;
             // Membuka root berarti pengunjung memang ingin landing page,
             // jadi view tersimpan tidak dipulihkan di sana.
-            if (pathSlug === "pembayaran-berhasil")
+            if (pathSlug === "pembayaran-berhasil" && returningPayment) {
+              /* halaman status pembayaran tetap tampil */
+            } else if (pathSlug === "pembayaran-berhasil")
               // Kembali dari halaman Mayar: tampilkan My Order, yang langsung
               // mengecek status pembayaran ke Mayar.
               setView(mappedRole === "User" ? "my-orders" : protectedView);
@@ -4971,6 +4998,17 @@ function App() {
         checkoutOrder.guestToken,
       );
       if (paid.paymentUrl) {
+        try {
+          sessionStorage.setItem(
+            "ikrarku-pending-payment",
+            JSON.stringify({
+              ...checkoutOrder,
+              templateId: selectedPublicTemplate?.id,
+            }),
+          );
+        } catch {
+          /* tanpa storage: customer tetap bisa cek di My Order */
+        }
         window.location.href = paid.paymentUrl;
         return true;
       }
@@ -5274,6 +5312,27 @@ function App() {
           setView("login");
         }}
         account={currentAccount}
+      />
+    );
+
+  if (view === "payment-success" && !lastPaidOrder && paymentReturn)
+    return (
+      <PaymentReturnPage
+        order={paymentReturn}
+        onPaid={(paid) => {
+          try {
+            sessionStorage.removeItem("ikrarku-pending-payment");
+            sessionStorage.removeItem("ikrarku-checkout-draft");
+          } catch {
+            /* abaikan */
+          }
+          setLastPaidOrder(paid);
+          setPaymentReturn(null);
+        }}
+        onHome={() => {
+          setPaymentReturn(null);
+          setView(currentAccount ? "my-orders" : "landing");
+        }}
       />
     );
 
@@ -7430,6 +7489,94 @@ function CheckoutPage({
           </div>
         </aside>
       </main>
+    </div>
+  );
+}
+
+function PaymentReturnPage({
+  order,
+  onPaid,
+  onHome,
+}: {
+  order: OrderResult;
+  onPaid: (order: OrderResult) => void;
+  onHome: () => void;
+}) {
+  const [state, setState] = useState<"checking" | "pending">("checking");
+  const paidRef = useRef(onPaid);
+  paidRef.current = onPaid;
+  const check = useCallback(async () => {
+    try {
+      const result = await api.checkPayment(order.id, order.guestToken);
+      if (result.status === "Paid") {
+        paidRef.current({
+          ...order,
+          status: "Paid",
+          receiptUrl: result.receiptUrl ? assetUrl(result.receiptUrl) : undefined,
+        });
+        return true;
+      }
+    } catch {
+      /* dicoba lagi */
+    }
+    return false;
+  }, [order]);
+  useEffect(() => {
+    let stopped = false;
+    let tries = 0;
+    const loop = async () => {
+      if (stopped) return;
+      if (await check()) return;
+      tries += 1;
+      if (tries >= 3) setState("pending");
+      if (tries < 24 && !stopped) window.setTimeout(loop, 5000);
+    };
+    loop();
+    return () => {
+      stopped = true;
+    };
+  }, [check]);
+  return (
+    <div className="payment-success-page payment-return-page">
+      <div className="success-rings">
+        <Clock3 size={46} />
+      </div>
+      <span>MENUNGGU KONFIRMASI</span>
+      <h1>
+        {state === "checking"
+          ? "Mengecek pembayaran Anda…"
+          : "Pembayaran belum terkonfirmasi"}
+      </h1>
+      <p>
+        Order <strong>{order.orderNo}</strong> ·{" "}
+        {formatRupiah(order.amount)}. Halaman ini otomatis berubah begitu
+        Mayar mengonfirmasi pembayaran.
+      </p>
+      <div className="order-pay-note">
+        <p>
+          <strong>Belum dibayar?</strong> Silakan cek email Anda (termasuk
+          folder Spam/Promosi) untuk tagihan dari Mayar, lalu selesaikan
+          pembayaran lewat link di email tersebut.
+        </p>
+        <p>
+          <strong>Sudah bayar?</strong> Tunggu 1–2 menit atau klik cek
+          sekarang. Status juga diperbarui otomatis di My Order.
+        </p>
+        <button
+          type="button"
+          className="order-check-payment"
+          onClick={async () => {
+            setState("checking");
+            if (!(await check())) setState("pending");
+          }}
+        >
+          <RefreshCw size={14} />
+          Cek status pembayaran
+        </button>
+      </div>
+      <div className="success-actions">
+        <button onClick={onHome}>Kembali</button>
+      </div>
     </div>
   );
 }
@@ -24333,9 +24480,16 @@ function MyOrdersPage({
   // QA TC-176: ringkasan di atas supaya customer langsung tahu posisi seluruh
   // ordernya tanpa harus membaca kartu satu per satu.
   const paidOrders = orders.filter((order) => order.payment_status === "Paid");
-  const doneOrders = paidOrders.filter(
-    (order) => order.fulfillment_status === "Complete",
-  );
+  // Roleplay 31 Okt — "Selesai" berarti seluruh tiket pengerjaan sudah Done,
+  // bukan sekadar onboarding otomatis selesai (fulfillment_status Complete
+  // terisi sesaat setelah bayar, sehingga order baru terhitung "Selesai").
+  const doneOrders = paidOrders.filter((order) => {
+    const tasks = order.tasks || [];
+    return (
+      tasks.length > 0 &&
+      tasks.every((task: any) => ["Done", "Approved"].includes(task.status))
+    );
+  });
   const totalValue = paidOrders.reduce(
     (total, order) => total + (Number(order.amount) || 0),
     0,

@@ -1309,3 +1309,11 @@ test("Mayar: status bayar dicek aktif bila webhook tidak datang", () => {
   assert.match(appTsx, /Belum dibayar\?<\/strong> Silakan cek email/);
   assert.match(appTsx, /Cek status pembayaran/);
 });
+test("Roleplay 31 Okt: kembali dari Mayar, status project, hitungan selesai", () => {
+  assert.match(appTsx, /sessionStorage\.setItem\(\s*"ikrarku-pending-payment"/);
+  assert.match(appTsx, /function PaymentReturnPage\(/);
+  assert.match(serverMjs, /if \(before\?\.order_id\) syncOrderProgressStatus\(before\.order_id\);/);
+  assert.match(serverMjs, /\? "Selesai"\s*: started\s*\? "Sedang dikerjakan"/);
+  assert.match(appTsx, /tasks\.every\(\(task: any\) => \["Done", "Approved"\]\.includes\(task\.status\)\)/);
+  assert.match(serverMjs, /UPDATE sites SET template_id=COALESCE\(template_id,\?\)/);
+});

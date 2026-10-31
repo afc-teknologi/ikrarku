@@ -3721,7 +3721,14 @@ function seedCustomerSiteFromTemplate(userId, order, template) {
   } catch {
     sections = [];
   }
-  if (!Array.isArray(sections) || !sections.length) return;
+  if (!Array.isArray(sections) || !sections.length) {
+    // Template tanpa canvas (template bawaan/demo): tetap catat template yang
+    // dipesan supaya Web Designer melihat nama template yang benar.
+    db.prepare(
+      "UPDATE sites SET template_id=COALESCE(template_id,?),updated_at=? WHERE user_id=?",
+    ).run(template.id, now(), userId);
+    return;
+  }
   const existing = db
     .prepare("SELECT * FROM sites WHERE user_id=?")
     .get(userId);
@@ -4636,7 +4643,17 @@ app.post(
       return res.status(403).json({ error: "Order tidak dapat diakses" });
     try {
       const result = await checkMayarPayment(order);
-      res.json({ ok: true, ...result });
+      const fresh =
+        result.status === "Paid"
+          ? db.prepare("SELECT * FROM orders WHERE id=?").get(order.id)
+          : null;
+      res.json({
+        ok: true,
+        ...result,
+        orderNo: order.order_no,
+        amount: order.amount,
+        receiptUrl: fresh ? receiptUrl(fresh) : undefined,
+      });
     } catch (error) {
       res
         .status(error.status || 500)
@@ -4945,10 +4962,33 @@ app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
   // prioritas tidak membanjiri live chat customer dengan pesan yang sama.
   if (before && before.status !== nextStatus)
     notifyTaskStatusChange(before, nextStatus, req.user.id);
+  // Roleplay 31 Okt — "Status project" di My Order ikut bergerak: dulu
+  // berhenti di "Paid - Onboarding" walau semua tiket sudah Done.
+  if (before?.order_id) syncOrderProgressStatus(before.order_id);
   // MoM A8 — order selesai/batal membebaskan slot; antrean langsung dibagi.
   if (["Done", "Cancelled"].includes(nextStatus)) drainEditorQueue();
   res.json({ ok: true });
 });
+
+function syncOrderProgressStatus(orderId) {
+  const order = db.prepare("SELECT * FROM orders WHERE id=?").get(orderId);
+  if (!order || order.payment_status !== "Paid") return;
+  const tasks = db
+    .prepare("SELECT status FROM tasks WHERE order_id=? AND status<>'Cancelled'")
+    .all(orderId);
+  if (!tasks.length) return;
+  const done = tasks.every((task) => ["Done", "Approved"].includes(task.status));
+  const started = tasks.some((task) => task.status !== "Open");
+  const next = done
+    ? "Selesai"
+    : started
+      ? "Sedang dikerjakan"
+      : order.assigned_editor_id
+        ? "Paid - Onboarding"
+        : "Paid - Antre Web Designer";
+  if (next !== order.order_status)
+    db.prepare("UPDATE orders SET order_status=? WHERE id=?").run(next, orderId);
+}
 
 // TC-157 — diskusi internal per tiket (ala internal comment Jira). Satu
 // order punya beberapa tiket (onboarding CS, build Web Designer); diskusinya
