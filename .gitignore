@@ -31,4 +31,5 @@ server/uploads/*
 server/receipts/*
 .env
 .env.staging
+.env.production
 .npm-cache

@@ -103,12 +103,12 @@ Lalu suite pengujian:
 ```bash
 npm run qa:integration    # 39/39
 npm run qa:db             # 38/38
-npm run qa:layout         # 59/59
+npm run qa:layout         # 112/112
 npm run preflight         # "Preflight passed."
 ```
 
 > Angka `qa:layout` naik setiap kali ada perbaikan QA baru: 29 → 34 → 36 →
-> 37 → 39 → 42 → 53 → **59**. Kalau yang keluar lebih kecil dari angka di atas, berarti
+> 37 → 39 → 42 → 53 → 59 → 62 → 63 → 70 → 71 → 72 → 75 → 76 → 77 → 78 → 79 → 80 → 81 → 82 → 83 → 84 → 103 → 104 → 105 → **110**. Kalau yang keluar lebih kecil dari angka di atas, berarti
 > repo lokal Anda belum memuat perbaikan terakhir — bukan testnya yang
 > hilang.
 
@@ -1008,6 +1008,144 @@ terlihat, perbaikannya belum terpasang (ulangi I.0).
 > **A6 — staff tidak pernah memegang password.** Yang dikirim hanya tautan
 > sekali pakai; customer membuat password sendiri.
 
+### QA 17 Oktober — file UPDATE_QA_IKRARKU.ID_9 (TC-204 s/d TC-221)
+
+Ke-18 TC berstatus Fail sudah diisi **Done · 17/10/2026** di kolom
+*Update Web Dev*. Yang baru di batch ini:
+
+| TC | Cara uji | Benar | Gejala lama |
+|---|---|---|---|
+| **TC-216/217** | canvas dengan layer & ornamen → bandingkan editor dengan Preview (Desktop & Mobile) | posisi layer & ornamen bawah sama | di editor canvas lebih tinggi ±19 px per fitur, layer bergeser |
+| **TC-217** | sedang di mode **Mobile** → klik Preview | Preview langsung tampil Mobile | selalu terbuka Desktop |
+| **TC-218** | mode Mobile → upload foto > 1 MB, lalu pilih foto yang sama lagi | dikompres otomatis & tersimpan; pilihan berulang tetap diproses | ditolak, lalu pilihan berikutnya tidak bereaksi sama sekali |
+| **TC-219** | 8–10 perubahan → Undo satu per satu → Redo | tiap Undo mundur tepat satu langkah; angka di tombol Undo = langkah tersedia (maks 30) | kadang melompat/macet, batas tidak jelas |
+| **TC-208** | Event/Location → **Ukuran tombol**, **Ukuran ikon** | tombol & ikon membesar/mengecil | tidak ada |
+| **TC-212** | Wedding Gift → **Tampilan logo bank** | bentuk, ukuran, posisi, warna berubah | logo selalu kapsul hijau |
+| **TC-213** | Credit → **Elemen musik** & **Gaya teks credit** | ikon/ukuran/warna musik & gaya teks berubah | default |
+
+> **TC-216/217 — satu perbedaan yang memang disengaja:** fitur *Buka
+> Undangan* yang diletakkan **di canvas yang sama** dengan fitur lain tampil
+> di editor, tetapi di Preview menjadi layar pembuka terpisah. Letakkan
+> Buka Undangan di canvas sendiri (Main Canvas) agar tinggi canvas lain
+> identik.
+
+
+### QA 21 Oktober — file UPDATE_QA_IKRARKU.ID_10 (TC-212 s/d TC-246)
+
+Ke-27 TC berstatus Fail sudah diisi **Done · 21/10/2026**. TC-212, 216, 225,
+dan 227 sudah selesai di batch sebelumnya (logo bank, preview, round-robin
+A8, harga admin A7); sisanya baru:
+
+| TC | Cara uji | Benar |
+|---|---|---|
+| **TC-245** | checkout template **tanpa daftar** → bayar | akun dibuat otomatis; email "Akun ikrarku Anda sudah siap" berisi username + password sementara; login pertama wajib membuat password baru |
+| **TC-232** | kirim 5+ ucapan di undangan | semua tampil (scroll atau per halaman), yang lama tidak hilang |
+| **TC-222** | My Order | billing tampil vertikal |
+| **TC-223/224** | login customer → editor & Templates | tombol **Hubungi Support** membuka chat; katalog template lain di dashboard |
+| **TC-226** | catatan internal dari Web Designer, dibuka CS | nama & role pengirim di setiap catatan |
+| **TC-228** | Save The Date → Ukuran kotak waktu | kotak & angka ikut membesar/mengecil |
+| **TC-229/230** | Gallery → tinggi/jarak gambar; Gallery Layout Style | tinggi bisa otomatis/tetap; Carousel & Filmstrip ada di picker |
+| **TC-231** | Style → Transparansi warna/gambar background & kotak putih | transparansi berubah per fitur & per canvas |
+| **TC-233** | Typography → Font heading / Font teks | font berganti (Google Fonts dimuat otomatis) |
+| **TC-234** | Credit → *Tempel di paling bawah* | credit di akhir undangan tanpa ruang kosong |
+| **TC-235** | Feature Library → **Live Streaming** | tautan YouTube diputar di undangan; IG/Zoom/Meet jadi tombol *Tonton Live* |
+| **TC-236** | Save The Date/Event → tanggal acara | tombol Google Calendar & unduh .ics |
+| **TC-237** | Buka Undangan → Style → **Mode button: Button slide** | tamu menggeser tombol untuk membuka |
+| **TC-238** | Icon → Teks pendamping | teks di bawah/samping icon, ukuran bisa diatur |
+| **TC-239** | pilih fitur → Advanced → **Live Motion Elemen (Layer 2)** | image, kotak putih, header, text bergerak terpisah |
+| **TC-240/241** | Wedding Gift → *Box alamat pengiriman kado*, *Mode tampilan: Ringkas* | hanya header, teks, tombol **Lihat Rekening**; diklik → rekening + alamat kado (bisa disalin) |
+| **TC-242** | Page Structure → Tata letak desktop **Kolom** → Rasio **70/30** | sisi 70% berisi warna/gambar, header, supporting text, slideshow *Our Image* otomatis, atau video |
+| **TC-243** | pilih canvas → Style → **Layer 1 (default)** | tombol *Upload Video Layer 1* |
+| **TC-244** | Preview Desktop di layar kecil & besar | selebar layar laptop, tanpa ruang abu-abu: tata letak Kolom/70-30 dirender apa adanya; desain penuh diskalakan pas lebar layar |
+| **TC-246** | landing page → tombol **ID / EN** | seluruh teks landing berganti bahasa; pilihan diingat |
+
+> **TC-245 menggantikan alur lama "daftar dulu sebelum bayar" (TC-072).**
+> Tombol A6 di Orders tetap ada untuk mengirim ulang tautan buat password.
+> **TC-237** ditafsirkan sebagai tombol *geser untuk membuka* pada Buka
+> Undangan. **TC-242:** kolom isi minimal 360 px, jadi pada layar/preview
+> sempit rasionya mendekati 62/38.
+>
+> **Revisi 21 Okt (Live Preview):** Mobile tidak lagi menampilkan pita putih
+> di atas saat di-scroll — penyebabnya padding 22 px di kontainer gulir yang
+> membuat background tetap menempel 22 px di bawah tepi atas.
+
+### Revisi 22 Oktober — color picker, 70/30, bottom navigation
+
+| Fitur | Cara uji | Benar |
+|---|---|---|
+| **Color picker** (semua) | pilih warna → klik ↺ | swatch kembali ke *Tidak ada warna* (kotak-kotak, garis merah). Warna isian punya tombol ⦸ *Tanpa warna (transparan)* |
+| **70/30** | Tata letak Kolom → Rasio 70/30 | Posisi kolom hanya Kanan/Kiri; *Isi sisi visual* hanya muncul di 70/30; upload slideshow/video mengosongkan Warna background desktop |
+| **Bottom navigation** | Page Structure → *Bottom navigation bar* → centang column/feature (maks 5), pilih style | bar tampil di undangan (Mobile saja / Mobile & Desktop), klik menu menggulir ke column-nya, menu aktif mengikuti scroll |
+| **Ikon menu sendiri** | pada menu yang dicentang → *Upload ikon* (PNG/JPG/WebP, maks 512 KB) | ikon hasil upload menggantikan ikon bawaan; *Pakai ikon bawaan* mengembalikannya |
+
+> Warna teks fitur yang sama dengan bawaan tidak lagi disimpan, jadi picker-nya
+> tampil *Tidak ada warna*; tampilan undangan tidak berubah.
+
+### Revisi 24 Oktober — header landing, preview template, sampul template
+
+| Fitur | Cara uji | Benar |
+|---|---|---|
+| **Header landing** | buka landing (desktop & HP) | pilihan **ID/EN**, tombol **Masuk** berbingkai, dan **Temukan desain** satu baris sejajar logo & menu. Di HP pilihan bahasa ada di dalam menu ☰ dengan tombol 48 px |
+| **Preview template (landing)** | Temukan desain → pilih template → Preview → Desktop | selebar layar, tanpa ruang kosong kiri-kanan |
+| **Safe Preview (ikon mata)** | Templates → arahkan ke kartu → ikon mata | sama dengan Template Preview: dialog di tengah, Desktop/Mobile, bisa di-scroll |
+| **Sampul tanpa gambar sample** | template baru tanpa upload *Gambar sample* | sampul warna aksen (kategori, nama, harga) + label *Belum ada gambar sample*, bukan foto contoh |
+| **Preview: layar Buka Undangan** | Preview Desktop di laptop | layar pembuka setinggi kotak preview, tanpa sisa latar abu-abu di bawahnya. Di layar rendah (mis. 1366×768) isi cover yang diperbesar bisa digulir di dalam kotak |
+| **Preview tidak gerak-gerak** | buka Template Preview / Live Preview, diamkan beberapa detik | skala tetap, tidak ada scrollbar horizontal dan tidak bergantian membesar-mengecil |
+| **Drag & drop feature** | Page Structure → tarik ikon ⋮⋮ feature ke atas feature lain / ke column lain; atau tarik blok di canvas | garis hijau menandai posisi; feature pindah ke posisi itu (bukan selalu ke paling bawah) |
+| **Button slide di kolom sempit** | Buka Undangan mode Button slide + tata letak 70/30 → Preview | slider utuh di dalam kolom (maks 320 px), bisa digeser sampai ujung |
+| **Kartu desain publik** | Buka `/` atau `/desain`, lihat kartu template tanpa sample image | tidak ada label "Canvas 01 · actual saved preview"; canvas memenuhi kartu 4:5 |
+| **Cover Buka Undangan di tata letak Kolom / 70/30** | Edit judul & background cover (tersimpan sebagai versi Mobile) → Preview Desktop | Preview & undangan live menampilkan isi yang sama dengan editor, bukan nilai bawaan |
+
+> Gambar contoh Chyntia & Rian dulu dipasang otomatis ke **semua** template
+> tanpa gambar setiap server start. Kini hanya untuk tiga template contoh
+> bawaan; template lain yang terlanjur memakainya dibersihkan otomatis saat
+> deploy berikutnya.
+
+### QA 26 Oktober — file UPDATE_QA_IKRARKU.ID_11 (TC-247 s/d TC-277)
+
+| TC | Cara uji | Benar |
+|---|---|---|
+| **TC-247 / 251 / 261 / 271** | tata letak 70/30 → bandingkan canvas editor dengan Live Preview | sisi 30% ditata selebar Mobile (390 px) lalu diskalakan: tinggi section, crop layer, dan ukuran ornamen sama persis di editor, preview, dan Mobile |
+| **TC-248** | kolom lebar tetap (px), posisi kanan/kiri | kolom menempel ke pojok layar, tanpa sisa background di sisi luar |
+| **TC-249** | Page Structure → Isi sisi visual | font, ukuran, warna header & supporting text, header bold |
+| **TC-250 / 272** | ornamen + layer di canvas Buka Undangan → Preview | ornamen & layer tampil di layar cover; fitur yang disembunyikan untuk device aktif tetap terlihat transparan di canvas editor (label *Disembunyikan di …*) |
+| **TC-252** | ornamen *Atas tengah* yang lebih lebar dari kolom | tetap tepat di tengah |
+| **TC-253** | Buka Undangan → Style | *Ukuran teks button*; default lebih kecil; editor = preview |
+| **TC-254** | Background tetap aktif → Canvas 1 → layer | sakelar *Ikut Background tetap* (default mati: bingkai tidak dobel) |
+| **TC-255** | duplicate canvas berlayer | layer & ornamen salinan ber-id baru; layer yang ikut backdrop tidak disalin |
+| **TC-256 / 268** | layer → Padding/Margin, Transparansi dalam bingkai | gambar tidak terpotong; bagian dalam bingkai transparan |
+| **TC-257 / 258 / 262** | Advanced → padding 0 / *Tempel antar fitur* | isi menempel ke tepi; fitur menyatu atas-bawah |
+| **TC-259** | Save The Date → *Header kecil* | bisa disembunyikan, diganti teks, warna, ukuran |
+| **TC-260** | ikon pensil di samping nama template (topbar) → Save | nama template berubah |
+| **TC-263 / 264** | Wedding Gift ringkas | *Jarak tombol dari teks*; teks tombol tepat di tengah |
+| **TC-265..267 / 276** | Greetings → Style → *Kolom Ucapan*; tombol **B Header** | font, ukuran, latar kotak ucapan; header bisa bold |
+| **TC-269 / 273** | Credit di canvas terakhir berlayer → Preview | credit di dalam canvas terakhir, di atas layer-nya, tanpa space kosong |
+| **TC-270** | Templates → Preview → Mobile, Background tetap | background tetap diam saat digulir |
+| **TC-274 / 275** | Text → *Titik peletakan*; **B Header** / **B Teks** | atas/tengah/bawah canvas; bold header & teks terpisah |
+| **TC-277** | halaman detail template → *Bagikan Template* | link `/templates?t=<id>` disalin/dibagikan dan membuka template itu langsung |
+
+### Revisi 27 Oktober — layar Buka Undangan = canvas editor
+
+| Fitur | Cara uji | Benar |
+|---|---|---|
+| **Layar cover** | edit canvas cover (layer, ornamen, teks) → Preview / Preview Template / undangan live | tampilan sama dengan canvas editor: teks di atas layer, urutan lapisan & posisi sama. Tombol membuka undangan |
+| **Tanpa ruang kosong** | Preview → buka undangan → gulir sampai bawah | canvas terakhir langsung berakhir di dasar; player musik melayang di atas canvas, tidak menambah ruang |
+| **Revisi template live** | Web Designer edit template Published (mis. tambah ornamen) → Save Template Draft | kartu menampilkan *Revisi menunggu approval*; landing masih versi lama sampai Administrator klik **Approve revisi** di kartu (atau di Tasks & Tickets) |
+
+### QA 29 Oktober — file UPDATE_QA_IKRARKU.ID_12 (pending)
+
+| TC / fitur | Cara uji | Benar |
+|---|---|---|
+| **Pembayaran Mayar semua template** | checkout beberapa template berbeda, nomor HP format apa pun (+62 / 62 / 08, dengan spasi atau tanda hubung) | semua diarahkan ke halaman Mayar. Bila Mayar menolak, alasannya tampil tetap di halaman checkout dan tercatat di log `[mayar]` |
+| **Akad & Resepsi** | fitur Event → Content → *Isi contoh Akad & Resepsi* / *Tambah acara* | tiap acara: nama, tanggal, jam, tempat, alamat, tombol Simpan Tanggal & Navigasi Map; tata letak bertumpuk atau berdampingan, garis pemisah |
+| **TC-250** | Web Designer edit template Published → Save → Admin *Approve revisi* | ornamen tampil di preview publik setelah revisi disetujui |
+| **TC-270** | Templates & Approval / Tasks / Safe Preview → Mobile → scroll | background tetap menempel penuh dari atas, tanpa pita kosong |
+| **TC-274** | Text → Content atau Style → *Posisi teks di section* | teks pindah ke atas/tengah/bawah section; fitur lain di kolom tetap |
+| **TC-073** | isi SMTP di `.env.staging` → `node scripts/smtp-check.mjs email@anda` → sign up | email verifikasi masuk; email yang tertahan sebelum SMTP diisi dikirim ulang saat server menyala |
+| **TC-157** | Tasks & Tickets → kartu tiket → *Diskusi internal CS & Web Designer* | catatan terlihat di tiket CS, tiket Web Designer, dan Support Inbox; tidak terlihat customer |
+| **TC-167** | checkout tanpa bayar | order hanya ada di Orders & Revenue; tiket baru muncul setelah lunas |
+| **TC-169** | ubah status tiket → Save Status | pesan otomatis di live chat customer; status Done juga mengirim email (butuh SMTP) |
+| **Status bayar Mayar otomatis** | bayar lewat link email Mayar → buka My Order | status jadi *Lunas* tanpa menunggu webhook: dicek ke Mayar saat My Order dibuka, tiap 20 detik, lewat tombol *Cek status pembayaran*, dan oleh server tiap 2 menit (`MAYAR_RECONCILE_MS`). Order belum lunas menampilkan catatan "Belum dibayar? Silakan cek email …" |
 ---
 
 # Ringkasan perintah harian
