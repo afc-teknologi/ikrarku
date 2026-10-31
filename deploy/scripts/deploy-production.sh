@@ -6,6 +6,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$ROOT"
 COMPOSE="docker compose -f docker-compose.production.yml"
 
+# Production hanya dari branch `production` (folder /opt/ikrarku-production).
+# Branch `staging` dipakai dev.ikrarku.id di /opt/ikrarku.
+branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")"
+if [[ "$branch" != "production" && "${ALLOW_ANY_BRANCH:-}" != "1" ]]; then
+  echo "ERROR: folder ini ada di branch '$branch'. Deploy production hanya dari branch 'production'"
+  echo "       (cd /opt/ikrarku-production). Lihat PANDUAN_DEPLOY_PRODUCTION.md bagian Branch."
+  exit 1
+fi
+git fetch -q origin production 2>/dev/null || true
+if [[ -n "$(git rev-list HEAD..origin/production 2>/dev/null)" ]]; then
+  echo "ERROR: branch production lokal tertinggal dari GitHub. Jalankan: git pull"
+  exit 1
+fi
+
 if [[ ! -f .env.production ]]; then
   echo "ERROR: .env.production tidak ada. Salin dari .env.production.example lalu isi."
   exit 1

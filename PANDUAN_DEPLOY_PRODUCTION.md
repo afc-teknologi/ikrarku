@@ -135,7 +135,7 @@ docker compose -f docker-compose.production.yml exec ikrarku node scripts/smtp-c
 ```bash
 crontab -e
 # tambahkan:
-15 2 * * * bash /opt/ikrarku/deploy/scripts/backup-production.sh /opt/ikrarku/backups/production >> /var/log/ikrarku-backup.log 2>&1
+15 2 * * * bash /opt/ikrarku-production/deploy/scripts/backup-production.sh /opt/ikrarku-production/backups/production >> /var/log/ikrarku-backup.log 2>&1
 ```
 
 ## D. Rapikan data di https://ikrarku.id (login Admin)
@@ -148,17 +148,30 @@ Akun tim memakai password yang sama dengan staging.
 4. Payment Methods → aktifkan metode yang dipakai.
 5. Transaksi uji Rp 10.000 sampai halaman Payment Received, lalu kembalikan harga.
 
-## E. Update berikutnya
+## E. Branch & update berikutnya
+
+| Branch GitHub | Server | Folder di VPS | Deploy |
+|---|---|---|---|
+| `staging` | dev.ikrarku.id | `/opt/ikrarku` | `docker compose -f docker-compose.staging.yml up -d --build` |
+| `production` | ikrarku.id | `/opt/ikrarku-production` | `bash deploy/scripts/deploy-production.sh` |
+
+Semua pekerjaan baru masuk ke `staging`. Setelah lolos uji di dev.ikrarku.id,
+naikkan ke production lewat Pull Request `staging → production` di GitHub.
+`deploy-production.sh` menolak jalan bila foldernya bukan branch `production`
+atau masih tertinggal dari GitHub.
 
 ```bash
+# staging
 cd /opt/ikrarku && git pull
-bash deploy/scripts/deploy-production.sh          # production
-docker compose -f docker-compose.staging.yml up -d --build   # staging
+docker compose -f docker-compose.staging.yml up -d --build
+
+# production (setelah PR staging → production di-merge)
+cd /opt/ikrarku-production && git pull
+bash deploy/scripts/deploy-production.sh
 ```
 
-Uji di staging dulu, baru production. `prod-seed-from-staging.mjs` hanya untuk
-peluncuran pertama: database production yang sudah ada ditolak kecuali `--force`,
-dan `--force` menghapus semua order production.
+`prod-seed-from-staging.mjs` hanya untuk peluncuran pertama: database production
+yang sudah ada ditolak kecuali `--force`, dan `--force` menghapus semua order production.
 
 ## F. Rollback
 
