@@ -2367,3 +2367,8 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .order-check-payment{display:inline-flex;align-items:center;gap:6px;border:1px solid #125946;background:#125946;color:#fff;border-radius:9px;padding:8px 12px;font-size:13px;font-weight:600;cursor:pointer}
 .order-check-payment:disabled{opacity:.65;cursor:wait}
 .payment-return-page .order-pay-note{max-width:560px;width:100%;text-align:left;margin:20px auto 6px}
+/* QA 1 Nov — credit paling bawah mengikuti kolom asalnya (lebar & posisi). */
+.site-credit-slot{display:flex;flex-direction:column;align-items:stretch;padding-inline:var(--canvas-padding-x,32px)}
+.site-credit-slot>.feature-block{max-width:100%}
+/* QA 1 Nov — Background tetap tidak terpotong oleh tinggi header undangan. */
+.site-fixed-backdrop{height:calc(var(--site-viewport-h,100vh) - var(--nav-visible,0px));margin-bottom:calc(-1 * (var(--site-viewport-h,100vh) - var(--nav-visible,0px)))}

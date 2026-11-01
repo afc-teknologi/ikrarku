@@ -16487,13 +16487,16 @@ function withoutSharedBackdrop(
 function FixedBackdrop({
   source,
   viewportHeight,
+  backdropRef,
 }: {
   source: CanvasSection;
   viewportHeight: number;
+  backdropRef?: React.Ref<HTMLDivElement>;
 }) {
   const filter = getBackgroundFilter(source.backgroundEffect);
   return (
     <div
+      ref={backdropRef}
       className="site-fixed-backdrop"
       aria-hidden
       style={
@@ -18892,6 +18895,8 @@ function WeddingCanvasBody({
   const fixedBackdrop = !thumbnail ? globalBackgroundSource : null;
   const [scrollViewportHeight, setScrollViewportHeight] = useState(0);
   const previewZoom = useContext(PreviewZoomContext);
+  const siteNavRef = useRef<HTMLElement>(null);
+  const fixedBackdropRef = useRef<HTMLDivElement>(null);
   const coverEntry = useMemo(() => {
     for (const section of sections)
       for (const column of section.columns)
@@ -19052,6 +19057,58 @@ function WeddingCanvasBody({
     // `opened`: bila ada cover, root halaman baru terpasang setelah cover
     // dibuka, jadi pengukuran harus diulang saat itu.
   }, [fixedBackdrop, opened, previewZoom]);
+  // QA 1 Nov — Background tetap terpotong di bawah. Backdrop sticky
+  // setinggi jendela gulir, tetapi posisi awalnya DI BAWAH header undangan
+  // (logo · Our Story · Event …). Selama header masih terlihat, bagian bawah
+  // backdrop — bingkai bunga, layer bawah — jatuh di luar layar sebesar
+  // tinggi header. Tingginya kini dikurangi bagian header yang masih
+  // terlihat, sehingga backdrop selalu tepat mengisi area di bawah header
+  // sampai tepi bawah layar; begitu header tergulir habis, tinggi penuh.
+  useEffect(() => {
+    if (!fixedBackdrop) return;
+    const backdrop = fixedBackdropRef.current;
+    const root = revealRootRef.current;
+    if (!backdrop || !root) return;
+    let scroller: HTMLElement | null = root.parentElement;
+    while (scroller && scroller !== document.body) {
+      const overflowY = getComputedStyle(scroller).overflowY;
+      if (overflowY === "auto" || overflowY === "scroll") break;
+      scroller = scroller.parentElement;
+    }
+    const box = scroller && scroller !== document.body ? scroller : null;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const nav = siteNavRef.current;
+      if (!nav) {
+        backdrop.style.setProperty("--nav-visible", "0px");
+        return;
+      }
+      const rect = nav.getBoundingClientRect();
+      const viewTop = box ? box.getBoundingClientRect().top : 0;
+      const visible = Math.max(0, Math.min(rect.height, rect.bottom - viewTop));
+      // Rect dalam piksel layar; preview/editor memakai CSS zoom, jadi
+      // dikonversi ke piksel desain lewat rasio tinggi asli header.
+      const scale = rect.height ? nav.offsetHeight / rect.height : 1;
+      backdrop.style.setProperty(
+        "--nav-visible",
+        `${Math.round(visible * scale)}px`,
+      );
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const target: HTMLElement | Window = box || window;
+    target.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      target.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [fixedBackdrop, opened, editable, scrollViewportHeight, previewZoom]);
+
   if (page === "rsvp-page")
     return <RsvpPage guests={guests} addGuest={addGuest} />;
   // Revisi 27 Okt — layar Buka Undangan = Canvas cover apa adanya. Dulu
@@ -19101,28 +19158,45 @@ function WeddingCanvasBody({
   const pinnedCredits = editable
     ? []
     : sections.flatMap((rawSection) =>
-        resolveSection(rawSection, device).columns.flatMap((column) =>
-          column.features
-            .filter(isPinnedCredit)
-            .map((feature) => ({ feature, canvasId: rawSection.id })),
-        ),
-      );
+        {
+          const resolved = resolveSection(rawSection, device);
+          return resolved.columns.flatMap((column) =>
+            column.features
+              .filter(isPinnedCredit)
+              .map((feature) => ({
+                feature,
+                canvasId: rawSection.id,
+                paddingX: resolved.paddingX ?? 32,
+              })),
+          );
+        });
   const creditFooter = pinnedCredits.length ? (
     <footer className="site-credit-footer">
-      {pinnedCredits.map(({ feature, canvasId }) => (
-        <FeatureBlock
+      {/* QA 1 Nov — credit dilepas dari canvas-nya, tetapi lebar & posisi
+          (objectWidth / objectAlign) dihitung terhadap KOLOM asalnya. Tanpa
+          kolom flex dan padding canvas asal, alignSelf diabaikan dan credit
+          selebar 60% menempel ke kiri. Slot ini meniru kolom tersebut. */}
+      {pinnedCredits.map(({ feature, canvasId, paddingX }) => (
+        <div
           key={`${feature.id}-${animationNonce}`}
-          feature={feature}
-          editable={false}
-          selected={false}
-          onSelect={() => {}}
-          onUpdate={() => {}}
-          greetings={greetings}
-          addGreeting={addGreeting}
-          guests={guests}
-          addGuest={addGuest}
-          canvasId={canvasId}
-        />
+          className="site-credit-slot"
+          style={
+            { "--canvas-padding-x": `${paddingX}px` } as React.CSSProperties
+          }
+        >
+          <FeatureBlock
+            feature={feature}
+            editable={false}
+            selected={false}
+            onSelect={() => {}}
+            onUpdate={() => {}}
+            greetings={greetings}
+            addGreeting={addGreeting}
+            guests={guests}
+            addGuest={addGuest}
+            canvasId={canvasId}
+          />
+        </div>
       ))}
     </footer>
   ) : null;
@@ -19145,7 +19219,7 @@ function WeddingCanvasBody({
       <CoverOpenContext value={lockedCover ? openCover : null}>
       {soundVpos !== "bottom" && soundNode}
       {!lockedCover && (
-      <nav>
+      <nav ref={siteNavRef}>
         <Brand />
         <div>
           <a>Our Story</a>
@@ -19159,6 +19233,7 @@ function WeddingCanvasBody({
         <FixedBackdrop
           source={fixedBackdrop}
           viewportHeight={scrollViewportHeight}
+          backdropRef={fixedBackdropRef}
         />
       )}
       {sections.map((rawSection) => {
