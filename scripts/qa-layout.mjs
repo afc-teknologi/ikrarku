@@ -1335,3 +1335,10 @@ test("QA 1 Nov: layar Buka Undangan memenuhi layar walau canvas cover pendek", (
   assert.match(appCss, /\.wedding-site\.cover-as-canvas\{display:flex;flex-direction:column\}/);
   assert.match(appCss, /\.wedding-site\.cover-as-canvas>\.canvas-section\{flex:1 0 auto\}/);
 });
+test("QA 1 Nov: credit di tengah walau footer flex; Mobile ikut rasio background tanpa memotong isi", () => {
+  assert.match(appCss, /\.site-credit-slot\{align-self:stretch;width:100%;box-sizing:border-box\}/);
+  assert.match(appCss, /\.canvas-section\.follow-aspect\{overflow:clip\}/);
+  assert.match(appTsx, /function readUrlAspect\(url: string\)/);
+  assert.match(appTsx, /const followAspectAll = async \(on: boolean\) =>/);
+  assert.match(appTsx, /Terapkan ke semua canvas/);
+});
