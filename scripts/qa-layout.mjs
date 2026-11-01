@@ -1317,3 +1317,9 @@ test("Roleplay 31 Okt: kembali dari Mayar, status project, hitungan selesai", ()
   assert.match(appTsx, /tasks\.every\(\(task: any\) => \["Done", "Approved"\]\.includes\(task\.status\)\)/);
   assert.match(serverMjs, /UPDATE sites SET template_id=COALESCE\(template_id,\?\)/);
 });
+test("QA 1 Nov: credit bawah ikut kolom asal, Background tetap tidak terpotong header", () => {
+  assert.match(appTsx, /className="site-credit-slot"/);
+  assert.match(appCss, /\.site-credit-slot\{display:flex;flex-direction:column/);
+  assert.match(appTsx, /"--nav-visible",\s*`\$\{Math\.round\(visible \* scale\)\}px`/);
+  assert.match(appCss, /\.site-fixed-backdrop\{height:calc\(var\(--site-viewport-h,100vh\) - var\(--nav-visible,0px\)\)/);
+});
