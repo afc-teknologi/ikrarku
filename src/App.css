@@ -2388,3 +2388,6 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .follow-aspect-all{display:flex;gap:6px;margin:-6px 0 12px}
 .follow-aspect-all button{flex:1;border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 8px;font-size:8px;color:#315e51;cursor:pointer}
 .follow-aspect-all button:hover{background:#f2f7f4}
+/* QA 1 Nov — layar Buka Undangan flex kolom: backdrop Background tetap tidak
+   boleh ikut menyusut (dulu tinggal ~2/3 tinggi kolom 70/30, sisanya gelap). */
+.wedding-site.cover-as-canvas>.site-fixed-backdrop,.wedding-site.cover-as-canvas>.sound-dock{flex:none}

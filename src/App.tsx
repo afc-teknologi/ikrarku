@@ -19378,7 +19378,7 @@ function WeddingCanvasBody({
         return (
           <section
             key={section.id}
-            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect ? " follow-aspect" : ""}`}
+            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect && !lockedCover ? " follow-aspect" : ""}`}
             onDragOver={(event) => {
               if (
                 editable &&
@@ -19422,8 +19422,13 @@ function WeddingCanvasBody({
                 })(),
                 // Mengikuti rasio asli background supaya seluruh desain terlihat
                 // di lebar berapa pun, bukan terpotong atas-bawah oleh `cover`.
+                // Layar Buka Undangan adalah satu layar penuh: rasio background
+                // tidak dipakai di sana (canvas cover potret pada kolom 70/30
+                // dulu lebih tinggi dari layar, judul terpotong di atas).
                 aspectRatio:
-                  section.backgroundFollowAspect && section.backgroundAspect
+                  section.backgroundFollowAspect &&
+                  section.backgroundAspect &&
+                  !lockedCover
                     ? String(section.backgroundAspect)
                     : undefined,
                 // QA 1 Nov — mengikuti rasio background TANPA memotong isi:

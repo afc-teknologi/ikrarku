@@ -1345,3 +1345,7 @@ test("QA 1 Nov: credit di tengah walau footer flex; Mobile ikut rasio background
 test("QA 1 Nov: cover ikut rasio background tetap penuh layar di Buka Undangan (70/30 & Mobile)", () => {
   assert.match(appTsx, /\? lockedCover\s*\? "100%"\s*: undefined/);
 });
+test("QA 1 Nov: Buka Undangan 70/30 dengan Background tetap — backdrop tidak menyusut, rasio tidak dipakai di layar cover", () => {
+  assert.match(appCss, /\.wedding-site\.cover-as-canvas>\.site-fixed-backdrop,\.wedding-site\.cover-as-canvas>\.sound-dock\{flex:none\}/);
+  assert.match(appTsx, /section\.backgroundAspect &&\s*!lockedCover\s*\? String\(section\.backgroundAspect\)/);
+});
