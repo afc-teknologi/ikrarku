@@ -835,7 +835,9 @@ test("TC-216: preview Desktop selebar canvas desain, tidak selebar layar", () =>
   assert.match(appTsx, /const DESKTOP_DESIGN_WIDTH = 1050;/);
   // Batas itu harus sama dengan batas atas canvas editor.
   assert.match(appCss, /\.canvas-frame\.desktop\{width:min\(1050px,/);
-  assert.match(appTsx, /document\.querySelector\("\.canvas-frame\.desktop"\)/);
+  // QA 1 Nov — editor menata Desktop pada 1050 px lalu diperkecil; preview
+  // memakai lebar desain tetap yang sama.
+  assert.match(appTsx, /const designWidth = DESKTOP_DESIGN_WIDTH;/);
   for (const selector of [
     ".preview-full-stage.desktop .preview-content",
     ".actual-template-preview-shell.device-desktop>.wedding-site",
@@ -960,7 +962,7 @@ test("QA 17 Okt TC-216/217: canvas editor setinggi preview; preview buka di mode
   // Label fitur di editor tidak boleh memakan tempat (dulu +19 px per fitur).
   assert.match(appCss, /\.feature-block>\.feature-handle\{position:absolute\}/);
   assert.match(appTsx, /document\.querySelector\("\.canvas-frame\.mobile"\) \? "mobile" : "desktop"/);
-  assert.match(appTsx, /return measured \|\| lastDesktopCanvasWidth \|\| DESKTOP_DESIGN_WIDTH;/);
+  assert.doesNotMatch(appTsx, /lastDesktopCanvasWidth/);
 });
 
 test("QA 17 Okt TC-208/212/213: ukuran tombol lokasi, logo bank, elemen musik credit", () => {
@@ -1322,4 +1324,10 @@ test("QA 1 Nov: credit bawah ikut kolom asal, Background tetap tidak terpotong h
   assert.match(appCss, /\.site-credit-slot\{display:flex;flex-direction:column/);
   assert.match(appTsx, /"--nav-visible",\s*`\$\{Math\.round\(visible \* scale\)\}px`/);
   assert.match(appCss, /\.site-fixed-backdrop\{height:calc\(var\(--site-viewport-h,100vh\) - var\(--nav-visible,0px\)\)/);
+});
+test("QA 1 Nov: canvas Desktop editor ditata 1050 px lalu diperkecil, drag dibagi skala", () => {
+  assert.match(appTsx, /const editorZoom = useFitZoom\(\s*canvasFrameRef,\s*DESKTOP_DESIGN_WIDTH,\s*desktopScaled,\s*1,\s*\)/);
+  assert.match(appTsx, /className=\{`canvas-frame-scale\$\{desktopScaled \? " is-scaled" : ""\}`\}/);
+  assert.match(appTsx, /function visualScale\(element: HTMLElement \| null\)/);
+  assert.match(appTsx, /base \+ \(moveEvent\.clientY - startY\) \/ scale/);
 });

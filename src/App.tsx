@@ -9661,9 +9661,6 @@ const MOBILE_PREVIEW_WIDTH = 390;
  * preview dari editor memakai lebar canvas yang sedang tampil.
  */
 const DESKTOP_DESIGN_WIDTH = 1050;
-/** Lebar area kerja Desktop terakhir di editor (untuk Preview yang dibuka
- *  dari mode Mobile, saat canvas Desktop tidak sedang terpasang). */
-let lastDesktopCanvasWidth = 0;
 
 const ThumbnailContext = createContext(false);
 /**
@@ -10929,19 +10926,29 @@ function Editor({
   // Lebar saat Preview dibuka. Sejak TC-216 sama dengan area kerja editor
   // pada mode Desktop (dulu selebar jendela), dan 390 px pada mode Mobile.
   const [previewWidth, setPreviewWidth] = useState(0);
+  // QA 1 Nov — "preview terlalu ngezoom & ngecrop". Dulu canvas Desktop
+  // ditata selebar area kerja editor (mis. 666 px di laptop), lalu Live
+  // Preview memperbesar desain 666 px itu ke lebar layar (190%) — teks dan
+  // ornamen raksasa, cover terpotong. Preview Templates/Approval memakai
+  // 1050 px, jadi tiap layar menampilkan tata letak berbeda. Kini canvas
+  // Desktop SELALU ditata pada DESKTOP_DESIGN_WIDTH lalu diperkecil agar
+  // muat di area kerja — editor, Live Preview, dan preview template sama.
+  const desktopScaled =
+    previewMode === "desktop" && !desktopColumn && activePage !== "invitees";
+  const editorZoom = useFitZoom(
+    canvasFrameRef,
+    DESKTOP_DESIGN_WIDTH,
+    desktopScaled,
+    1,
+  );
   useEffect(() => {
     const node = canvasFrameRef.current;
     if (!node) return;
     const read = () => {
       setCanvasWidth(Math.round(node.getBoundingClientRect().width));
-      if (previewMode === "desktop")
-        lastDesktopCanvasWidth = Math.round(node.getBoundingClientRect().width);
-      // TC-216 — preview Desktop kini selebar area kerja ini, bukan selebar
-      // jendela, jadi kedua angka di chip mode seharusnya sama.
+      // QA 1 Nov — desain Desktop selalu ditata pada DESKTOP_DESIGN_WIDTH.
       setPreviewWidth(
-        previewMode === "mobile"
-          ? MOBILE_PREVIEW_WIDTH
-          : Math.round(node.getBoundingClientRect().width),
+        previewMode === "mobile" ? MOBILE_PREVIEW_WIDTH : DESKTOP_DESIGN_WIDTH,
       );
     };
     read();
@@ -12808,8 +12815,11 @@ function Editor({
                 <div className="template-mode-chip">
                   <Palette size={15} /> Template Design · URL tidak diperlukan ·{" "}
                   {previewMode === "mobile" ? "Mobile" : "Desktop"} · Area kerja{" "}
-                  {canvasWidth ? `${canvasWidth} px` : "…"} · Preview{" "}
+                  {canvasWidth ? `${canvasWidth} px` : "…"} · Desain{" "}
                   {previewWidth ? `${previewWidth} px` : "…"}
+                  {desktopScaled && editorZoom < 1
+                    ? ` (tampil ${Math.round(editorZoom * 100)}%)`
+                    : ""}
                 </div>
               )}
               <span className="canvas-hint">
@@ -12830,6 +12840,19 @@ function Editor({
                   slug={slug}
                 />
               ) : (
+                <PreviewZoomContext value={desktopScaled ? editorZoom : 1}>
+                <div
+                  className={`canvas-frame-scale${desktopScaled ? " is-scaled" : ""}`}
+                  style={
+                    desktopScaled
+                      ? ({
+                          width: DESKTOP_DESIGN_WIDTH,
+                          zoom: editorZoom,
+                          "--preview-zoom": editorZoom,
+                        } as React.CSSProperties)
+                      : undefined
+                  }
+                >
                 <WeddingCanvas
                   page={activePage}
                   sections={sections}
@@ -12851,6 +12874,8 @@ function Editor({
                   animationNonce={animationNonce}
                   updateSectionLayout={updateSection}
                 />
+                </div>
+                </PreviewZoomContext>
               )}
             </div>
             </DeviceContext>
@@ -20763,7 +20788,9 @@ function startBoxResize(
   const baseWidth =
     feature.objectWidth ??
     Math.round((blockRect.width / Math.max(1, columnRect.width)) * 100);
-  const baseHeight = feature.imageHeight || feature.boxHeight || blockRect.height;
+  const scale = visualScale(block);
+  const baseHeight =
+    feature.imageHeight || feature.boxHeight || blockRect.height / scale;
   const move = (moveEvent: PointerEvent) => {
     const widthRatio =
       ((moveEvent.clientX - startX) / Math.max(1, columnRect.width)) * 100;
@@ -20774,7 +20801,7 @@ function startBoxResize(
       ),
     };
     const nextHeight = Math.round(
-      Math.max(40, baseHeight + (moveEvent.clientY - startY)),
+      Math.max(40, baseHeight + (moveEvent.clientY - startY) / scale),
     );
     if (feature.type === "image" || feature.type === "gallery")
       patch.imageHeight = nextHeight;
@@ -20787,6 +20814,15 @@ function startBoxResize(
   };
   window.addEventListener("pointermove", move);
   window.addEventListener("pointerup", up);
+}
+
+/** Piksel layar per piksel desain pada elemen ini. Canvas Desktop editor
+ *  diperkecil dengan CSS zoom, jadi geseran pointer (piksel layar) harus
+ *  dibagi skala ini sebelum disimpan sebagai ukuran desain. */
+function visualScale(element: HTMLElement | null) {
+  if (!element || !element.offsetWidth) return 1;
+  const scale = element.getBoundingClientRect().width / element.offsetWidth;
+  return scale > 0 ? scale : 1;
 }
 
 // QA TC-113 — garis guide/margin yang dapat di-drag untuk mengubah padding X.
@@ -20807,9 +20843,12 @@ function CanvasGuides({
     if (!host) return;
     const startX = event.clientX;
     const base = padding;
+    const scale = visualScale(host);
     const move = (moveEvent: PointerEvent) => {
       const delta =
-        side === "left" ? moveEvent.clientX - startX : startX - moveEvent.clientX;
+        (side === "left"
+          ? moveEvent.clientX - startX
+          : startX - moveEvent.clientX) / scale;
       onChange({ paddingX: Math.round(Math.min(320, Math.max(0, base + delta))) });
     };
     const up = () => {
@@ -20853,11 +20892,16 @@ function startSectionResize(
   ) as HTMLElement | null;
   if (!host) return;
   const startY = event.clientY;
-  const base = section.minHeight || host.getBoundingClientRect().height;
+  const scale = visualScale(host);
+  const base =
+    section.minHeight || host.getBoundingClientRect().height / scale;
   const move = (moveEvent: PointerEvent) => {
     onChange({
       minHeight: Math.round(
-        Math.min(2400, Math.max(160, base + (moveEvent.clientY - startY))),
+        Math.min(
+          2400,
+          Math.max(160, base + (moveEvent.clientY - startY) / scale),
+        ),
       ),
     });
   };
@@ -22335,12 +22379,9 @@ function PreviewModal({
   // background `cover`, dan tinggi section berpiksel bergeser semua, sehingga
   // hasilnya "kepotong & acak-acakan". Preview kini selebar canvas yang
   // terakhir dilihat Web Designer; sisa layar menjadi ruang kosong.
-  const [designWidth] = useState(() => {
-    const frame = document.querySelector(".canvas-frame.desktop");
-    const measured = frame ? Math.round(frame.getBoundingClientRect().width) : 0;
-    // Dibuka dari mode Mobile: pakai lebar Desktop terakhir yang terukur.
-    return measured || lastDesktopCanvasWidth || DESKTOP_DESIGN_WIDTH;
-  });
+  // QA 1 Nov — editor kini menata Desktop pada DESKTOP_DESIGN_WIDTH (lalu
+  // diperkecil), jadi preview memakai lebar yang sama di semua layar.
+  const designWidth = DESKTOP_DESIGN_WIDTH;
   // Preview selalu dibuka dari section pembuka, termasuk saat berpindah
   // tab Pages/RSVP atau mengganti mode Desktop/Mobile.
   useScrollResetOnOpen(stageRef, true, page, mode);
@@ -26047,13 +26088,14 @@ function startExtraTextMove(
   const section = node.closest(".canvas-section") as HTMLElement | null;
   if (!section) return;
   const rect = section.getBoundingClientRect();
+  const scale = visualScale(section);
   const startX = event.clientX;
   const startY = event.clientY;
   const baseX = item.posX ?? 50;
   const baseY = item.posY ?? 0;
   const move = (e: PointerEvent) => {
     const dx = ((e.clientX - startX) / Math.max(1, rect.width)) * 100;
-    const dy = e.clientY - startY;
+    const dy = (e.clientY - startY) / scale;
     onMove({
       posX: Math.round(Math.max(0, Math.min(100, baseX + dx)) * 10) / 10,
       posY: Math.round(Math.max(-2000, baseY + dy)),
