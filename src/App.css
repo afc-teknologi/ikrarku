@@ -2372,3 +2372,8 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .site-credit-slot>.feature-block{max-width:100%}
 /* QA 1 Nov — Background tetap tidak terpotong oleh tinggi header undangan. */
 .site-fixed-backdrop{height:calc(var(--site-viewport-h,100vh) - var(--nav-visible,0px));margin-bottom:calc(-1 * (var(--site-viewport-h,100vh) - var(--nav-visible,0px)))}
+/* QA 1 Nov — layar "Buka Undangan" selalu memenuhi layar. Canvas cover yang
+   pendek (mis. 330 px di Mobile) dulu menyisakan area gelap di bawahnya;
+   kini section cover memanjang mengisi sisa layar, layer & background ikut. */
+.wedding-site.cover-as-canvas{display:flex;flex-direction:column}
+.wedding-site.cover-as-canvas>.canvas-section{flex:1 0 auto}

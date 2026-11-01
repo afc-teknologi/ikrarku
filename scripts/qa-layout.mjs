@@ -1331,3 +1331,7 @@ test("QA 1 Nov: canvas Desktop editor ditata 1050 px lalu diperkecil, drag dibag
   assert.match(appTsx, /function visualScale\(element: HTMLElement \| null\)/);
   assert.match(appTsx, /base \+ \(moveEvent\.clientY - startY\) \/ scale/);
 });
+test("QA 1 Nov: layar Buka Undangan memenuhi layar walau canvas cover pendek", () => {
+  assert.match(appCss, /\.wedding-site\.cover-as-canvas\{display:flex;flex-direction:column\}/);
+  assert.match(appCss, /\.wedding-site\.cover-as-canvas>\.canvas-section\{flex:1 0 auto\}/);
+});
