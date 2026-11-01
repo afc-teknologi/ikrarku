@@ -103,7 +103,7 @@ Lalu suite pengujian:
 ```bash
 npm run qa:integration    # 39/39
 npm run qa:db             # 38/38
-npm run qa:layout         # 117/117
+npm run qa:layout         # 118/118
 npm run preflight         # "Preflight passed."
 ```
 
