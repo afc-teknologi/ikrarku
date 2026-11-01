@@ -157,7 +157,7 @@
 
 @media(max-width:1200px){.landing-article-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.approval-task-grid{grid-template-columns:1fr}}
 @media(max-width:800px){.landing-article-inner{width:calc(100% - 32px)}.landing-article-section{padding:70px 0}.article-intro h2{font-size:36px}.landing-article-banner{min-height:430px;padding:35px}.landing-article-banner h3{font-size:38px}.landing-article-grid{grid-template-columns:1fr}.invitee-page{padding:16px}.invitee-page>header{flex-direction:column;gap:16px}.invitee-summary{grid-template-columns:1fr}.invitee-create-row{grid-template-columns:1fr}.invitee-table{overflow-x:auto}.invitee-table>div{min-width:720px}}
-.public-site-route{min-height:100vh;background:#fff;overflow-x:hidden}.public-site-route .wedding-site{min-height:100vh}
+.public-site-route{min-height:100vh;background:#fff;overflow-x:hidden;overflow-x:clip}.public-site-route .wedding-site{min-height:100vh}
 
 /* v0.11 commerce, verification, notification, and staging UX */
 .password-field{display:flex;align-items:center;border:1px solid var(--line);border-radius:9px;background:#fff;overflow:hidden}.password-field input{border:0!important;border-radius:0!important;flex:1}.password-field button{width:42px;height:40px;border:0;background:#f6f8f6;color:#5d6d67;display:grid;place-items:center}.password-ok,.password-error{display:block;margin-top:5px;font-size:10px}.password-ok{color:#168456}.password-error{color:#b44f48}.verification-dev-link{display:flex;gap:10px;align-items:flex-start;border:1px solid #cfe5da;background:#edf7f2;border-radius:10px;padding:12px;color:#155f48}.verification-dev-link div{display:flex;flex-direction:column;gap:3px}.verification-dev-link strong{font-size:11px}.verification-dev-link span{font-size:9px;color:#70817a}.verification-dev-link button{border:0;background:none;color:#125946;font-size:10px;font-weight:700;text-align:left;padding:0}.verification-page{min-height:100vh;background:radial-gradient(circle at 20% 10%,#eff7f2,#f8f5ee 45%,#f2eee5);display:flex;flex-direction:column;align-items:center;padding:42px}.verification-card{margin:auto;width:min(560px,94vw);background:#fff;border:1px solid var(--line);border-radius:22px;padding:44px;text-align:center;box-shadow:0 30px 80px rgba(20,50,40,.12)}.verification-card>svg{color:#125946}.verification-card>span{display:block;margin-top:18px;font-size:10px;letter-spacing:2px;color:#a27d42}.verification-card h1{font-family:'Playfair Display',Georgia,serif;font-size:34px;color:#173f33;margin:10px 0}.verification-card p{color:#72807b;line-height:1.65}.verification-card.error>svg{color:#a84c45}.template-mode-chip{height:36px;display:flex;align-items:center;gap:8px;padding:0 12px;border-radius:9px;border:1px solid #d6e4de;background:#edf4f1;color:#145c47;font-size:10px;font-weight:700}.checkout-auth-options{display:flex;gap:8px;margin:14px 0 20px}.checkout-auth-options button{flex:1;border:1px solid var(--line);background:#fff;border-radius:9px;padding:10px;color:#245246;font-size:10px;font-weight:700}.article-catalog-section{background:#f4f6f2}.article-catalog-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:22px}.article-catalog-card{background:#fff;border:1px solid var(--line);border-radius:18px;overflow:hidden;cursor:pointer;transition:transform .25s,box-shadow .25s}.article-catalog-card:hover{transform:translateY(-5px);box-shadow:0 18px 38px rgba(24,53,44,.12)}.article-catalog-cover{height:250px;background:linear-gradient(145deg,#173e34,#6f806e);background-size:cover;background-position:center;padding:18px;display:flex;align-items:flex-start;justify-content:space-between;color:#fff}.article-catalog-cover span,.article-catalog-cover small{font-size:9px;text-transform:uppercase;letter-spacing:1.2px;padding:6px 9px;border-radius:999px;background:rgba(5,24,18,.48);backdrop-filter:blur(8px)}.article-catalog-card>div:last-child{padding:22px}.article-catalog-card h3{font-family:'Playfair Display',Georgia,serif;font-size:23px;color:#183e33;margin:0 0 9px}.article-catalog-card p{font-size:11px;line-height:1.65;color:#73817b;min-height:54px}.article-catalog-card button{border:0;background:none;color:#125946;font-size:10px;font-weight:700;display:flex;gap:6px;align-items:center;padding:0}.article-reader-page.wide{background:#f6f6f2}.article-reader-page.wide>main{max-width:none;width:100%;padding:0}.reader-hero-wide{min-height:620px;background:linear-gradient(110deg,#102f27,#718175);background-size:cover;background-position:center;display:flex;align-items:flex-end;padding:80px max(7vw,48px);color:#fff}.reader-hero-wide>div{max-width:900px}.reader-hero-wide span{font-size:10px;letter-spacing:2px}.reader-hero-wide h1{font-family:'Playfair Display',Georgia,serif;font-size:clamp(44px,6vw,82px);line-height:1.05;margin:16px 0}.reader-hero-wide p{font-size:18px;line-height:1.7;max-width:760px}.reader-hero-wide small{opacity:.75}.reader-body-wide{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:70px;max-width:1380px;margin:auto;padding:76px 6vw}.reader-body-wide article{background:#fff;border:1px solid var(--line);border-radius:18px;padding:clamp(30px,5vw,72px)}.reader-body-wide aside{position:sticky;top:95px;height:max-content;background:#123f33;color:#fff;border-radius:18px;padding:28px}.reader-body-wide aside strong{font-family:'Playfair Display',Georgia,serif;font-size:25px;display:block;margin:22px 0 8px}.reader-body-wide aside p{font-size:11px;color:#c4d3cd;line-height:1.6}.orders-page .stats-grid{margin-bottom:22px}.orders-table{overflow:hidden}.table-scroll{overflow:auto}.orders-table table{width:100%;border-collapse:collapse;min-width:1120px}.orders-table th,.orders-table td{padding:14px;border-bottom:1px solid #edf0ed;text-align:left;font-size:10px;vertical-align:top}.orders-table th{font-size:8px;text-transform:uppercase;letter-spacing:1px;color:#77857f}.orders-table td>strong,.orders-table td>span{display:block}.orders-table td>span,.orders-table td>small{font-size:9px;color:#7d8985;margin-top:3px}.topbar .notification-badge{position:absolute;right:-3px;top:-3px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:#c44e45;color:#fff;font-size:8px;display:grid;place-items:center}.setting-row .toggle{flex:0 0 auto}
@@ -2391,3 +2391,80 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 /* QA 1 Nov — layar Buka Undangan flex kolom: backdrop Background tetap tidak
    boleh ikut menyusut (dulu tinggal ~2/3 tinggi kolom 70/30, sisanya gelap). */
 .wedding-site.cover-as-canvas>.site-fixed-backdrop,.wedding-site.cover-as-canvas>.sound-dock{flex:none}
+/* QA 13 — canvas cover di layar Buka Undangan setinggi desainnya (layer &
+   ornamen = editor), ditengahkan; background cover memenuhi seluruh layar. */
+.wedding-site.cover-as-canvas>.canvas-section{flex:none;margin-block:auto}
+.site-fixed-backdrop{height:max(0px,calc(var(--site-viewport-h,100vh) - var(--nav-visible,0px)));margin-bottom:calc(-1 * max(0px,calc(var(--site-viewport-h,100vh) - var(--nav-visible,0px))))}
+/* QA 13 TC-284/285 — ikon tombol lokasi sejajar tengah; warnanya bisa diatur sendiri (default ikut teks tombol). */
+.event-feature .event-map-button svg,.event-map-button svg.map-button-icon{margin:0;color:inherit;flex:none;display:block}
+.event-map-button{line-height:1;vertical-align:middle}
+/* QA 13 TC-293/294 — teks tebal di dalam kartu mengikuti pilihan Bold. */
+.feature-block.has-body-weight .gift-account-card :is(strong,b,span,small,p),.feature-block.has-body-weight .greeting-list article>div:last-child :is(strong,p,small),.feature-block.has-body-weight .greetings-widget form :is(button,input,textarea,label),.feature-block.has-body-weight .gift-reveal-button{font-weight:var(--body-weight,700)}
+/* QA 13 TC-291 — kotak rekening & Kirim Kado sama lebar (bisa diatur). */
+.gift-account-list{align-items:stretch}
+.gift-account-card{flex:0 1 var(--gift-card-w,230px);width:var(--gift-card-w,230px);min-width:0;max-width:100%;box-sizing:border-box}
+.gift-icon{display:block;margin-inline:auto}
+/* QA 13 TC-280 — gaya tampilan Event. */
+.event-feature.event-style-minimal .event-item{padding:12px 6px}
+.event-feature.event-style-minimal .event-items{margin-top:8px}
+.event-feature.event-style-outline .event-items{gap:12px}
+.event-feature.event-style-outline .event-item{border:1px solid color-mix(in srgb,currentColor 45%,transparent)!important;border-radius:16px;padding:20px 14px}
+.event-feature.event-style-outline .event-items.layout-columns{gap:12px}
+.event-feature.event-style-timeline .event-items{position:relative;padding-left:26px;text-align:left}
+.event-feature.event-style-timeline .event-items:before{content:'';position:absolute;left:8px;top:14px;bottom:14px;border-left:2px solid color-mix(in srgb,currentColor 40%,transparent)}
+.event-feature.event-style-timeline .event-item{align-items:flex-start;position:relative;border:0!important;padding:14px 4px}
+.event-feature.event-style-timeline .event-item:before{content:'';position:absolute;left:-24px;top:22px;width:12px;height:12px;border-radius:50%;background:var(--accent,#125946);box-shadow:0 0 0 4px color-mix(in srgb,var(--accent,#125946) 22%,transparent)}
+.event-feature.event-style-timeline .event-item-actions{justify-content:flex-start}
+.event-feature.event-style-elegant .event-items{gap:14px}
+.event-feature.event-style-elegant .event-item{border:3px double color-mix(in srgb,currentColor 55%,transparent)!important;border-radius:999px 999px 18px 18px;padding:34px 18px 22px}
+.event-feature.event-style-elegant .event-items.layout-columns{gap:14px}
+.event-feature.event-style-outline:not(.has-event-items),.event-feature.event-style-elegant:not(.has-event-items){padding:22px 16px}
+.event-feature.event-style-outline:not(.has-event-items){border:1px solid color-mix(in srgb,currentColor 45%,transparent);border-radius:16px}
+.event-feature.event-style-elegant:not(.has-event-items){border:3px double color-mix(in srgb,currentColor 55%,transparent);border-radius:999px 999px 18px 18px}
+/* QA 13 TC-283 — gradien setengah pada gambar. */
+.feature-block.img-fade-mask.img-fade-bottom .image-feature img{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - var(--img-fade-size,50%)),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - var(--img-fade-size,50%)),transparent)}
+.feature-block.img-fade-mask.img-fade-top .image-feature img{-webkit-mask-image:linear-gradient(to top,#000 calc(100% - var(--img-fade-size,50%)),transparent);mask-image:linear-gradient(to top,#000 calc(100% - var(--img-fade-size,50%)),transparent)}
+.feature-block.img-fade-mask.img-fade-left .image-feature img{-webkit-mask-image:linear-gradient(to left,#000 calc(100% - var(--img-fade-size,50%)),transparent);mask-image:linear-gradient(to left,#000 calc(100% - var(--img-fade-size,50%)),transparent)}
+.feature-block.img-fade-mask.img-fade-right .image-feature img{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - var(--img-fade-size,50%)),transparent);mask-image:linear-gradient(to right,#000 calc(100% - var(--img-fade-size,50%)),transparent)}
+.feature-block.img-fade-color .image-feature{position:relative}
+.feature-block.img-fade-color .image-feature:after{content:'';position:absolute;inset:0;pointer-events:none;border-radius:inherit}
+.feature-block.img-fade-color.img-fade-bottom .image-feature:after{background:linear-gradient(to bottom,transparent calc(100% - var(--img-fade-size,50%)),var(--img-fade-color))}
+.feature-block.img-fade-color.img-fade-top .image-feature:after{background:linear-gradient(to top,transparent calc(100% - var(--img-fade-size,50%)),var(--img-fade-color))}
+.feature-block.img-fade-color.img-fade-left .image-feature:after{background:linear-gradient(to left,transparent calc(100% - var(--img-fade-size,50%)),var(--img-fade-color))}
+.feature-block.img-fade-color.img-fade-right .image-feature:after{background:linear-gradient(to right,transparent calc(100% - var(--img-fade-size,50%)),var(--img-fade-color))}
+/* QA 13 TC-297 — lapisan ornamen: di belakang isi (di atas background). */
+.section-decoration.deco-back{z-index:1}
+/* QA 13 TC-298 — ornamen tetap di layar seperti Background tetap: satu lapisan
+   sticky setinggi layar untuk seluruh undangan. overflow:clip (bukan hidden)
+   supaya undangan tidak menjadi kontainer gulir yang mematikan sticky. */
+.wedding-site.has-pinned-deco{overflow:visible;overflow:clip}
+.site-pinned-decorations{position:sticky;top:0;z-index:4;height:var(--site-viewport-h,100vh);margin-bottom:calc(-1 * var(--site-viewport-h,100vh));pointer-events:none}
+.site-pinned-decorations.layer-back{z-index:1}
+/* QA 13 TC-282 — ornamen boleh melewati batas atas/bawah canvas (tetap dipotong
+   di kiri/kanan supaya halaman tidak bergeser ke samping). */
+.canvas-section.has-overflow-deco{overflow:visible;clip-path:inset(-600px 0 -600px 0);z-index:3}
+.canvas-section.has-overflow-deco>.background-layer{inset:0}
+/* QA 13 TC-299 — ornamen bergerak mengikuti gulir (--deco-scroll -1..1). */
+.section-decoration.scroll-up{translate:0 calc(var(--deco-scroll,0) * -90px)}
+.section-decoration.scroll-down{translate:0 calc(var(--deco-scroll,0) * 90px)}
+.section-decoration.scroll-rotate{rotate:calc(var(--deco-scroll,0) * 40deg)}
+.section-decoration.scroll-zoom{scale:calc(1 + (var(--deco-scroll,0) + 1) * .18)}
+.section-decoration.scroll-fade{opacity:calc(var(--deco-fade-base,1) * (1 - max(0, -1 * var(--deco-scroll,0)) * 1.6))!important}
+@media (prefers-reduced-motion:reduce){.section-decoration[class*=" scroll-"]{translate:none;rotate:none;scale:none}}
+/* QA 13 TC-292 — pindah fitur ke canvas lain dari Page Structure. */
+.tree-move-select{width:26px;height:20px;padding:0 2px;border:1px solid #dfe5e2;border-radius:5px;background:#fff;color:#2a6a57;font-size:10px;cursor:pointer;appearance:none;-webkit-appearance:none;text-align:center}
+.tree-move-select:focus{width:auto}
+/* QA 13 TC-279 — draft yang dibuang tampil di Revisions dan bisa dikembalikan. */
+.revision-discarded{background:#fff8ec!important;border-color:#f0d9b0!important}
+.revision-discarded strong{color:#8a5a12}
+/* QA 13 TC-278 — penanda background untuk beberapa fitur dalam satu canvas. */
+.canvas-bg-indicator{position:absolute;z-index:25;left:10px;top:10px;display:flex;align-items:center;gap:5px;padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.92);border:1px solid rgba(21,72,57,.25);color:#1b5c49;font-size:8px;font-weight:800;letter-spacing:.3px;box-shadow:0 4px 12px rgba(9,31,24,.12);cursor:help}
+.canvas-section:has(>.canvas-bg-indicator:hover){box-shadow:inset 0 0 0 3px rgba(42,134,106,.55)}
+.canvas-section:has(>.canvas-bg-indicator:hover) .feature-block{outline:1px dashed rgba(42,134,106,.8);outline-offset:3px}
+/* QA 13 TC-302 — pilihan ikon & bentuk tombol musik. */
+.fixed-sound-disc{background:var(--sound-icon-bg,rgba(12,34,28,.82))}
+.fixed-sound-disc:not(.sound-icon-disc)>svg{background:rgba(255,255,255,.14);border-color:rgba(255,255,255,.35);color:var(--sound-icon-color,#fff)}
+.fixed-sound-disc.sound-icon-disc>svg{color:var(--sound-icon-color,#fff)}
+.fixed-sound-disc.playing:not(.sound-icon-disc)>svg{animation:soundPulse 1.4s ease-in-out infinite}
+.fixed-sound-disc.sound-shape-circle{padding:6px;border-radius:50%}
+@keyframes soundPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.12)}}

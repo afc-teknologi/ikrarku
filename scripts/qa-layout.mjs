@@ -102,6 +102,7 @@ test("Flow layout has no absolute positioning variables and keeps custom motion"
 // ---------------------------------------------------------------------------
 const appTsx = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const appCss = readFileSync(new URL("../src/App.css", import.meta.url), "utf8");
+const serverJs = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
 const apiTs = readFileSync(new URL("../src/api.ts", import.meta.url), "utf8");
 
 /** Ambil blok deklarasi untuk selector persis (tanpa regex multi-baris rapuh). */
@@ -1204,7 +1205,11 @@ test("TC-250: layar cover merender ornamen & layer canvasnya", () => {
   assert.match(appTsx, /const CoverOpenContext = createContext<\(\(\) => void\) \| null>\(null\);/);
   assert.match(appTsx, /<CoverOpenContext value=\{lockedCover \? openCover : null\}>/);
   assert.match(appTsx, /invitation-locked cover-as-canvas/);
-  assert.match(appTsx, /\? `max\(\$\{section\.minHeight\}px, 100%\)`/);
+  // QA 13 (QA 2) — canvas cover TIDAK lagi diregang setinggi layar (ornamen &
+  // layer bergeser dari posisi editor); layar diisi background cover di
+  // pembungkus dan canvas dipusatkan.
+  assert.match(appTsx, /const coverScreenSource =\s*lockedCover && coverEntry && !fixedBackdrop/);
+  assert.match(appCss, /\.wedding-site\.cover-as-canvas>\.canvas-section\{flex:none;margin-block:auto\}/);
 });
 test("TC-252: ornamen tengah dipusatkan dengan left:50%", () => {
   assert.match(appTsx, /"--deco-w": `\$\{decoration\.size\}px`/);
@@ -1343,9 +1348,62 @@ test("QA 1 Nov: credit di tengah walau footer flex; Mobile ikut rasio background
   assert.match(appTsx, /Terapkan ke semua canvas/);
 });
 test("QA 1 Nov: cover ikut rasio background tetap penuh layar di Buka Undangan (70/30 & Mobile)", () => {
-  assert.match(appTsx, /\? lockedCover\s*\? "100%"\s*: undefined/);
+  // QA 13 — geometri canvas cover = editor (tinggi asli), layar penuh diisi
+  // background canvas cover pada pembungkus .wedding-site.
+  assert.match(appTsx, /minHeight:\s*section\.backgroundFollowAspect && section\.backgroundAspect\s*\? undefined\s*: section\.minHeight/);
+  assert.match(appTsx, /\.\.\.coverScreenStyle,/);
 });
 test("QA 1 Nov: Buka Undangan 70/30 dengan Background tetap — backdrop tidak menyusut, rasio tidak dipakai di layar cover", () => {
   assert.match(appCss, /\.wedding-site\.cover-as-canvas>\.site-fixed-backdrop,\.wedding-site\.cover-as-canvas>\.sound-dock\{flex:none\}/);
-  assert.match(appTsx, /section\.backgroundAspect &&\s*!lockedCover\s*\? String\(section\.backgroundAspect\)/);
+  assert.match(appTsx, /aspectRatio:\s*section\.backgroundFollowAspect && section\.backgroundAspect\s*\? String\(section\.backgroundAspect\)/);
+});
+
+test("QA 13 TC-296: halaman publik tidak menjadi kontainer gulir (Background tetap tetap menempel)", () => {
+  assert.match(appCss, /\.public-site-route\{min-height:100vh;background:#fff;overflow-x:hidden;overflow-x:clip\}/);
+});
+test("QA 13 TC-286 (QA 3/4): tinggi backdrop dikurangi semua yang di atasnya, bukan hanya header", () => {
+  assert.match(appTsx, /const anchorBottom = nav \? rect\.bottom : rect\.top;/);
+  assert.match(appCss, /height:max\(0px,calc\(var\(--site-viewport-h,100vh\) - var\(--nav-visible,0px\)\)\)/);
+});
+test("QA 13 TC-290/295: credit tidak lagi dipaku ke bawah layar secara default", () => {
+  assert.match(appTsx, /feature\.type === "credit" && feature\.creditPinBottom === true/);
+});
+test("QA 13 TC-281/289/291/294: Wedding Gift — ikon, teks Kirim Kado, lebar kotak, bold", () => {
+  assert.match(appTsx, /function GiftIcon\(\{ feature \}: \{ feature: Feature \}\)/);
+  assert.match(appTsx, /giftAddressTextSize/);
+  assert.match(appCss, /\.gift-account-card\{flex:0 1 var\(--gift-card-w,230px\);width:var\(--gift-card-w,230px\)/);
+  assert.match(appCss, /\.feature-block\.has-body-weight \.gift-account-card :is\(strong,b,span,small,p\)/);
+});
+test("QA 13 TC-293: Greetings — teks kartu mengikuti Bold", () => {
+  assert.match(appCss, /\.feature-block\.has-body-weight \.greeting-list article>div:last-child :is\(strong,p,small\)/);
+});
+test("QA 13 TC-280/284/285: Event — gaya, ikon lokasi di tengah & warnanya", () => {
+  assert.match(appTsx, /event-style-\$\{feature\.eventStyle \|\| "card"\}/);
+  assert.match(appCss, /\.event-feature \.event-map-button svg,\.event-map-button svg\.map-button-icon\{margin:0;color:inherit/);
+  assert.match(appTsx, /mapButtonIconColor/);
+});
+test("QA 13 TC-287/288/283: tombol Live, Our Story, gradien gambar", () => {
+  assert.match(appTsx, /liveButtonBackground/);
+  assert.match(appTsx, /!feature\.loveStoryHideIntro && editableText\("body", "editable-body"\)/);
+  assert.match(appCss, /\.feature-block\.img-fade-mask\.img-fade-bottom \.image-feature img/);
+});
+test("QA 13 TC-297/298/299/282: ornamen — lapisan, tetap, gerak gulir, keluar canvas", () => {
+  assert.match(appTsx, /deco-\$\{decoration\.layer \|\| "front"\}/);
+  assert.match(appCss, /\.site-pinned-decorations\{position:sticky;top:0;z-index:4/);
+  assert.match(appTsx, /<SectionDecorations decorations=\{list\} pinned \/>/);
+  assert.match(appCss, /\.section-decoration\.scroll-up\{translate:0 calc\(var\(--deco-scroll,0\) \* -90px\)\}/);
+  assert.match(appCss, /\.canvas-section\.has-overflow-deco\{overflow:visible;clip-path:inset\(-600px 0 -600px 0\)/);
+});
+test("QA 13 TC-300 (QA 6/7): background tetap desktop ala serein bisa digeser & diatur", () => {
+  assert.match(appTsx, /function BackdropAdjustEditor\(/);
+  assert.match(appTsx, /adjust=\{first\.desktopBackdropAdjust\}/);
+});
+test("QA 13 TC-292/278/302: pindah fitur antar canvas, penanda background, ikon musik", () => {
+  assert.match(appTsx, /className="tree-move-select"/);
+  assert.match(appTsx, /className="canvas-bg-indicator"/);
+  assert.match(appTsx, /function SoundButtonIcon\(/);
+});
+test("QA 13 TC-279: draft yang dibuang tersimpan di Revisions", () => {
+  assert.match(serverJs, /const archived = archiveTemplateAutosave\(req\.params\.id, req\.user\.id\);/);
+  assert.match(serverJs, /const archived = archiveSiteAutosave\(req\.user\.id, req\.user\.id\);/);
 });
