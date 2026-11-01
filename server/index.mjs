@@ -835,6 +835,44 @@ function saveSiteRevision(site, actorUserId, reason = "Save") {
     now(),
   );
 }
+// QA 13 TC-279 — draft (autosave) yang dibuang tidak lagi hilang: isinya
+// disimpan sebagai revision "Draft dibuang" sehingga bisa dikembalikan dari
+// menu Revisions di editor.
+const DISCARDED_DRAFT_REASON = "Draft dibuang (bisa dikembalikan)";
+function archiveTemplateAutosave(templateId, actorUserId) {
+  const draft = db
+    .prepare("SELECT * FROM template_autosaves WHERE template_id=?")
+    .get(templateId);
+  const template = db.prepare("SELECT * FROM templates WHERE id=?").get(templateId);
+  if (!draft || !template) return false;
+  if ((draft.canvas_json || "[]") === (template.canvas_json || "[]")) return false;
+  saveTemplateRevision(
+    { ...template, canvas_json: draft.canvas_json },
+    actorUserId || draft.actor_user_id,
+    DISCARDED_DRAFT_REASON,
+  );
+  return true;
+}
+function archiveSiteAutosave(userId, actorUserId) {
+  const draft = db
+    .prepare("SELECT * FROM site_autosaves WHERE user_id=?")
+    .get(userId);
+  const site = db.prepare("SELECT * FROM sites WHERE user_id=?").get(userId);
+  if (!draft || !site) return false;
+  if ((draft.canvas_json || "[]") === (site.canvas_json || "[]")) return false;
+  saveSiteRevision(
+    {
+      ...site,
+      title: draft.title || site.title,
+      slug: draft.slug || site.slug,
+      template_id: draft.template_id || site.template_id,
+      canvas_json: draft.canvas_json,
+    },
+    actorUserId || draft.actor_user_id,
+    DISCARDED_DRAFT_REASON,
+  );
+  return true;
+}
 function saveTemplateRevision(template, actorUserId, reason = "Save") {
   if (!template) return;
   const metadata = {
@@ -3289,8 +3327,9 @@ app.delete(
   auth,
   permit("canvas.manage.own"),
   (req, res) => {
+    const archived = archiveSiteAutosave(req.user.id, req.user.id);
     db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.user.id);
-    res.json({ ok: true });
+    res.json({ ok: true, archived });
   },
 );
 app.get(
@@ -3310,8 +3349,9 @@ app.delete(
   (req, res) => {
     if (!canManageSiteFor(req.user, req.params.id))
       return res.status(403).json({ error: "Permission denied" });
+    const archived = archiveSiteAutosave(req.params.id, req.user.id);
     db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.params.id);
-    res.json({ ok: true });
+    res.json({ ok: true, archived });
   },
 );
 app.get(
@@ -3339,10 +3379,11 @@ app.delete(
   permit("templates.edit"),
   (req, res) => {
     policy.requireTemplate(req.user, req.params.id);
+    const archived = archiveTemplateAutosave(req.params.id, req.user.id);
     db.prepare("DELETE FROM template_autosaves WHERE template_id=?").run(
       req.params.id,
     );
-    res.json({ ok: true });
+    res.json({ ok: true, archived });
   },
 );
 app.get(

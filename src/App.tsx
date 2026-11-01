@@ -116,6 +116,7 @@ import {
   VolumeX,
   ExternalLink,
   Music2,
+  Music,
   Pause,
   FileAudio,
   ShoppingCart,
@@ -340,6 +341,45 @@ type BackgroundLayer = {
   innerClear?: number;
   innerSize?: number;
 };
+/** QA 13 TC-300 — pengaturan background tetap desktop (serein), sama dengan
+ *  pengaturan layer background tambahan. */
+type BackdropAdjust = {
+  offsetX?: number; // 0–100 (%), 50 = tengah
+  offsetY?: number;
+  scale?: number; // 100 = ukuran asli (cover)
+  opacity?: number; // 0–100
+  blend?: string;
+  padX?: number;
+  padY?: number;
+  marginTop?: number;
+  marginBottom?: number;
+};
+function backdropAdjustStyle(adjust?: BackdropAdjust): React.CSSProperties {
+  if (!adjust) return {};
+  const style: React.CSSProperties = {
+    backgroundPosition: `${adjust.offsetX ?? 50}% ${adjust.offsetY ?? 50}%`,
+    objectPosition: `${adjust.offsetX ?? 50}% ${adjust.offsetY ?? 50}%`,
+  };
+  if (adjust.scale && adjust.scale !== 100) {
+    style.transform = `scale(${adjust.scale / 100})`;
+    style.transformOrigin = `${adjust.offsetX ?? 50}% ${adjust.offsetY ?? 50}%`;
+  }
+  if (adjust.opacity !== undefined && adjust.opacity < 100)
+    style.opacity = adjust.opacity / 100;
+  if (adjust.blend && adjust.blend !== "normal")
+    style.mixBlendMode = adjust.blend as React.CSSProperties["mixBlendMode"];
+  const padX = adjust.padX ?? 0;
+  const padY = adjust.padY ?? 0;
+  if (padX || padY || adjust.marginTop || adjust.marginBottom) {
+    style.top = padY + (adjust.marginTop ?? 0);
+    style.bottom = padY + (adjust.marginBottom ?? 0);
+    style.left = padX;
+    style.right = padX;
+    style.width = "auto";
+    style.height = "auto";
+  }
+  return style;
+}
 /** Kotak & mask layer tambahan (TC-256, TC-268). Dipakai editor, preview,
  *  layar cover, dan backdrop Background tetap agar hasilnya identik. */
 function layerBoxStyle(layer: BackgroundLayer): React.CSSProperties {
@@ -426,7 +466,26 @@ type SectionDecoration = {
   // TC-206 — geser halus dari titik tambatnya (px). Positif = kanan / bawah.
   offsetX?: number;
   offsetY?: number;
+  /** QA 13 TC-297 — di depan (default) atau di belakang isi canvas. */
+  layer?: "front" | "back";
+  /** QA 13 TC-298 — menempel di layar selama canvas-nya digulir (seperti Background tetap). */
+  pinned?: boolean;
+  /** QA 13 TC-299 — gerak mengikuti gulir halaman. */
+  scrollMotion?: DecorScrollMotion;
+  /** QA 13 TC-282 — boleh keluar dari batas atas/bawah canvas. */
+  overflow?: boolean;
 };
+type DecorScrollMotion = "none" | "up" | "down" | "rotate" | "zoom" | "fade";
+/** Kelas tambahan section untuk ornamen dengan pengaturan QA 13. */
+function decorationSectionClasses(decorations?: SectionDecoration[]) {
+  const list = decorations || [];
+  return [
+    list.some((item) => item.overflow) ? " has-overflow-deco" : "",
+    list.some((item) => item.scrollMotion && item.scrollMotion !== "none")
+      ? " has-scroll-deco"
+      : "",
+  ].join("");
+}
 type ImageFrame =
   | "none"
   | "rounded"
@@ -583,6 +642,12 @@ type Feature = DesignerLayout & {
   eventItemTitleSize?: number;
   giftAccounts?: GiftAccount[]; // TC-088
   soundPersist?: boolean; // TC-089
+  /** QA 13 TC-302 — ikon tombol musik selain piringan hitam. */
+  soundIcon?: "disc" | "note" | "notes" | "headphones" | "speaker" | "heart";
+  /** Tampilan tombol musik: pil berlabel atau bulat ikon saja. */
+  soundIconShape?: "pill" | "circle";
+  soundIconColor?: string;
+  soundIconBackground?: string;
   icons?: IconItem[]; // TC-095
   iconSize?: number; // TC-095
   iconColor?: string; // TC-095
@@ -665,6 +730,36 @@ type Feature = DesignerLayout & {
   // TC-208 — ukuran tombol lokasi (teks + padding) dan ukuran ikonnya.
   mapButtonFontSize?: number;
   mapButtonIconSize?: number;
+  /** QA 13 TC-285 — warna ikon lokasi terpisah dari warna teks tombol. */
+  mapButtonIconColor?: string;
+  /** QA 13 TC-280 — gaya tampilan fitur Event. */
+  eventStyle?: "card" | "minimal" | "outline" | "timeline" | "elegant";
+  /** QA 13 TC-281 — ikon Wedding Gift. */
+  giftIcon?: "crown" | "gift" | "heart" | "wallet" | "card" | "envelope" | "sparkles" | "package" | "none";
+  giftIconSize?: number;
+  giftIconColor?: string;
+  /** QA 13 TC-291 — lebar seragam kotak rekening & Kirim Kado (px). */
+  giftCardWidth?: number;
+  /** QA 13 TC-289 — teks Kirim Kado. */
+  giftAddressFont?: string;
+  giftAddressColor?: string;
+  giftAddressHeadSize?: number;
+  giftAddressNameSize?: number;
+  giftAddressTextSize?: number;
+  /** QA 13 TC-287 — tombol Tonton Live. */
+  liveButtonBackground?: string;
+  liveButtonTextColor?: string;
+  liveButtonBorderColor?: string;
+  liveButtonRadius?: number;
+  liveButtonFontSize?: number;
+  /** QA 13 TC-288 — Our Story: sembunyikan teks per cerita & jarak header. */
+  loveStoryHideItemBody?: boolean;
+  loveStoryHideIntro?: boolean;
+  loveStoryGap?: number;
+  /** QA 13 TC-283 — gradien setengah pada gambar. */
+  imageFade?: "none" | "bottom" | "top" | "left" | "right";
+  imageFadeColor?: string;
+  imageFadeSize?: number;
   // QA 15 Okt — ukuran teks kotak "Created by" pada Credit (dulu 8 px tetap).
   creditFontSize?: number;
   // TC-234 — Credit menempel di paling bawah undangan (tanpa ruang kosong).
@@ -852,6 +947,9 @@ type CanvasSection = {
   desktopBackdropUrl?: string; // background luar kolom (opsional)
   desktopBackdropKey?: string;
   desktopBackdropColor?: string;
+  /** QA 13 TC-300 (QA 6/7) — posisi & tampilan background tetap ala serein
+   *  di desktop: geser X/Y, skala, opacity, blend, padding & margin. */
+  desktopBackdropAdjust?: BackdropAdjust;
   /** TC-242 — rasio 70/30: kolom isi 30%, sisi 70% berisi background polos,
    *  header & supporting text, slideshow otomatis, atau video. */
   desktopColumnRatio?: "fixed" | "70-30";
@@ -1523,6 +1621,10 @@ const SHARED_SOUND_KEYS = [
   "autoplay",
   "soundPersist",
   "creditSongTitle",
+  "soundIcon",
+  "soundIconShape",
+  "soundIconColor",
+  "soundIconBackground",
 ] as const satisfies readonly (keyof Feature)[];
 
 // Patch ditulis ke slot device yang sedang aktif agar Desktop tidak ikut berubah
@@ -12727,6 +12829,41 @@ function Editor({
                             <FeatureIcon type={feature.type} />
                             <span>{feature.title || feature.type}</span>
                             <div className="tree-feature-actions">
+                              {/* QA 13 TC-292 — pindahkan fitur ke canvas lain
+                                  tanpa harus menyeret jauh. */}
+                              {sections.length > 1 && (
+                                <select
+                                  className="tree-move-select"
+                                  title="Pindah ke canvas lain"
+                                  aria-label="Pindah ke canvas lain"
+                                  value=""
+                                  onClick={(event) => event.stopPropagation()}
+                                  onChange={(event) => {
+                                    const target = sections.find(
+                                      (item) => item.id === event.target.value,
+                                    );
+                                    if (!target?.columns[0]) return;
+                                    moveFeature(
+                                      feature.id,
+                                      target.id,
+                                      target.columns[0].id,
+                                    );
+                                    flash(
+                                      `Fitur dipindah ke Canvas ${sections.indexOf(target) + 1}.`,
+                                    );
+                                  }}
+                                >
+                                  <option value="">⇄</option>
+                                  {sections.map((target, targetIndex) =>
+                                    target.id === section.id ? null : (
+                                      <option key={target.id} value={target.id}>
+                                        Ke Canvas {targetIndex + 1}
+                                        {target.name ? ` · ${target.name}` : ""}
+                                      </option>
+                                    ),
+                                  )}
+                                </select>
+                              )}
                               <button
                                 title="Duplicate feature"
                                 onClick={(event) => {
@@ -13127,6 +13264,11 @@ function Editor({
                 revisions.map((revision: any) => (
                   <button
                     key={revision.id}
+                    className={
+                      String(revision.reason || "").startsWith("Draft dibuang")
+                        ? "revision-discarded"
+                        : undefined
+                    }
                     onClick={() => restoreRevision(revision)}
                   >
                     <HistoryIcon size={16} />
@@ -13145,8 +13287,8 @@ function Editor({
                   <HistoryIcon size={20} />
                   <strong>Belum ada revision</strong>
                   <span>
-                    Revision pertama akan tersedia setelah manual save
-                    berikutnya.
+                    Revision tersedia setelah manual save berikutnya. Draft
+                    yang dibuang juga tersimpan di sini dan bisa dikembalikan.
                   </span>
                 </div>
               )}
@@ -14093,6 +14235,62 @@ function FeatureInspector({
               >
                 <i />
               </button>
+            </div>
+            {/* QA 13 TC-302 — tampilan tombol musik. */}
+            <div className="two-inputs">
+              <label>
+                Ikon musik
+                <select
+                  value={feature.soundIcon || "disc"}
+                  onChange={(event) =>
+                    update({
+                      soundIcon: event.target.value as Feature["soundIcon"],
+                    })
+                  }
+                >
+                  <option value="disc">Piringan hitam</option>
+                  <option value="note">Not balok</option>
+                  <option value="notes">Not ganda</option>
+                  <option value="headphones">Headphone</option>
+                  <option value="speaker">Speaker</option>
+                  <option value="heart">Hati</option>
+                </select>
+              </label>
+              <label>
+                Bentuk tombol
+                <select
+                  value={feature.soundIconShape || "pill"}
+                  onChange={(event) =>
+                    update({
+                      soundIconShape: event.target
+                        .value as Feature["soundIconShape"],
+                    })
+                  }
+                >
+                  <option value="pill">Pil + judul lagu</option>
+                  <option value="circle">Bulat (ikon saja)</option>
+                </select>
+              </label>
+            </div>
+            <div className="two-inputs">
+              <label>
+                Warna ikon
+                <ColorInput
+                  value={feature.soundIconColor}
+                  fallback="#ffffff"
+                  onChange={(soundIconColor) => update({ soundIconColor })}
+                />
+              </label>
+              <label>
+                Warna tombol
+                <ColorInput
+                  value={feature.soundIconBackground}
+                  fallback="#0c221c"
+                  onChange={(soundIconBackground) =>
+                    update({ soundIconBackground })
+                  }
+                />
+              </label>
             </div>
             <SoundCatalogPreview
               feature={feature}
@@ -16521,6 +16719,61 @@ function SectionDecorationEditor({
               onChange={(event) => patch(item.id, { flip: event.target.checked })}
             />
           </label>
+          {/* QA 13 TC-297/298/299/282 */}
+          <div className="two-inputs">
+            <label>
+              Lapisan
+              <select
+                value={item.layer || "front"}
+                onChange={(event) =>
+                  patch(item.id, {
+                    layer: event.target.value as SectionDecoration["layer"],
+                  })
+                }
+              >
+                <option value="front">Di depan isi</option>
+                <option value="back">Di belakang isi</option>
+              </select>
+            </label>
+            <label>
+              Gerak saat digulir
+              <select
+                value={item.scrollMotion || "none"}
+                onChange={(event) =>
+                  patch(item.id, {
+                    scrollMotion: event.target.value as DecorScrollMotion,
+                  })
+                }
+              >
+                <option value="none">Tidak ada</option>
+                <option value="up">Naik (parallax)</option>
+                <option value="down">Turun (parallax)</option>
+                <option value="rotate">Berputar</option>
+                <option value="zoom">Membesar</option>
+                <option value="fade">Muncul perlahan</option>
+              </select>
+            </label>
+          </div>
+          <label className="checkbox-row">
+            <span>Tetap di layar saat digulir (seperti Background tetap)</span>
+            <input
+              type="checkbox"
+              checked={!!item.pinned}
+              onChange={(event) =>
+                patch(item.id, { pinned: event.target.checked })
+              }
+            />
+          </label>
+          <label className="checkbox-row">
+            <span>Boleh keluar dari batas canvas (atas/bawah)</span>
+            <input
+              type="checkbox"
+              checked={!!item.overflow}
+              onChange={(event) =>
+                patch(item.id, { overflow: event.target.checked })
+              }
+            />
+          </label>
         </div>
       ))}
       {!items.length && (
@@ -16564,10 +16817,12 @@ function FixedBackdrop({
   source,
   viewportHeight,
   backdropRef,
+  adjust,
 }: {
   source: CanvasSection;
   viewportHeight: number;
   backdropRef?: React.Ref<HTMLDivElement>;
+  adjust?: BackdropAdjust;
 }) {
   const filter = getBackgroundFilter(source.backgroundEffect);
   return (
@@ -16602,6 +16857,7 @@ function FixedBackdrop({
             source.backgroundSize ||
             (source.backgroundRepeat === "no-repeat" ? "cover" : "auto"),
           filter,
+          ...backdropAdjustStyle(adjust),
         }}
       />
       {source.backgroundVideoUrl && (
@@ -16613,7 +16869,7 @@ function FixedBackdrop({
           muted
           playsInline
           preload="metadata"
-          style={{ filter }}
+          style={{ filter, ...backdropAdjustStyle(adjust) }}
         />
       )}
       {(source.backgroundLayers || [])
@@ -17846,6 +18102,7 @@ function WeddingCanvas(props: WeddingCanvasProps) {
       <FixedBackdrop
         source={desktopColumnBackdrop(first)}
         viewportHeight={viewportHeight}
+        adjust={first.desktopBackdropAdjust}
       />
       <DesktopSidePanel first={first} />
       <div className="desktop-column" ref={columnRef}>
@@ -18634,6 +18891,101 @@ function DesktopSideEditor({
   );
 }
 
+/** QA 13 TC-300 (QA 6/7) — atur background tetap desktop ala serein seperti
+ *  layer background: geser kanan/kiri/atas/bawah, skala, opacity, blend,
+ *  padding & margin. Berlaku untuk background desktop dan media sisi 70/30. */
+function BackdropAdjustEditor({
+  value,
+  onChange,
+}: {
+  value?: BackdropAdjust;
+  onChange: (next: BackdropAdjust | undefined) => void;
+}) {
+  const adjust = value || {};
+  const set = (patch: Partial<BackdropAdjust>) =>
+    onChange({ ...adjust, ...patch });
+  const range = (
+    label: string,
+    key: Exclude<keyof BackdropAdjust, "blend">,
+    min: number,
+    max: number,
+    fallback: number,
+    unit: string,
+  ) => (
+    <label className="range-field">
+      <span>
+        {label}
+        <b>
+          {adjust[key] ?? fallback}
+          {unit}
+        </b>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={adjust[key] ?? fallback}
+        onChange={(event) => set({ [key]: Number(event.target.value) })}
+        onDoubleClick={() => set({ [key]: undefined })}
+      />
+    </label>
+  );
+  return (
+    <div className="desktop-side-style backdrop-adjust-editor">
+      <div className="desktop-side-style-head">
+        Posisi & tampilan background desktop
+      </div>
+      <small className="layout-help">
+        Geser kanan/kiri/atas/bawah agar bagian gambar yang penting terlihat.
+        Klik dua kali slider untuk kembali ke bawaan.
+      </small>
+      <div className="two-inputs">
+        {range("Geser X (kiri–kanan)", "offsetX", 0, 100, 50, "%")}
+        {range("Geser Y (atas–bawah)", "offsetY", 0, 100, 50, "%")}
+      </div>
+      <div className="two-inputs">
+        {range("Skala", "scale", 50, 250, 100, "%")}
+        {range("Opacity", "opacity", 0, 100, 100, "%")}
+      </div>
+      <label>
+        Blend
+        <select
+          value={adjust.blend || "normal"}
+          onChange={(event) => set({ blend: event.target.value })}
+        >
+          {[
+            "normal",
+            "multiply",
+            "screen",
+            "overlay",
+            "soft-light",
+            "darken",
+            "lighten",
+            "luminosity",
+          ].map((mode) => (
+            <option key={mode} value={mode}>
+              {mode}
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="two-inputs">
+        {range("Padding X", "padX", 0, 300, 0, "px")}
+        {range("Padding Y", "padY", 0, 300, 0, "px")}
+      </div>
+      <div className="two-inputs">
+        {range("Margin atas", "marginTop", -200, 300, 0, "px")}
+        {range("Margin bawah", "marginBottom", -200, 300, 0, "px")}
+      </div>
+      {value && (
+        <button className="text-button" onClick={() => onChange(undefined)}>
+          Reset posisi background
+        </button>
+      )}
+    </div>
+  );
+}
+
 /** TC-242 — isi sisi lebar (70%) tata letak kolom desktop. */
 function DesktopSidePanel({ first }: { first: CanvasSection }) {
   const slides = (first.desktopSideSlides || []).filter((item) => item.url);
@@ -18659,6 +19011,7 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
         {first.desktopSideVideoUrl ? (
           <video
             className="desktop-side-media"
+            style={backdropAdjustStyle(first.desktopBackdropAdjust)}
             src={assetUrl(first.desktopSideVideoUrl)}
             autoPlay
             muted
@@ -18670,7 +19023,10 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
             <div
               key={`${slide.url}-${slideIndex}`}
               className={`desktop-side-media desktop-side-slide ${slideIndex === index % slides.length ? "is-active" : ""}`}
-              style={{ backgroundImage: `url(${assetUrl(slide.url)})` }}
+              style={{
+                backgroundImage: `url(${assetUrl(slide.url)})`,
+                ...backdropAdjustStyle(first.desktopBackdropAdjust),
+              }}
             />
           ))
         )}
@@ -18895,6 +19251,12 @@ function DesktopLayoutPanel({
               Pakai background Canvas 1
             </button>
           )}
+          <BackdropAdjustEditor
+            value={first.desktopBackdropAdjust}
+            onChange={(desktopBackdropAdjust) =>
+              update({ desktopBackdropAdjust })
+            }
+          />
           {first.desktopColumnRatio === "70-30" && (
           <DesktopSideEditor
             first={first}
@@ -19187,17 +19549,30 @@ function WeddingCanvasBody({
     let frame = 0;
     const measure = () => {
       frame = 0;
+      // QA 13 (QA 3 & 4) — yang perlu dikurangi bukan hanya header undangan,
+      // tetapi SEMUA yang ada di atas posisi asli backdrop di jendela gulir:
+      // di editor ada toolbar + margin canvas, di preview Templates &
+      // Approval ada header undangan. Dulu hanya tinggi header yang
+      // dihitung, sehingga di layar tablet bagian bawah bingkai terpotong.
       const nav = siteNavRef.current;
-      if (!nav) {
-        backdrop.style.setProperty("--nav-visible", "0px");
-        return;
-      }
-      const rect = nav.getBoundingClientRect();
+      const anchor = nav || root;
+      const rect = anchor.getBoundingClientRect();
       const viewTop = box ? box.getBoundingClientRect().top : 0;
-      const visible = Math.max(0, Math.min(rect.height, rect.bottom - viewTop));
+      const viewHeight = box ? box.clientHeight : window.innerHeight;
+      const anchorBottom = nav ? rect.bottom : rect.top;
+      const visible = Math.max(
+        0,
+        Math.min(viewHeight, anchorBottom - viewTop),
+      );
       // Rect dalam piksel layar; preview/editor memakai CSS zoom, jadi
-      // dikonversi ke piksel desain lewat rasio tinggi asli header.
-      const scale = rect.height ? nav.offsetHeight / rect.height : 1;
+      // dikonversi ke piksel desain lewat rasio ukuran aslinya.
+      const scale = nav
+        ? rect.height
+          ? nav.offsetHeight / rect.height
+          : 1
+        : rect.width
+          ? root.offsetWidth / rect.width
+          : 1;
       backdrop.style.setProperty(
         "--nav-visible",
         `${Math.round(visible * scale)}px`,
@@ -19216,6 +19591,57 @@ function WeddingCanvasBody({
       window.removeEventListener("resize", schedule);
     };
   }, [fixedBackdrop, opened, editable, scrollViewportHeight, previewZoom]);
+
+  // QA 13 TC-299 — ornamen bergerak mengikuti gulir: tiap canvas yang punya
+  // ornamen bergerak diberi --deco-scroll (-1 saat canvas di bawah layar,
+  // 0 saat di tengah, 1 saat sudah lewat ke atas). CSS memakai nilainya pada
+  // properti translate/rotate/scale yang tidak bentrok dengan animasi loop.
+  const hasScrollDeco = sections.some((entry) =>
+    entry.decorations?.some(
+      (item) => item.scrollMotion && item.scrollMotion !== "none",
+    ),
+  );
+  useEffect(() => {
+    if (!hasScrollDeco) return;
+    const root = revealRootRef.current;
+    if (!root) return;
+    let scroller: HTMLElement | null = root.parentElement;
+    while (scroller && scroller !== document.body) {
+      const overflowY = getComputedStyle(scroller).overflowY;
+      if (overflowY === "auto" || overflowY === "scroll") break;
+      scroller = scroller.parentElement;
+    }
+    const box = scroller && scroller !== document.body ? scroller : null;
+    let frame = 0;
+    const measure = () => {
+      frame = 0;
+      const viewTop = box ? box.getBoundingClientRect().top : 0;
+      const viewHeight = box ? box.clientHeight : window.innerHeight;
+      root
+        .querySelectorAll<HTMLElement>(".canvas-section.has-scroll-deco")
+        .forEach((sectionEl) => {
+          const rect = sectionEl.getBoundingClientRect();
+          const center = rect.top + rect.height / 2 - viewTop;
+          const progress = Math.max(
+            -1,
+            Math.min(1, (viewHeight / 2 - center) / Math.max(1, viewHeight)),
+          );
+          sectionEl.style.setProperty("--deco-scroll", progress.toFixed(3));
+        });
+    };
+    const schedule = () => {
+      if (!frame) frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const target: HTMLElement | Window = box || window;
+    target.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    return () => {
+      if (frame) cancelAnimationFrame(frame);
+      target.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [hasScrollDeco, opened, editable, scrollViewportHeight, previewZoom, sections.length]);
 
   if (page === "rsvp-page")
     return <RsvpPage guests={guests} addGuest={addGuest} />;
@@ -19241,6 +19667,11 @@ function WeddingCanvasBody({
       Math.max(150, coverExit?.coverExitDuration ?? 700),
     );
   };
+  const pinnedDecorations = sections.flatMap((rawSection) =>
+    (resolveSection(rawSection, device).decorations || []).filter(
+      (decoration) => decoration.pinned,
+    ),
+  );
   const prepareSection = (rawSection: CanvasSection) =>
     fixedBackdrop
       ? withoutSharedBackdrop(
@@ -19308,13 +19739,43 @@ function WeddingCanvasBody({
       ))}
     </footer>
   ) : null;
+  // QA 13 (QA 2 / TC-301) — layar Buka Undangan dulu memanjangkan canvas
+  // cover memenuhi layar; layer & ornamen yang mengikuti tinggi canvas ikut
+  // melar sehingga "berantakan" dibanding editor. Kini canvas cover tampil
+  // setinggi desainnya (geometri layer/ornamen = editor), ditengahkan, dan
+  // background utamanya dilukis di belakang SELURUH layar agar tidak ada
+  // pita kosong di atas/bawahnya.
+  const coverScreenSource =
+    lockedCover && coverEntry && !fixedBackdrop
+      ? prepareSection(coverEntry.section)
+      : null;
+  const coverScreenStyle: React.CSSProperties = coverScreenSource
+    ? {
+        background: getGradientBackground(
+          coverScreenSource.backgroundGradientEnabled,
+          coverScreenSource.backgroundGradientFrom,
+          coverScreenSource.backgroundGradientTo,
+          coverScreenSource.backgroundGradientAngle,
+          coverScreenSource.backgroundColor,
+        ),
+        ...(coverScreenSource.backgroundUrl
+          ? {
+              backgroundImage: `url(${assetUrl(coverScreenSource.backgroundUrl)})`,
+              backgroundSize: coverScreenSource.backgroundSize || "cover",
+              backgroundPosition: coverScreenSource.backgroundPosition || "center",
+              backgroundRepeat: "no-repeat",
+            }
+          : {}),
+      }
+    : {};
   return (
     <div
       ref={revealRootRef}
-      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${showBottomNav && !lockedCover ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}${lockedCover ? ` invitation-locked cover-as-canvas${opening ? ` cover-opening cover-exit-${coverExit?.coverExitEffect || "fade"}` : ""}` : ""}`}
+      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${sections.some((entry) => entry.decorations?.some((item) => item.pinned)) ? "has-pinned-deco" : ""} ${showBottomNav && !lockedCover ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}${lockedCover ? ` invitation-locked cover-as-canvas${opening ? ` cover-opening cover-exit-${coverExit?.coverExitEffect || "fade"}` : ""}` : ""}`}
       style={
         {
           "--accent": selectedTemplate.accent,
+          ...coverScreenStyle,
           ...(lockedCover
             ? {
                 "--cover-exit-duration": `${coverExit?.coverExitDuration ?? 700}ms`,
@@ -19344,10 +19805,46 @@ function WeddingCanvasBody({
           backdropRef={fixedBackdropRef}
         />
       )}
+      {/* QA 13 TC-298 — ornamen "tetap di layar": seperti Background tetap,
+          satu lapisan sticky setinggi layar untuk seluruh undangan; ornamen
+          ditambatkan ke pojok layar dan tidak ikut tergulir. */}
+      {!lockedCover &&
+        (["back", "front"] as const).map((layer) => {
+          const list = pinnedDecorations.filter(
+            (decoration) => (decoration.layer || "front") === layer,
+          );
+          if (!list.length) return null;
+          return (
+            <div
+              key={layer}
+              className={`site-pinned-decorations layer-${layer}`}
+              aria-hidden
+              style={
+                scrollViewportHeight
+                  ? ({
+                      "--site-viewport-h": `${scrollViewportHeight}px`,
+                    } as React.CSSProperties)
+                  : undefined
+              }
+            >
+              <SectionDecorations decorations={list} pinned />
+            </div>
+          );
+        })}
       {sections.map((rawSection) => {
         if (lockedCover && rawSection.id !== coverEntry?.section.id)
           return null;
-        const section = prepareSection(rawSection);
+        const prepared = prepareSection(rawSection);
+        // Background utama cover sudah dilukis di belakang seluruh layar.
+        const section =
+          coverScreenSource && rawSection.id === coverEntry?.section.id
+            ? {
+                ...prepared,
+                backgroundColor: "transparent",
+                backgroundGradientEnabled: false,
+                backgroundUrl: undefined,
+              }
+            : prepared;
         // QA TC-112: nilai section mengikuti device aktif (Desktop / Mobile).
         // QA TC-146: bila mode background global aktif, seluruh canvas memakai
         // background canvas pertama sehingga tidak perlu upload berulang.
@@ -19378,7 +19875,7 @@ function WeddingCanvasBody({
         return (
           <section
             key={section.id}
-            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect && !lockedCover ? " follow-aspect" : ""}`}
+            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect ? " follow-aspect" : ""}${decorationSectionClasses(section.decorations)}`}
             onDragOver={(event) => {
               if (
                 editable &&
@@ -19426,9 +19923,7 @@ function WeddingCanvasBody({
                 // tidak dipakai di sana (canvas cover potret pada kolom 70/30
                 // dulu lebih tinggi dari layar, judul terpotong di atas).
                 aspectRatio:
-                  section.backgroundFollowAspect &&
-                  section.backgroundAspect &&
-                  !lockedCover
+                  section.backgroundFollowAspect && section.backgroundAspect
                     ? String(section.backgroundAspect)
                     : undefined,
                 // QA 1 Nov — mengikuti rasio background TANPA memotong isi:
@@ -19439,12 +19934,8 @@ function WeddingCanvasBody({
                 // kolom 70/30 / Mobile, sisanya gelap).
                 minHeight:
                   section.backgroundFollowAspect && section.backgroundAspect
-                    ? lockedCover
-                      ? "100%"
-                      : undefined
-                    : lockedCover
-                      ? `max(${section.minHeight}px, 100%)`
-                      : section.minHeight,
+                    ? undefined
+                    : section.minHeight,
                 paddingTop:
                   section.layoutMode !== "standard" ? 0 : section.paddingY,
                 paddingBottom:
@@ -19607,6 +20098,34 @@ function WeddingCanvasBody({
                 <GripVertical size={15} /> Drag Canvas
               </div>
             )}
+            {/* QA 13 TC-278 — penanda bahwa background canvas ini menaungi
+                beberapa fitur sekaligus. Arahkan kursor untuk menyorot
+                fitur-fitur yang tercakup. */}
+            {editable &&
+              (() => {
+                const featureCount = section.columns.reduce(
+                  (total, column) => total + column.features.length,
+                  0,
+                );
+                const hasBackground = Boolean(
+                  section.backgroundUrl ||
+                    section.backgroundVideoUrl ||
+                    section.backgroundGradientEnabled ||
+                    (section.backgroundLayers || []).some((layer) => layer.url) ||
+                    (section.backgroundColor &&
+                      !/^(transparent|#fff(fff)?)$/i.test(section.backgroundColor)) ||
+                    (fixedBackdrop && featureCount),
+                );
+                if (featureCount < 2 || !hasBackground) return null;
+                return (
+                  <div
+                    className="canvas-bg-indicator"
+                    title={`Background canvas ini berlaku untuk ${featureCount} fitur sekaligus`}
+                  >
+                    <ImageIcon size={12} /> Background · {featureCount} fitur
+                  </div>
+                );
+              })()}
             <div
               className={`canvas-columns columns-${section.columns.length}`}
               style={
@@ -19811,15 +20330,22 @@ function liveSectionVisible(section: CanvasSection, editable: boolean) {
 
 function SectionDecorations({
   decorations,
+  pinned = false,
 }: {
   decorations?: SectionDecoration[];
+  /** QA 13 TC-298 — true: hanya ornamen "tetap" (dirender di lapisan layar
+   *  milik undangan); false: hanya ornamen biasa milik canvas. */
+  pinned?: boolean;
 }) {
   return (
     <>
-            {(decorations || []).map((decoration) => (
+            {(decorations || [])
+              .filter((decoration) => Boolean(decoration.pinned) === pinned)
+              .map((decoration) => {
+              const node = (
               <span
                 key={decoration.id}
-                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"}`}
+                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"} deco-${decoration.layer || "front"}${decoration.scrollMotion && decoration.scrollMotion !== "none" ? ` scroll-${decoration.scrollMotion}` : ""}`}
                 style={
                   {
                     width: decoration.size,
@@ -19832,6 +20358,7 @@ function SectionDecorations({
                     height: decoration.imageUrl ? undefined : decoration.size,
                     color: decoration.color,
                     opacity: (decoration.opacity ?? 70) / 100,
+                    "--deco-fade-base": (decoration.opacity ?? 70) / 100,
                     // transform inline kalah dari keyframes .loop-* yang juga
                     // menganimasikan transform, jadi "Cermin horizontal" dan
                     // penyusutan di mobile tidak pernah terlihat. Nilainya
@@ -19857,7 +20384,9 @@ function SectionDecorations({
                   <DecorGlyphIcon glyph={decoration.glyph} />
                 )}
               </span>
-            ))}
+              );
+              return node;
+            })}
     </>
   );
 }
@@ -19941,6 +20470,23 @@ function FeatureBlock({
     marginTop: feature.margin,
     marginBottom: feature.margin,
     fontWeight: (feature.bodyBold ?? feature.bold) ? 700 : 400,
+    // QA 13 TC-293/294 — teks di dalam kartu (nama di Greetings, nomor
+    // rekening & alamat di Wedding Gift) dulu selalu tebal karena memakai
+    // <strong>; kini mengikuti pilihan Bold teks.
+    ...((feature.bodyBold ?? feature.bold) !== undefined
+      ? ({
+          "--body-weight": (feature.bodyBold ?? feature.bold) ? 700 : 400,
+        } as React.CSSProperties)
+      : {}),
+    ...(feature.imageFade && feature.imageFade !== "none"
+      ? ({
+          "--img-fade-size": `${feature.imageFadeSize ?? 50}%`,
+          "--img-fade-color": feature.imageFadeColor || "transparent",
+        } as React.CSSProperties)
+      : {}),
+    ...(feature.giftCardWidth
+      ? ({ "--gift-card-w": `${feature.giftCardWidth}px` } as React.CSSProperties)
+      : {}),
     ...(feature.titleBold !== undefined
       ? ({
           "--title-weight": feature.titleBold ? 700 : 400,
@@ -20087,7 +20633,7 @@ function FeatureBlock({
       data-fixed-height={
         feature.freePosition && feature.boxHeight ? "true" : undefined
       }
-      className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
+      className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
       style={style}
     >
       <FeatureEffect effect={feature.visualEffect || "none"} />
@@ -20111,7 +20657,7 @@ function FeatureBlock({
       )}
       {feature.type === "event" && (
         <div
-          className={`event-feature ${feature.eventItems?.length ? "has-event-items" : ""}`}
+          className={`event-feature ${feature.eventItems?.length ? "has-event-items" : ""} event-style-${feature.eventStyle || "card"}`}
         >
           <CalendarDays size={25} />
           {editableText("title", "editable-title")}
@@ -20150,8 +20696,8 @@ function FeatureBlock({
         </div>
       )}
       {feature.type === "gift" && (
-        <div className="event-feature">
-          <Crown size={25} />
+        <div className="event-feature gift-feature">
+          <GiftIcon feature={feature} />
           {editableText("title", "editable-title")}
           {editableText("body", "editable-body")}
           <GiftReveal feature={feature} editable={editable} />
@@ -20451,8 +20997,15 @@ function LoveStoryFeature({
   return (
     <div className={`love-story-feature layout-${feature.loveStoryLayout || "timeline"}`}>
       {editableText("title", "editable-title")}
-      {editableText("body", "editable-body")}
-      <div className="love-story-track">
+      {!feature.loveStoryHideIntro && editableText("body", "editable-body")}
+      <div
+        className="love-story-track"
+        style={
+          feature.loveStoryGap !== undefined
+            ? { marginTop: feature.loveStoryGap }
+            : undefined
+        }
+      >
         {items.map((item) => (
           <article
             key={item.id}
@@ -20484,6 +21037,7 @@ function LoveStoryFeature({
               >
                 {item.title}
               </strong>
+              {!feature.loveStoryHideItemBody && (editable || item.body?.trim()) && (
               <p
                 contentEditable={editable && !feature.locked}
                 suppressContentEditableWarning
@@ -20508,6 +21062,7 @@ function LoveStoryFeature({
               >
                 {item.body}
               </p>
+              )}
             </div>
           </article>
         ))}
@@ -20683,7 +21238,25 @@ function LiveStreamFeature({
           href={info.href}
           target="_blank"
           rel="noreferrer"
-          style={giftCardStyle(feature)}
+          style={{
+            ...giftCardStyle(feature),
+            // QA 13 TC-287 — tombol Tonton Live bisa diatur sendiri.
+            ...(feature.liveButtonBackground
+              ? { background: feature.liveButtonBackground }
+              : {}),
+            ...(feature.liveButtonTextColor
+              ? { color: feature.liveButtonTextColor }
+              : {}),
+            ...(feature.liveButtonBorderColor
+              ? { borderColor: feature.liveButtonBorderColor }
+              : {}),
+            ...(feature.liveButtonRadius !== undefined
+              ? { borderRadius: feature.liveButtonRadius }
+              : {}),
+            ...(feature.liveButtonFontSize
+              ? { fontSize: feature.liveButtonFontSize }
+              : {}),
+          }}
         >
           <PlayCircle size={16} />
           {feature.liveButtonLabel || "Tonton Live"}
@@ -20738,6 +21311,60 @@ function LiveStreamEditor({
           onChange={(event) => update({ liveButtonLabel: event.target.value })}
         />
       </label>
+      {/* QA 13 TC-287 — custom tombol Tonton Live. */}
+      <div className="two-inputs">
+        <label>
+          Warna tombol
+          <ColorInput
+            value={feature.liveButtonBackground}
+            fallback="#ffffff"
+            onChange={(liveButtonBackground) => update({ liveButtonBackground })}
+          />
+        </label>
+        <label>
+          Warna teks
+          <ColorInput
+            value={feature.liveButtonTextColor}
+            fallback="#125946"
+            onChange={(liveButtonTextColor) => update({ liveButtonTextColor })}
+          />
+        </label>
+      </div>
+      <label>
+        Warna garis tepi
+        <ColorInput
+          value={feature.liveButtonBorderColor}
+          fallback="#d5ddd9"
+          noneValue="transparent"
+          onChange={(liveButtonBorderColor) => update({ liveButtonBorderColor })}
+        />
+      </label>
+      <div className="two-inputs">
+        <label>
+          Ukuran teks <span>{feature.liveButtonFontSize || 13}px</span>
+          <input
+            type="range"
+            min={9}
+            max={24}
+            value={feature.liveButtonFontSize || 13}
+            onChange={(event) =>
+              update({ liveButtonFontSize: Number(event.target.value) })
+            }
+          />
+        </label>
+        <label>
+          Sudut <span>{feature.liveButtonRadius ?? 12}px</span>
+          <input
+            type="range"
+            min={0}
+            max={40}
+            value={feature.liveButtonRadius ?? 12}
+            onChange={(event) =>
+              update({ liveButtonRadius: Number(event.target.value) })
+            }
+          />
+        </label>
+      </div>
       <div className="setting-row compact">
         <span>
           <strong>Tampilkan pemutar YouTube</strong>
@@ -20760,7 +21387,9 @@ function LiveStreamEditor({
 /** TC-234 — Credit yang dipasang "paling bawah" dilepas dari canvas-nya dan
  *  dirender sekali di akhir undangan, tanpa padding/min-height canvas. */
 const isPinnedCredit = (feature: Feature) =>
-  feature.type === "credit" && feature.creditPinBottom !== false;
+  // QA 13 TC-290/295 — Credit kini tampil PERSIS di posisi canvas-nya
+  // (editor = preview). Melepasnya ke akhir undangan adalah pilihan sadar.
+  feature.type === "credit" && feature.creditPinBottom === true;
 
 function CreditFeature({
   feature,
@@ -21391,6 +22020,22 @@ function EventItemsEditor({
           </button>
         </>
       )}
+      {/* QA 13 TC-280 — beberapa gaya tampilan Event. */}
+      <label>
+        Gaya tampilan
+        <select
+          value={feature.eventStyle || "card"}
+          onChange={(event) =>
+            update({ eventStyle: event.target.value as Feature["eventStyle"] })
+          }
+        >
+          <option value="card">Kartu (bawaan)</option>
+          <option value="minimal">Minimal (tanpa kotak)</option>
+          <option value="outline">Garis tepi</option>
+          <option value="timeline">Timeline</option>
+          <option value="elegant">Elegan (bingkai ganda)</option>
+        </select>
+      </label>
       {items.length > 0 && (
         <div className="two-inputs">
           <label>
@@ -21647,17 +22292,25 @@ function mapButtonStyle(feature: Feature): {
 }
 
 function MapButtonIcon({ feature, size }: { feature: Feature; size: number }) {
+  // QA 13 TC-284/285 — ikon sejajar tengah dan warnanya bisa diatur sendiri.
+  const props = {
+    size,
+    className: "map-button-icon",
+    style: feature.mapButtonIconColor
+      ? { color: feature.mapButtonIconColor }
+      : undefined,
+  };
   switch (feature.mapButtonIcon) {
     case "none":
       return null;
     case "navigation":
-      return <Navigation size={size} />;
+      return <Navigation {...props} />;
     case "map":
-      return <MapIcon size={size} />;
+      return <MapIcon {...props} />;
     case "external":
-      return <ExternalLink size={size} />;
+      return <ExternalLink {...props} />;
     default:
-      return <MapPin size={size} />;
+      return <MapPin {...props} />;
   }
 }
 
@@ -26602,6 +27255,35 @@ function bankLogoStyle(feature: Feature): React.CSSProperties {
     alignSelf: feature.bankLogoAlign || undefined,
   };
 }
+/** QA 13 TC-281 — pilihan ikon Wedding Gift. */
+function GiftIcon({ feature }: { feature: Feature }) {
+  const size = feature.giftIconSize || 25;
+  const style = feature.giftIconColor
+    ? { color: feature.giftIconColor }
+    : undefined;
+  const props = { size, style, className: "gift-icon" };
+  switch (feature.giftIcon) {
+    case "none":
+      return null;
+    case "gift":
+      return <Gift {...props} />;
+    case "heart":
+      return <Heart {...props} />;
+    case "wallet":
+      return <Wallet {...props} />;
+    case "card":
+      return <CreditCard {...props} />;
+    case "envelope":
+      return <MailOpen {...props} />;
+    case "sparkles":
+      return <Sparkles {...props} />;
+    case "package":
+      return <PackageCheck {...props} />;
+    default:
+      return <Crown {...props} />;
+  }
+}
+
 /** TC-241 — mode ringkas: hanya tombol "Lihat Rekening" yang membuka daftar
  *  rekening dan alamat kado. Di editor isi tetap terlihat agar bisa dirapikan. */
 function GiftReveal({
@@ -26657,14 +27339,46 @@ function GiftAddressCard({ feature }: { feature: Feature }) {
   return (
     <div
       className="gift-account-card gift-address-card"
-      style={giftCardStyle(feature)}
+      style={{
+        ...giftCardStyle(feature),
+        ...(feature.giftAddressFont
+          ? { fontFamily: `"${feature.giftAddressFont}"` }
+          : {}),
+        ...(feature.giftAddressColor ? { color: feature.giftAddressColor } : {}),
+      }}
     >
-      <span className="gift-address-head">
-        <MapPin size={15} /> Kirim Kado
+      <span
+        className="gift-address-head"
+        style={
+          feature.giftAddressHeadSize
+            ? { fontSize: feature.giftAddressHeadSize }
+            : undefined
+        }
+      >
+        <MapPin size={feature.giftAddressHeadSize ? feature.giftAddressHeadSize + 3 : 15} /> Kirim Kado
       </span>
-      {feature.giftAddressName && <strong>{feature.giftAddressName}</strong>}
+      {feature.giftAddressName && (
+        <strong
+          style={
+            feature.giftAddressNameSize
+              ? { fontSize: feature.giftAddressNameSize }
+              : undefined
+          }
+        >
+          {feature.giftAddressName}
+        </strong>
+      )}
       {feature.giftAddressPhone && <small>{feature.giftAddressPhone}</small>}
-      <p className="gift-address-text">{feature.giftAddressText}</p>
+      <p
+        className="gift-address-text"
+        style={
+          feature.giftAddressTextSize
+            ? { fontSize: feature.giftAddressTextSize }
+            : undefined
+        }
+      >
+        {feature.giftAddressText}
+      </p>
       <button
         type="button"
         style={submitButtonStyle(feature)}
@@ -26963,11 +27677,17 @@ function ControlledSoundPlayer({
   return (
     <button
       type="button"
-      className={`fixed-sound-disc sound-pos-${feature.objectAlign || "left"} sound-vpos-${feature.soundVerticalAlign || "bottom"} ${playing ? "playing" : ""} ${contained ? "is-contained" : ""}`}
+      className={`fixed-sound-disc sound-pos-${feature.objectAlign || "left"} sound-vpos-${feature.soundVerticalAlign || "bottom"} ${playing ? "playing" : ""} ${contained ? "is-contained" : ""} sound-icon-${feature.soundIcon || "disc"} sound-shape-${feature.soundIconShape || "pill"}`}
       style={
         {
           "--sound-offset-x": `${feature.soundOffsetX ?? 22}px`,
           "--sound-offset-y": `${feature.soundOffsetY ?? 22}px`,
+          ...(feature.soundIconColor
+            ? { "--sound-icon-color": feature.soundIconColor }
+            : {}),
+          ...(feature.soundIconBackground
+            ? { "--sound-icon-bg": feature.soundIconBackground }
+            : {}),
         } as React.CSSProperties
       }
       onClick={onToggle}
@@ -26975,10 +27695,36 @@ function ControlledSoundPlayer({
         playing ? "Matikan backsound" : `Putar ${feature.title || feature.body}`
       }
     >
-      <Disc3 size={23} />
-      <span>{playing ? "Sound on" : feature.title || feature.body}</span>
+      <SoundButtonIcon icon={feature.soundIcon} playing={playing} />
+      {feature.soundIconShape !== "circle" && (
+        <span>{playing ? "Sound on" : feature.title || feature.body}</span>
+      )}
     </button>
   );
+}
+
+/** QA 13 TC-302 — pilihan ikon tombol musik. */
+function SoundButtonIcon({
+  icon,
+  playing,
+}: {
+  icon?: Feature["soundIcon"];
+  playing: boolean;
+}) {
+  switch (icon) {
+    case "note":
+      return <Music2 size={23} />;
+    case "notes":
+      return <Music size={23} />;
+    case "headphones":
+      return <Headphones size={23} />;
+    case "speaker":
+      return playing ? <Volume2 size={23} /> : <VolumeX size={23} />;
+    case "heart":
+      return <Heart size={23} />;
+    default:
+      return <Disc3 size={23} />;
+  }
 }
 
 // TC-080 — heading & supporting text dapat dinonaktifkan/dihapus, mendukung baris baru.
@@ -27322,8 +28068,126 @@ function GiftAccountEditor({
                 }
               />
             </label>
+            {/* QA 13 TC-289 — teks Kirim Kado: font, ukuran, warna. */}
+            <label>
+              Font teks Kirim Kado
+              <FontSelect
+                value={feature.giftAddressFont}
+                onChange={(giftAddressFont) =>
+                  update({ giftAddressFont: giftAddressFont || undefined })
+                }
+                allowInherit
+              />
+            </label>
+            <label>
+              Warna teks Kirim Kado
+              <ColorInput
+                value={feature.giftAddressColor}
+                fallback="#1f3a2e"
+                onChange={(giftAddressColor) => update({ giftAddressColor })}
+              />
+            </label>
+            <div className="two-inputs">
+              <label>
+                Judul <span>{feature.giftAddressHeadSize || 12}px</span>
+                <input
+                  type="range"
+                  min={8}
+                  max={28}
+                  value={feature.giftAddressHeadSize || 12}
+                  onChange={(event) =>
+                    update({ giftAddressHeadSize: Number(event.target.value) })
+                  }
+                />
+              </label>
+              <label>
+                Nama <span>{feature.giftAddressNameSize || 14}px</span>
+                <input
+                  type="range"
+                  min={10}
+                  max={32}
+                  value={feature.giftAddressNameSize || 14}
+                  onChange={(event) =>
+                    update({ giftAddressNameSize: Number(event.target.value) })
+                  }
+                />
+              </label>
+            </div>
+            <label>
+              Alamat <span>{feature.giftAddressTextSize || 12}px</span>
+              <input
+                type="range"
+                min={8}
+                max={26}
+                value={feature.giftAddressTextSize || 12}
+                onChange={(event) =>
+                  update({ giftAddressTextSize: Number(event.target.value) })
+                }
+              />
+            </label>
           </>
         )}
+      </div>
+      {/* QA 13 TC-281 & TC-291 — ikon Wedding Gift dan lebar kotak seragam. */}
+      <div className="bank-logo-style">
+        <strong>Ikon & kotak</strong>
+        <label>
+          Ikon
+          <select
+            value={feature.giftIcon || "crown"}
+            onChange={(event) =>
+              update({ giftIcon: event.target.value as Feature["giftIcon"] })
+            }
+          >
+            <option value="crown">Mahkota</option>
+            <option value="gift">Kado</option>
+            <option value="heart">Hati</option>
+            <option value="wallet">Dompet</option>
+            <option value="card">Kartu</option>
+            <option value="envelope">Amplop</option>
+            <option value="sparkles">Kilau</option>
+            <option value="package">Paket</option>
+            <option value="none">Tanpa ikon</option>
+          </select>
+        </label>
+        {feature.giftIcon !== "none" && (
+          <div className="two-inputs">
+            <label>
+              Ukuran ikon <span>{feature.giftIconSize || 25}px</span>
+              <input
+                type="range"
+                min={14}
+                max={64}
+                value={feature.giftIconSize || 25}
+                onChange={(event) =>
+                  update({ giftIconSize: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Warna ikon
+              <ColorInput
+                value={feature.giftIconColor}
+                fallback="#125946"
+                onChange={(giftIconColor) => update({ giftIconColor })}
+              />
+            </label>
+          </div>
+        )}
+        <label>
+          Lebar kotak (rekening & Kirim Kado){" "}
+          <span>{feature.giftCardWidth ? `${feature.giftCardWidth}px` : "seragam bawaan"}</span>
+          <input
+            type="range"
+            min={160}
+            max={520}
+            step={5}
+            value={feature.giftCardWidth || 240}
+            onChange={(event) =>
+              update({ giftCardWidth: Number(event.target.value) })
+            }
+          />
+        </label>
       </div>
       {/* TC-212 — logo bank bisa disesuaikan dengan tema. */}
       <div className="bank-logo-style">
@@ -28487,6 +29351,47 @@ function ImageLayoutEditor({
         onSelect={(imageLayoutTemplate) => update({ imageLayoutTemplate })}
         glyph={(value) => <ImageLayoutGlyph layout={value} />}
       />
+      {/* QA 13 TC-283 — gradien setengah: memudar transparan atau ke warna. */}
+      <div className="two-inputs">
+        <label>
+          Gradien gambar
+          <select
+            value={feature.imageFade || "none"}
+            onChange={(event) =>
+              update({ imageFade: event.target.value as Feature["imageFade"] })
+            }
+          >
+            <option value="none">Tidak ada</option>
+            <option value="bottom">Pudar ke bawah</option>
+            <option value="top">Pudar ke atas</option>
+            <option value="left">Pudar ke kiri</option>
+            <option value="right">Pudar ke kanan</option>
+          </select>
+        </label>
+        {feature.imageFade && feature.imageFade !== "none" && (
+          <label>
+            Warna pudar
+            <ColorInput
+              value={feature.imageFadeColor}
+              fallback="#ffffff"
+              noneValue="transparent"
+              onChange={(imageFadeColor) => update({ imageFadeColor })}
+            />
+          </label>
+        )}
+      </div>
+      {feature.imageFade && feature.imageFade !== "none" && (
+        <label>
+          Panjang gradien <span>{feature.imageFadeSize ?? 50}%</span>
+          <input
+            type="range"
+            min={10}
+            max={100}
+            value={feature.imageFadeSize ?? 50}
+            onChange={(event) => update({ imageFadeSize: Number(event.target.value) })}
+          />
+        </label>
+      )}
       <label>
         Caption
         <input
@@ -28619,6 +29524,16 @@ function MapButtonEditor({
           }
         />
       </label>
+      {feature.mapButtonIcon !== "none" && (
+        <label>
+          Warna ikon
+          <ColorInput
+            value={feature.mapButtonIconColor}
+            fallback="#ffffff"
+            onChange={(mapButtonIconColor) => update({ mapButtonIconColor })}
+          />
+        </label>
+      )}
       {feature.mapButtonIcon !== "none" && (
         <label>
           Ukuran ikon <span>{feature.mapButtonIconSize || 14}px</span>
@@ -28792,6 +29707,35 @@ function LoveStoryEditor({
           <option value="zigzag">Zigzag kiri-kanan</option>
         </select>
       </label>
+      {/* QA 13 TC-288 — kotak teks pendukung bisa dihapus & jarak diatur. */}
+      <label className="checkbox-row">
+        <span>Sembunyikan teks pendukung di bawah judul</span>
+        <input
+          type="checkbox"
+          checked={feature.loveStoryHideIntro === true}
+          onChange={(event) => update({ loveStoryHideIntro: event.target.checked })}
+        />
+      </label>
+      <label className="checkbox-row">
+        <span>Sembunyikan teks tiap cerita (hanya tahun & judul)</span>
+        <input
+          type="checkbox"
+          checked={feature.loveStoryHideItemBody === true}
+          onChange={(event) =>
+            update({ loveStoryHideItemBody: event.target.checked })
+          }
+        />
+      </label>
+      <label>
+        Jarak judul ke cerita <span>{feature.loveStoryGap ?? 18}px</span>
+        <input
+          type="range"
+          min={0}
+          max={80}
+          value={feature.loveStoryGap ?? 18}
+          onChange={(event) => update({ loveStoryGap: Number(event.target.value) })}
+        />
+      </label>
       {items.map((item, index) => (
         <div className="extra-text-row" key={item.id}>
           <div className="form-spec-head">
@@ -28919,16 +29863,17 @@ function CreditEditor({
         <span>
           <strong>Tempel di paling bawah undangan</strong>
           <small>
-            Di Preview & undangan, Credit tampil di akhir halaman tanpa ruang
-            kosong di bawahnya, di canvas mana pun ia diletakkan.
+            Mati (bawaan): Credit tampil persis di posisi canvas-nya, sama
+            seperti di editor. Nyala: dipindah ke akhir undangan tanpa ruang
+            kosong di bawahnya.
           </small>
         </span>
         <button
-          className={`toggle ${feature.creditPinBottom !== false ? "on" : ""}`}
-          aria-pressed={feature.creditPinBottom !== false}
+          className={`toggle ${feature.creditPinBottom === true ? "on" : ""}`}
+          aria-pressed={feature.creditPinBottom === true}
           aria-label="Tempel Credit di paling bawah"
           onClick={() =>
-            update({ creditPinBottom: feature.creditPinBottom === false })
+            update({ creditPinBottom: feature.creditPinBottom !== true })
           }
         >
           <i />
