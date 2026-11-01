@@ -15,3 +15,5 @@ server/receipts/*
 !server/data/.gitkeep
 !server/uploads/.gitkeep
 !server/receipts/.gitkeep
+backups
+backups/**
