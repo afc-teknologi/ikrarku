@@ -19057,52 +19057,6 @@ function WeddingCanvasBody({
     // `opened`: bila ada cover, root halaman baru terpasang setelah cover
     // dibuka, jadi pengukuran harus diulang saat itu.
   }, [fixedBackdrop, opened, previewZoom]);
-  if (page === "rsvp-page")
-    return <RsvpPage guests={guests} addGuest={addGuest} />;
-  // Revisi 27 Okt — layar Buka Undangan = Canvas cover apa adanya. Dulu
-  // dirender oleh komponen terpisah (InvitationCover) dengan susunan sendiri:
-  // urutan lapisan, ukuran, dan posisi teks berbeda dari canvas editor (teks
-  // tertutup layer, kotak bisa digulir dan menampilkan ruang kosong). Kini
-  // canvas cover dirender oleh kode yang sama dengan editor, hanya tombolnya
-  // yang membuka undangan.
-  const lockedCover = !editable && Boolean(coverEntry) && !opened;
-  const coverExit = coverEntry
-    ? resolveFeature(coverEntry.feature, device)
-    : undefined;
-  const openCover = () => {
-    if (opening) return;
-    setOpening(true);
-    startSound();
-    window.setTimeout(
-      () => {
-        setOpened(true);
-        setOpening(false);
-      },
-      Math.max(150, coverExit?.coverExitDuration ?? 700),
-    );
-  };
-  const prepareSection = (rawSection: CanvasSection) =>
-    fixedBackdrop
-      ? withoutSharedBackdrop(
-          resolveSection(rawSection, device),
-          rawSection.id === sections[0]?.id,
-        )
-      : applyGlobalBackground(
-          resolveSection(rawSection, device),
-          globalBackgroundSource,
-        );
-  // TC-269 / TC-273 — Credit "paling bawah" dirender di DALAM section
-  // terakhir yang tampil, bukan di footer terpisah setelahnya. Dulu footer
-  // itu berdiri di atas backdrop polos: background & layer section terakhir
-  // berhenti sebelum credit (tampak "hanya meng-cover fitur pertama" dan
-  // menyisakan space di bawah), padahal di editor credit ada di dalamnya.
-  const lastVisibleSectionId = editable
-    ? undefined
-    : [...sections]
-        .reverse()
-        .find((rawSection) =>
-          liveSectionVisible(prepareSection(rawSection), false),
-        )?.id;
   // QA 1 Nov — Background tetap terpotong di bawah. Backdrop sticky
   // setinggi jendela gulir, tetapi posisi awalnya DI BAWAH header undangan
   // (logo · Our Story · Event …). Selama header masih terlihat, bagian bawah
@@ -19153,8 +19107,54 @@ function WeddingCanvasBody({
       target.removeEventListener("scroll", schedule);
       window.removeEventListener("resize", schedule);
     };
-  }, [fixedBackdrop, lockedCover, scrollViewportHeight, previewZoom]);
+  }, [fixedBackdrop, opened, editable, scrollViewportHeight, previewZoom]);
 
+  if (page === "rsvp-page")
+    return <RsvpPage guests={guests} addGuest={addGuest} />;
+  // Revisi 27 Okt — layar Buka Undangan = Canvas cover apa adanya. Dulu
+  // dirender oleh komponen terpisah (InvitationCover) dengan susunan sendiri:
+  // urutan lapisan, ukuran, dan posisi teks berbeda dari canvas editor (teks
+  // tertutup layer, kotak bisa digulir dan menampilkan ruang kosong). Kini
+  // canvas cover dirender oleh kode yang sama dengan editor, hanya tombolnya
+  // yang membuka undangan.
+  const lockedCover = !editable && Boolean(coverEntry) && !opened;
+  const coverExit = coverEntry
+    ? resolveFeature(coverEntry.feature, device)
+    : undefined;
+  const openCover = () => {
+    if (opening) return;
+    setOpening(true);
+    startSound();
+    window.setTimeout(
+      () => {
+        setOpened(true);
+        setOpening(false);
+      },
+      Math.max(150, coverExit?.coverExitDuration ?? 700),
+    );
+  };
+  const prepareSection = (rawSection: CanvasSection) =>
+    fixedBackdrop
+      ? withoutSharedBackdrop(
+          resolveSection(rawSection, device),
+          rawSection.id === sections[0]?.id,
+        )
+      : applyGlobalBackground(
+          resolveSection(rawSection, device),
+          globalBackgroundSource,
+        );
+  // TC-269 / TC-273 — Credit "paling bawah" dirender di DALAM section
+  // terakhir yang tampil, bukan di footer terpisah setelahnya. Dulu footer
+  // itu berdiri di atas backdrop polos: background & layer section terakhir
+  // berhenti sebelum credit (tampak "hanya meng-cover fitur pertama" dan
+  // menyisakan space di bawah), padahal di editor credit ada di dalamnya.
+  const lastVisibleSectionId = editable
+    ? undefined
+    : [...sections]
+        .reverse()
+        .find((rawSection) =>
+          liveSectionVisible(prepareSection(rawSection), false),
+        )?.id;
   const pinnedCredits = editable
     ? []
     : sections.flatMap((rawSection) =>
