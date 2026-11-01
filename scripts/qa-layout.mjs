@@ -1342,3 +1342,6 @@ test("QA 1 Nov: credit di tengah walau footer flex; Mobile ikut rasio background
   assert.match(appTsx, /const followAspectAll = async \(on: boolean\) =>/);
   assert.match(appTsx, /Terapkan ke semua canvas/);
 });
+test("QA 1 Nov: cover ikut rasio background tetap penuh layar di Buka Undangan (70/30 & Mobile)", () => {
+  assert.match(appTsx, /\? lockedCover\s*\? "100%"\s*: undefined/);
+});

@@ -19429,9 +19429,14 @@ function WeddingCanvasBody({
                 // QA 1 Nov — mengikuti rasio background TANPA memotong isi:
                 // tinggi minimum dari aspect-ratio, isi yang lebih panjang
                 // tetap memanjangkan canvas (lihat .follow-aspect di CSS).
+                // Layar Buka Undangan tetap memenuhi layar walau canvas cover
+                // mengikuti rasio background lanskap (dulu tinggi ~330 px di
+                // kolom 70/30 / Mobile, sisanya gelap).
                 minHeight:
                   section.backgroundFollowAspect && section.backgroundAspect
-                    ? undefined
+                    ? lockedCover
+                      ? "100%"
+                      : undefined
                     : lockedCover
                       ? `max(${section.minHeight}px, 100%)`
                       : section.minHeight,
