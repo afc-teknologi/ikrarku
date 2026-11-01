@@ -62,7 +62,7 @@ test("Designer: actual CSS docks image to corners, mobile inherits and overrides
   const page = await browser.newPage({
     viewport: { width: 1200, height: 900 },
   });
-  await page.goto(base + "/qa/designer.html");
+  await page.goto(base + "/QA/designer.html");
   const ornament = page.getByTestId("ornament"),
     canvas = page.getByTestId("canvas");
   await ornament.waitFor();
