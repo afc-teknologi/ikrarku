@@ -2419,6 +2419,20 @@ function hydrateSections(raw: CanvasSection[]): CanvasSection[] {
  * Dipakai saat upload background agar tinggi canvas bisa mengikuti rasli asli
  * desain. Mengembalikan undefined bila dimensinya tidak terbaca.
  */
+/** Rasio lebar/tinggi gambar yang sudah tersimpan (untuk background lama
+ *  yang diunggah sebelum rasio direkam). */
+function readUrlAspect(url: string): Promise<number | undefined> {
+  return new Promise((resolve) => {
+    const image = new Image();
+    image.onload = () => {
+      const value = image.naturalWidth / Math.max(1, image.naturalHeight);
+      resolve(Number.isFinite(value) && value > 0 ? value : undefined);
+    };
+    image.onerror = () => resolve(undefined);
+    image.src = url;
+  });
+}
+
 function readMediaAspect(file: File): Promise<number | undefined> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
@@ -11322,6 +11336,42 @@ function Editor({
       ),
     );
   };
+  // QA 1 Nov — Mobile Maroon Style: tiap canvas setinggi Minimum height
+  // (299 px) sementara backgroundnya potret 9:16, sehingga desain terpotong.
+  // Satu klik menyalakan "Tinggi mengikuti rasio background" untuk semua
+  // canvas pada device yang sedang diedit; rasio yang belum terekam diukur.
+  const followAspectAll = async (on: boolean) => {
+    let changed = 0;
+    for (const raw of sections) {
+      const resolved = resolveSection(raw, editDevice);
+      if (!on) {
+        if (resolved.backgroundFollowAspect) {
+          updateSection(raw.id, { backgroundFollowAspect: false });
+          changed += 1;
+        }
+        continue;
+      }
+      if (!resolved.backgroundUrl && !resolved.backgroundAspect) continue;
+      // Rasio diukur dari gambar yang benar-benar dipakai device ini: Mobile
+      // sering punya background sendiri (potret) tetapi mewarisi rasio
+      // Desktop (lanskap) yang terekam saat upload.
+      const aspect =
+        (resolved.backgroundUrl
+          ? await readUrlAspect(assetUrl(resolved.backgroundUrl))
+          : undefined) || resolved.backgroundAspect;
+      if (!aspect) continue;
+      updateSection(raw.id, {
+        backgroundAspect: aspect,
+        backgroundFollowAspect: true,
+      });
+      changed += 1;
+    }
+    flash(
+      on
+        ? `Tinggi ${changed} canvas kini mengikuti rasio background (${editDevice === "mobile" ? "Mobile" : "Desktop"}).`
+        : `Rasio background dimatikan di ${changed} canvas.`,
+    );
+  };
   // Ornamen pojok & layer background adalah KONTEN struktural, bukan setting
   // per device. Dua alasan jalur ini harus terpisah dari updateSection():
   //  1. Editor menulis seluruh array sekaligus. Lewat applyDevicePatch satu
@@ -12974,6 +13024,7 @@ function Editor({
                   uploadBackground={uploadBackground}
                   backgroundGlobalOn={Boolean(sections[0]?.backgroundGlobal)}
                   isPrimaryCanvas={sections[0]?.id === selectedSection.id}
+                  onFollowAspectAll={(on) => void followAspectAll(on)}
                 />
               ) : (
                 <div className="empty-inspector">
@@ -17222,6 +17273,7 @@ function SectionInspector({
   uploadBackground,
   backgroundGlobalOn = false,
   isPrimaryCanvas = true,
+  onFollowAspectAll,
 }: {
   section: CanvasSection;
   tab: InspectorTab;
@@ -17242,6 +17294,9 @@ function SectionInspector({
   // Background global aktif: hanya Canvas 1 yang boleh punya background sendiri.
   backgroundGlobalOn?: boolean;
   isPrimaryCanvas?: boolean;
+  /** QA 1 Nov — terapkan "Tinggi mengikuti rasio background" ke semua canvas
+   *  pada device yang sedang diedit. */
+  onFollowAspectAll?: (on: boolean) => void;
 }) {
   const backgroundVideoInput = useRef<HTMLInputElement>(null);
   if (tab === "content")
@@ -17479,7 +17534,14 @@ function SectionInspector({
                 antara editor dan preview — `background-size:cover` lalu memangkas
                 sisanya. Opsi ini membuat tinggi canvas mengikuti rasio asli
                 gambar/video, sehingga seluruh desain selalu terlihat utuh. */}
-            {section.backgroundAspect && (
+            {/* QA 1 Nov — dulu hanya tampil bila rasio sudah terekam saat
+                upload, sehingga canvas hasil duplikat / background lama
+                (mayoritas canvas Maroon Style di Mobile) tidak punya opsi
+                ini dan terpotong. Rasio kini diukur saat opsi dinyalakan. */}
+            {(section.backgroundAspect ||
+              section.backgroundUrl ||
+              section.backgroundVideoUrl) && (
+              <>
               <div className="setting-row compact">
                 <div>
                   <ImageIcon size={16} />
@@ -17492,16 +17554,37 @@ function SectionInspector({
                   </span>
                 </div>
                 <button
-                  className={`toggle ${section.backgroundFollowAspect ? "on" : ""}`}
-                  onClick={() =>
-                    update({
-                      backgroundFollowAspect: !section.backgroundFollowAspect,
-                    })
-                  }
+                  className={`toggle ${section.backgroundFollowAspect && section.backgroundAspect ? "on" : ""}`}
+                  onClick={async () => {
+                    if (section.backgroundFollowAspect && section.backgroundAspect) {
+                      update({ backgroundFollowAspect: false });
+                      return;
+                    }
+                    const aspect =
+                      (section.backgroundUrl
+                        ? await readUrlAspect(assetUrl(section.backgroundUrl))
+                        : undefined) || section.backgroundAspect;
+                    if (aspect)
+                      update({
+                        backgroundAspect: aspect,
+                        backgroundFollowAspect: true,
+                      });
+                  }}
                 >
                   <i />
                 </button>
               </div>
+              {onFollowAspectAll && (
+                <div className="follow-aspect-all">
+                  <button type="button" onClick={() => onFollowAspectAll(true)}>
+                    Terapkan ke semua canvas
+                  </button>
+                  <button type="button" onClick={() => onFollowAspectAll(false)}>
+                    Matikan di semua canvas
+                  </button>
+                </div>
+              )}
+              </>
             )}
           </>
         )}
@@ -19295,7 +19378,7 @@ function WeddingCanvasBody({
         return (
           <section
             key={section.id}
-            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}`}
+            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect ? " follow-aspect" : ""}`}
             onDragOver={(event) => {
               if (
                 editable &&
@@ -19343,9 +19426,12 @@ function WeddingCanvasBody({
                   section.backgroundFollowAspect && section.backgroundAspect
                     ? String(section.backgroundAspect)
                     : undefined,
+                // QA 1 Nov — mengikuti rasio background TANPA memotong isi:
+                // tinggi minimum dari aspect-ratio, isi yang lebih panjang
+                // tetap memanjangkan canvas (lihat .follow-aspect di CSS).
                 minHeight:
                   section.backgroundFollowAspect && section.backgroundAspect
-                    ? 0
+                    ? undefined
                     : lockedCover
                       ? `max(${section.minHeight}px, 100%)`
                       : section.minHeight,

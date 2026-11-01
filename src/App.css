@@ -2377,3 +2377,14 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
    kini section cover memanjang mengisi sisa layar, layer & background ikut. */
 .wedding-site.cover-as-canvas{display:flex;flex-direction:column}
 .wedding-site.cover-as-canvas>.canvas-section{flex:1 0 auto}
+/* Footer credit bisa menjadi flex baris (aturan section/stack lain); slot
+   harus tetap selebar section supaya credit rata tengah seperti di editor. */
+.site-credit-footer{flex-direction:column}
+.site-credit-slot{align-self:stretch;width:100%;box-sizing:border-box}
+/* QA 1 Nov — canvas yang mengikuti rasio background: overflow:clip (bukan
+   hidden) supaya tinggi minimum dari aspect-ratio tetap boleh memanjang bila
+   isinya lebih panjang — isi tidak lagi terpotong. */
+.canvas-section.follow-aspect{overflow:clip}
+.follow-aspect-all{display:flex;gap:6px;margin:-6px 0 12px}
+.follow-aspect-all button{flex:1;border:1px solid var(--line);background:#fff;border-radius:7px;padding:7px 8px;font-size:8px;color:#315e51;cursor:pointer}
+.follow-aspect-all button:hover{background:#f2f7f4}
