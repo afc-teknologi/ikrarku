@@ -1209,6 +1209,8 @@ test("TC-250: layar cover merender ornamen & layer canvasnya", () => {
   // layer bergeser dari posisi editor); layar diisi background cover di
   // pembungkus dan canvas dipusatkan.
   assert.match(appTsx, /const coverScreenSource =\s*lockedCover && coverEntry && !fixedBackdrop/);
+  // Revisi preview = editor — canvas cover diperkecil utuh (contain), tidak terpotong.
+  assert.match(appTsx, /const scale = Math\.min\(1, viewH \/ natural\);/);
   assert.match(appCss, /\.wedding-site\.cover-as-canvas>\.canvas-section\{flex:none;margin-block:auto\}/);
 });
 test("TC-252: ornamen tengah dipusatkan dengan left:50%", () => {
@@ -1406,4 +1408,14 @@ test("QA 13 TC-292/278/302: pindah fitur antar canvas, penanda background, ikon 
 test("QA 13 TC-279: draft yang dibuang tersimpan di Revisions", () => {
   assert.match(serverJs, /const archived = archiveTemplateAutosave\(req\.params\.id, req\.user\.id\);/);
   assert.match(serverJs, /const archived = archiveSiteAutosave\(req\.user\.id, req\.user\.id\);/);
+});
+
+test("Preview = editor: gagang editor tidak menambah tinggi fitur, teks kosong tidak menambah tinggi", () => {
+  assert.match(appCss, /\.feature-block>\.box-resize-handle,\.feature-block>\.free-resize-handle,\.feature-block>\.free-move-handle,\.feature-block>\.feature-handle\{position:absolute;display:block\}/);
+  assert.match(appCss, /\.feature-block:not\(\.selected-feature\) :is\(\.editable-body,\.editable-title\):empty\{display:none\}/);
+});
+test("Preview = editor: layar Buka Undangan menampilkan canvas cover utuh dengan background-nya sendiri", () => {
+  assert.match(appTsx, /const section = prepareSection\(rawSection\);/);
+  assert.match(appTsx, /section\.style\.scale = String\(scale\);/);
+  assert.match(appCss, /\.wedding-site\.cover-fitted \.fixed-sound-disc\{scale:var\(--cover-fit,1\)/);
 });
