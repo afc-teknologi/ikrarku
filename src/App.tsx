@@ -19592,69 +19592,6 @@ function WeddingCanvasBody({
     };
   }, [fixedBackdrop, opened, editable, scrollViewportHeight, previewZoom]);
 
-  // QA 13 (revisi preview) — layar Buka Undangan = canvas cover UTUH seperti
-  // di editor. Canvas yang lebih tinggi dari layar dulu terpotong di bawah
-  // (tombol & bunga hilang, dock musik menimpa tombol) karena canvas
-  // diskalakan memenuhi lebar lalu dipotong setinggi layar. Kini canvas
-  // diperkecil seragam (contain) sampai seluruhnya muat; sisa layar diisi
-  // background canvas cover. Rasio, posisi layer & ornamen tidak berubah.
-  const coverLocked = !editable && Boolean(coverEntry) && !opened;
-  useEffect(() => {
-    if (!coverLocked) return;
-    const root = revealRootRef.current;
-    const section = root?.querySelector<HTMLElement>(":scope > .canvas-section");
-    if (!root || !section) return;
-    let frame = 0;
-    const fit = () => {
-      frame = 0;
-      const viewH = root.clientHeight;
-      const natural = section.offsetHeight;
-      if (!viewH || !natural) return;
-      const scale = Math.min(1, viewH / natural);
-      if (scale >= 0.999) {
-        section.style.removeProperty("scale");
-        section.style.removeProperty("transform-origin");
-        section.style.removeProperty("margin-top");
-        section.style.removeProperty("margin-bottom");
-        section.classList.remove("cover-fit");
-        root.classList.add("cover-fitted");
-        root.style.removeProperty("--cover-fit");
-        return;
-      }
-      const top = Math.max(0, (viewH - natural * scale) / 2);
-      section.classList.add("cover-fit");
-      root.classList.add("cover-fitted");
-      // Dock musik ikut diperkecil seukuran canvas supaya proporsinya sama
-      // dengan editor (tidak menutupi tombol Buka Undangan).
-      root.style.setProperty("--cover-fit", String(scale));
-      // `scale` (bukan transform) supaya animasi keluar cover yang memakai
-      // transform tetap berjalan tanpa canvas melompat ke ukuran penuh.
-      section.style.scale = String(scale);
-      section.style.transformOrigin = "50% 0";
-      section.style.marginTop = `${top}px`;
-      section.style.marginBottom = `${viewH - natural - top}px`;
-    };
-    const schedule = () => {
-      if (!frame) frame = requestAnimationFrame(fit);
-    };
-    fit();
-    const observer = new ResizeObserver(schedule);
-    observer.observe(root);
-    observer.observe(section);
-    window.addEventListener("resize", schedule);
-    return () => {
-      if (frame) cancelAnimationFrame(frame);
-      observer.disconnect();
-      window.removeEventListener("resize", schedule);
-      root.classList.remove("cover-fitted");
-      root.style.removeProperty("--cover-fit");
-      section.classList.remove("cover-fit");
-      section.style.removeProperty("scale");
-      section.style.removeProperty("margin-top");
-      section.style.removeProperty("margin-bottom");
-    };
-  }, [coverLocked, device, previewZoom, sections]);
-
   // QA 13 TC-299 — ornamen bergerak mengikuti gulir: tiap canvas yang punya
   // ornamen bergerak diberi --deco-scroll (-1 saat canvas di bawah layar,
   // 0 saat di tengah, 1 saat sudah lewat ke atas). CSS memakai nilainya pada
@@ -19821,14 +19758,11 @@ function WeddingCanvasBody({
           coverScreenSource.backgroundGradientAngle,
           coverScreenSource.backgroundColor,
         ),
-        ...(coverScreenSource.backgroundUrl
-          ? {
-              backgroundImage: `url(${assetUrl(coverScreenSource.backgroundUrl)})`,
-              backgroundSize: coverScreenSource.backgroundSize || "cover",
-              backgroundPosition: coverScreenSource.backgroundPosition || "center",
-              backgroundRepeat: "no-repeat",
-            }
-          : {}),
+        // Revisi 2 Nov — hanya WARNA background cover (tanpa gambar, tanpa
+        // blur) untuk sisa layar bila canvas cover lebih pendek dari layar.
+        // Canvas cover sendiri tampil selebar layar dengan tinggi aslinya —
+        // sama dengan canvas lain dan editor: tidak dipotong, tidak
+        // diperkecil; bila lebih tinggi dari layar, layar cover bisa digulir.
       }
     : {};
   return (
@@ -19897,8 +19831,7 @@ function WeddingCanvasBody({
         if (lockedCover && rawSection.id !== coverEntry?.section.id)
           return null;
         // Revisi preview = editor — canvas cover tetap melukis background-nya
-        // sendiri (persis editor). Background yang sama di pembungkus hanya
-        // menjadi bingkai blur di sisa layar (lihat .cover-fitted).
+        // sendiri (persis editor).
         const section = prepareSection(rawSection);
         // QA TC-112: nilai section mengikuti device aktif (Desktop / Mobile).
         // QA TC-146: bila mode background global aktif, seluruh canvas memakai
