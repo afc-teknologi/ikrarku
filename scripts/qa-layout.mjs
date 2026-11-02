@@ -1209,8 +1209,9 @@ test("TC-250: layar cover merender ornamen & layer canvasnya", () => {
   // layer bergeser dari posisi editor); layar diisi background cover di
   // pembungkus dan canvas dipusatkan.
   assert.match(appTsx, /const coverScreenSource =\s*lockedCover && coverEntry && !fixedBackdrop/);
-  // Revisi preview = editor — canvas cover diperkecil utuh (contain), tidak terpotong.
-  assert.match(appTsx, /const scale = Math\.min\(1, viewH \/ natural\);/);
+  // Revisi 2 Nov — tanpa bingkai blur / skala: cover selebar layar, tinggi asli, bisa digulir.
+  assert.doesNotMatch(appTsx, /const scale = Math\.min\(1, viewH \/ natural\);/);
+  assert.doesNotMatch(appCss, /cover-fitted/);
   assert.match(appCss, /\.wedding-site\.cover-as-canvas>\.canvas-section\{flex:none;margin-block:auto\}/);
 });
 test("TC-252: ornamen tengah dipusatkan dengan left:50%", () => {
@@ -1414,8 +1415,7 @@ test("Preview = editor: gagang editor tidak menambah tinggi fitur, teks kosong t
   assert.match(appCss, /\.feature-block>\.box-resize-handle,\.feature-block>\.free-resize-handle,\.feature-block>\.free-move-handle,\.feature-block>\.feature-handle\{position:absolute;display:block\}/);
   assert.match(appCss, /\.feature-block:not\(\.selected-feature\) :is\(\.editable-body,\.editable-title\):empty\{display:none\}/);
 });
-test("Preview = editor: layar Buka Undangan menampilkan canvas cover utuh dengan background-nya sendiri", () => {
+test("Preview = editor: layar Buka Undangan = canvas cover tinggi asli, tanpa blur, bisa digulir", () => {
   assert.match(appTsx, /const section = prepareSection\(rawSection\);/);
-  assert.match(appTsx, /section\.style\.scale = String\(scale\);/);
-  assert.match(appCss, /\.wedding-site\.cover-fitted \.fixed-sound-disc\{scale:var\(--cover-fit,1\)/);
+  assert.match(appCss, /\.wedding-site\.cover-as-canvas\{overflow-y:auto\}\s*$/);
 });
