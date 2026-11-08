@@ -2525,3 +2525,10 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
   .filter-tabs::-webkit-scrollbar{display:none}
   .filter-tabs button{flex:none}
 }
+/* Revisi 8 Nov — Admin Orders: chip status ringkas, info per baris, tombol aksi order belum bayar */
+.orders-table td>span.status{display:inline-block;width:max-content;padding:3px 9px;border-radius:999px;font-size:9px;font-weight:700;background:#eef2f0;color:#4f625b}
+.orders-table td>span.status.paid{background:#e4f3ec;color:#1b6a4f}.orders-table td>span.status.pending{background:#fdf2e0;color:#8a6220}.orders-table td>span.status.expired{background:#f6e7e5;color:#9b3d33}
+.orders-table td>small{display:block}
+.orders-table td>button{display:inline-flex;align-items:center;margin:8px 6px 0 0;padding:6px 10px;border-radius:8px;border:1px solid #cfe0d8;background:#fff;color:#125946;font-size:9px;font-weight:700;cursor:pointer}
+.orders-table td>button:hover:not(:disabled){background:#edf6f1}.orders-table td>button:disabled{opacity:.55;cursor:default}
+.orders-table td>button.order-expire-btn{border-color:#ecc9c4;color:#a1433a}

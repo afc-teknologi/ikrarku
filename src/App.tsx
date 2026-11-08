@@ -24791,6 +24791,7 @@ function OrdersAnalyticsPage({
                             {retrying === row.id ? "Mengecek…" : "Cek ke Mayar"}
                           </button>
                           <button
+                            className="order-expire-btn"
                             disabled={retrying !== null}
                             onClick={() => {
                               if (
