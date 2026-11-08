@@ -2486,10 +2486,42 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
    Canvas yang lebih tinggi dari layar digulir di dalam layar cover. */
 .wedding-site.cover-as-canvas{overflow-y:auto}
 /* MoM 2 Nov — template masih memakai nama contoh bawaan. */
-.status-chip.sample-content-warning{background:#fff4e5;color:#9a5b00;border:1px solid #f1d3a2;cursor:help}
 /* QC 8 Nov — order hangus setelah 1x24 jam tanpa pembayaran. */
 .status.expired{background:#f6e7e5;color:#9b3d33}
 .order-pay-note.expired{background:#fbefed;border-color:#efc9c3}
 .order-pay-note .order-deadline{color:#6b4a12}
 .payment-countdown{color:#9a6a12;font-weight:600}
 .payment-countdown.late{color:#9b3d33}
+/* Revisi 8 Nov — header kartu Templates & Approval: info template selebar
+   kartu, chip status di baris sendiri (wrap), peringatan nama contoh sebagai
+   catatan. Responsif dari 4 kolom sampai 1 kolom di ponsel. */
+.template-status-meta{flex-direction:column;align-items:stretch;gap:7px}
+.template-status-meta>div:first-child{min-width:0;width:100%}
+.template-status-meta strong{overflow-wrap:anywhere}
+.template-status-badges{display:flex;flex-wrap:wrap;gap:5px;min-width:0}
+.template-status-badges .status-chip{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+.template-sample-warning{display:flex;align-items:flex-start;gap:6px;margin:0 12px 9px;padding:7px 9px;border:1px solid #f1d3a2;border-radius:8px;background:#fff6e8;color:#7a4b00;font-size:8px;line-height:1.5}
+.template-sample-warning svg{flex:none;margin-top:1px;color:#c27a00}
+.template-sample-warning b{font-weight:700;overflow-wrap:anywhere}
+.template-status-actions button{white-space:nowrap}
+@media(max-width:640px){
+  .template-status-meta strong{font-size:13px}
+  .template-status-meta span,.template-status-creator,.template-status-meta .template-price-edit{font-size:10px}
+  .status-chip{font-size:8px}
+  .template-sample-warning,.template-status-hint{font-size:10px}
+  .template-status-actions{gap:7px}
+  .template-status-actions button{font-size:10px;padding:8px 10px;min-height:36px;flex:1 1 calc(50% - 7px);justify-content:center}
+  .template-status-thumb{height:160px}
+}
+/* Revisi 8 Nov — workspace responsif: sidebar jadi laci di layar ≤ 900 px. */
+.sidebar-backdrop{display:none}
+@media(max-width:900px){
+  .main-content,.main-content.collapsed{margin-left:0}
+  .sidebar{box-shadow:0 18px 50px rgba(9,31,24,.22)}
+  .sidebar-backdrop{display:block;position:fixed;inset:0;z-index:49;background:rgba(9,31,24,.35)}
+}
+@media(max-width:900px){
+  .filter-tabs{max-width:100%;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .filter-tabs::-webkit-scrollbar{display:none}
+  .filter-tabs button{flex:none}
+}

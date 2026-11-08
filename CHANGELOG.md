@@ -17,6 +17,11 @@ Persiapan beta testing ke user asli (W2 November).
 - Password dari email akun otomatis bisa dipakai terus. Dialog login pertama kini opsional ("Tetap pakai password dari email"); email akun menjelaskan password tetap berlaku.
 - Order yang tidak dibayar dalam 1x24 jam **hangus otomatis** (seperti marketplace). My Order menampilkan batas bayar + sisa waktu; order hangus berlabel "Hangus" dengan tombol Pesan ulang. Order Mayar dicek ke Mayar sebelum dihanguskan; pembayaran yang tetap masuk setelah hangus tetap diproses lunas. Atur lewat `ORDER_PAYMENT_HOURS` (bawaan 24).
 
+**Revisi 8 November (layout & konfigurasi)**
+- Kartu Templates & Approval: info template selebar kartu, chip status di baris sendiri (wrap), peringatan nama contoh jadi kotak catatan; tombol aksi dua kolom di ponsel.
+- Workspace responsif: di layar ≤ 900 px sidebar menjadi laci (tertutup bawaan, ada latar gelap, tertutup setelah memilih menu); filter status bisa digeser ke samping.
+- Dokumentasi: langkah ganti akun Google SMTP & API Mayar (PANDUAN_DEPLOY_PRODUCTION bagian I).
+
 **Pengujian**: qa:integration 40/40, qa:layout 137/137, qa:db 38/38, qa-browser 2/2, TypeScript + build lolos, oxlint 0 error.
 
 ## 0.16.0
