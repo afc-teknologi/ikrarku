@@ -1290,7 +1290,23 @@ dev.ikrarku.id dulu, lalu production dengan transaksi nominal kecil
 - [ ] Email yang masuk memakai pengirim resmi (lihat
       [PANDUAN_DEPLOY_PRODUCTION.md bagian G](PANDUAN_DEPLOY_PRODUCTION.md)).
 
-## V.7 — Belum dikerjakan dari MoM (butuh keputusan / bukan kode)
+## V.7 — Setelah ganti akun Google SMTP / API Mayar
+
+Langkah lengkap: [PANDUAN_DEPLOY_PRODUCTION.md bagian I](PANDUAN_DEPLOY_PRODUCTION.md).
+
+- [ ] `smtp-check` mengirim email uji ke inbox dengan pengirim baru
+- [ ] `mayar-check` → key valid, Read & Write, webhook `200`
+- [ ] Transaksi uji nominal kecil → Payment Received + email receipt masuk
+
+## V.8 — Kartu Templates & Approval di layar kecil
+
+- [ ] Kartu template: judul & harga tidak terjepit; chip status turun baris;
+      catatan "Masih memakai nama contoh …" tampil sebagai kotak oranye.
+- [ ] Di ponsel (≤ 900 px) sidebar tertutup bawaan, dibuka lewat tombol
+      kiri atas, tertutup lagi setelah memilih menu; tombol aksi kartu dua
+      kolom; filter status bisa digeser ke samping.
+
+## V.9 — Belum dikerjakan dari MoM (butuh keputusan / bukan kode)
 
 - IKR-06 form permintaan konten & upload foto/CSV — menunggu keputusan
   Google Form vs upload langsung.

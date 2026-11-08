@@ -205,6 +205,111 @@ Order yang belum dibayar hangus otomatis setelah `ORDER_PAYMENT_HOURS` jam
 Server mengecek setiap 5 menit (`ORDER_EXPIRY_CHECK_MS`). Tidak perlu
 mengubah `.env` bila 24 jam sudah sesuai; bila diubah, samakan kedua nilai.
 
+## I. Ganti akun Google (SMTP) dan API Mayar
+
+Dipakai saat akun Google pengirim email diganti atau Mayar memberi API key /
+akun baru. Kerjakan di **staging dulu**, baru production. Jangan menempel
+password atau API key ke chat / dokumen bersama.
+
+### I.1 Siapkan App Password Google (akun pengirim baru)
+
+1. Login ke akun Google baru → **myaccount.google.com → Security**.
+2. Aktifkan **2-Step Verification** (wajib untuk App Password).
+3. Buka **myaccount.google.com/apppasswords** → buat app "ikrarku" → salin
+   16 karakter yang muncul **tanpa spasi**. Password akun Google biasa
+   **tidak** bisa dipakai untuk SMTP.
+4. Bila pengirim memakai alamat lain dari akun ini (mis. `hello@ikrarku.id`),
+   daftarkan dulu di Gmail → Settings → Accounts → **Send mail as** (bagian G).
+
+### I.2 Siapkan data Mayar baru
+
+1. Dashboard Mayar → **Integrasi → API Key** → salin API key (JWT utuh,
+   diawali `eyJ`), pastikan izinnya **Read & Write**.
+2. Bila **akun Mayar ikut berganti**, buat token webhook baru:
+   `openssl rand -hex 24` (simpan, dipakai di I.3 dan I.5).
+
+### I.3 Ubah `.env` di VPS
+
+```bash
+ssh root@srv1890813
+cd /opt/ikrarku                       # staging; production: /opt/ikrarku-production
+cp .env.staging .env.staging.bak-$(date +%Y%m%d)   # production: .env.production
+nano .env.staging                     # production: nano .env.production
+```
+
+Ganti hanya baris berikut (nilai tanpa tanda kutip kecuali `SMTP_FROM`):
+
+```bash
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=465
+SMTP_SECURE=true
+SMTP_USER=akun.baru@domain.com
+SMTP_PASS=16karakterapppassword
+SMTP_FROM="ikrarku <akun.baru@domain.com>"   # atau alias Send mail as
+SMTP_REPLY_TO=akun.baru@domain.com            # opsional
+
+MAYAR_API_KEY=eyJ...                           # API key baru, utuh satu baris
+MAYAR_WEBHOOK_TOKEN=...                        # hanya bila akun Mayar berganti
+# MAYAR_API_BASE tetap https://api.mayar.id/hl/v1 kecuali Mayar
+# menyatakan akun Anda wajib V2 (lihat I.6)
+```
+
+Simpan: `Ctrl+O`, `Enter`, `Ctrl+X`. Cek tidak ada spasi/CR tersisa:
+`grep -nE '^(SMTP|MAYAR)_' .env.staging | cut -c1-40`.
+
+### I.4 Terapkan (container dibuat ulang agar membaca `.env` baru)
+
+```bash
+# staging
+docker compose -f docker-compose.staging.yml up -d --force-recreate
+
+# production
+cd /opt/ikrarku-production && bash deploy/scripts/deploy-production.sh
+```
+
+Restart biasa (`restart`) **tidak** membaca ulang `.env`.
+
+### I.5 Uji
+
+```bash
+# staging (production: ganti file compose ke docker-compose.production.yml)
+C="docker compose -f docker-compose.staging.yml exec ikrarku"
+$C node scripts/smtp-check.mjs email-anda@gmail.com
+$C node scripts/mayar-check.mjs --webhook https://dev.ikrarku.id   # production: https://ikrarku.id
+```
+
+Hasil yang benar:
+
+- `smtp-check`: login berhasil dan email uji masuk inbox dengan nama
+  pengirim yang benar. `535 Username and Password not accepted` = App
+  Password salah / 2-Step Verification belum aktif.
+- `mayar-check`: key valid & **Read & Write**, bagian webhook `200`.
+  `401` = API key salah/terpotong.
+
+Bila akun Mayar berganti, daftarkan ulang URL webhook di dashboard Mayar
+yang **baru** (Integrasi → Webhook):
+`https://ikrarku.id/api/webhooks/mayar?token=<MAYAR_WEBHOOK_TOKEN baru>`
+(staging: `https://dev.ikrarku.id/...`). Satu akun Mayar hanya punya satu URL
+webhook — arahkan ke production; staging tetap jalan lewat cek status aktif.
+
+Terakhir, transaksi uji nominal kecil sampai halaman **Payment Received**
+dan email receipt masuk.
+
+### I.6 Catatan Mayar V1 → V2
+
+Server masih memakai endpoint `/hl/v1` (kontrak `invoice/create` V2 belum
+tersedia untuk kita). Bila perubahan dari Mayar berarti **V1 dimatikan**
+(`mayar-check` bagian V1 menjawab `404`/`410`), pembayaran akan gagal di
+tombol Bayar: kirimkan dokumentasi `invoice/create` V2 dari Mayar ke tim
+developer untuk migrasi kode — jangan sekadar mengganti `MAYAR_API_BASE`.
+
+### I.7 Rollback cepat
+
+```bash
+cp .env.staging.bak-YYYYMMDD .env.staging
+docker compose -f docker-compose.staging.yml up -d --force-recreate
+```
+
 ## F. Rollback
 
 ```bash

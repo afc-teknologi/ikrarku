@@ -134,6 +134,7 @@ import {
   PackageCheck,
   History as HistoryIcon,
   PenLine,
+  TriangleAlert,
 } from "lucide-react";
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 import "./App.css";
@@ -3018,7 +3019,12 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<View>(initialSession.view);
   const [role, setRole] = useState<Role>(initialSession.role);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Revisi 8 Nov — di layar ≤ 900 px sidebar menjadi laci (tertutup bawaan,
+  // menimpa konten, tertutup lagi setelah memilih menu). Dulu sidebar 258 px
+  // selalu terbuka sehingga konten di ponsel tinggal ±130 px.
+  const isCompactScreen = () =>
+    typeof window !== "undefined" && window.innerWidth <= 900;
+  const [sidebarOpen, setSidebarOpen] = useState(() => !isCompactScreen());
   const [templateCatalog, setTemplateCatalog] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<Template>(
     templates[0],
@@ -3346,6 +3352,10 @@ function App() {
       localStorage.setItem("ikrarku-notification-muted", String(stored));
     }
   }, [currentAccountId, currentAccount?.settings]);
+  useEffect(() => {
+    if (isCompactScreen()) setSidebarOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view]);
   // MoM 2 Nov IKR-01 — halaman workspace (dashboard, order, editor, admin,
   // dst.) hanya untuk pengguna yang sudah login. Dulu /workspace dari browser
   // tanpa sesi menampilkan kerangka Customer Workspace (tanpa data — semua API
@@ -5664,6 +5674,13 @@ function App() {
 
   return (
     <div className="app-shell">
+      {sidebarOpen && (
+        <div
+          className="sidebar-backdrop"
+          aria-hidden
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
       <Sidebar
         role={role}
         view={view}
@@ -31093,32 +31110,40 @@ function TemplateApprovalManager({
                   </span>
                 )}
               </div>
-              <em
-                className={`status-chip ${statusLabel(template.status).toLowerCase()}`}
-              >
-                {statusLabel(template.status)}
-              </em>
-              {/* Revisi 27 Okt — revisi template live dari Web Designer
-                  disimpan sebagai draft dan baru tampil di landing setelah
-                  disetujui. Dulu kartu tetap hanya "Published", sehingga
-                  perubahan (mis. ornamen) tampak "tidak tersimpan". */}
-              {template.pendingReview && template.status !== "Pending" && (
-                <em className="status-chip revision-pending">
-                  Revisi menunggu approval
-                </em>
-              )}
-              {/* MoM 2 Nov IKR-02/04 — customer melihat isi template apa
-                  adanya setelah membeli; nama contoh bawaan editor (mis.
-                  "Chyntia & Rian") di template bertema lain terlihat salah. */}
-              {sampleNamesIn(template).length > 0 && (
+              {/* Revisi 8 Nov — chip status dikumpulkan dalam satu baris yang
+                  boleh turun (wrap) di bawah info template. Dulu chip berjejer
+                  di samping judul sehingga judul & harga terjepit jadi satu
+                  kata per baris dan chip terpotong di tepi kartu. */}
+              <div className="template-status-badges">
                 <em
-                  className="status-chip sample-content-warning"
-                  title={`Masih memakai nama contoh bawaan: ${sampleNamesIn(template).join(", ")}. Ganti agar sesuai tema sebelum template dijual.`}
+                  className={`status-chip ${statusLabel(template.status).toLowerCase()}`}
                 >
-                  Nama contoh: {sampleNamesIn(template).join(", ")}
+                  {statusLabel(template.status)}
                 </em>
-              )}
+                {/* Revisi 27 Okt — revisi template live dari Web Designer
+                    disimpan sebagai draft dan baru tampil di landing setelah
+                    disetujui. */}
+                {template.pendingReview && template.status !== "Pending" && (
+                  <em className="status-chip revision-pending">
+                    Revisi menunggu approval
+                  </em>
+                )}
+              </div>
             </div>
+            {/* MoM 2 Nov IKR-02/04 — customer melihat isi template apa adanya
+                setelah membeli; nama contoh bawaan editor (mis. "Chyntia &
+                Rian") di template bertema lain terlihat salah. Ditampilkan
+                sebagai catatan yang bisa turun baris, bukan chip panjang. */}
+            {sampleNamesIn(template).length > 0 && (
+              <p className="template-sample-warning" role="note">
+                <TriangleAlert size={13} aria-hidden />
+                <span>
+                  Masih memakai nama contoh{" "}
+                  <b>{sampleNamesIn(template).join(", ")}</b>. Ganti di cover
+                  agar sesuai tema sebelum template dijual.
+                </span>
+              </p>
+            )}
             <div className="template-status-actions">
               <button onClick={() => setPreview(template)}>
                 <Eye size={14} /> Preview

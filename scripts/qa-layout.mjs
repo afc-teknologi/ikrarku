@@ -1454,3 +1454,10 @@ test("MoM 2 Nov IKR-05/08/09: email staff, email In Progress, reply-to bisnis", 
   assert.match(serverJs, /\["In Progress", "Waiting Customer", "Pending"\]\.includes\(nextStatus\)/);
   assert.match(serverJs, /replyTo: process\.env\.SMTP_REPLY_TO/);
 });
+test("Revisi 8 Nov: kartu Templates & Approval rapi & responsif, sidebar laci di ponsel", () => {
+  assert.match(appTsx, /<div className="template-status-badges">/);
+  assert.match(appTsx, /<p className="template-sample-warning" role="note">/);
+  assert.match(appCss, /\.template-status-meta\{flex-direction:column;align-items:stretch;gap:7px\}/);
+  assert.match(appTsx, /useState\(\(\) => !isCompactScreen\(\)\)/);
+  assert.match(appCss, /\.main-content,\.main-content\.collapsed\{margin-left:0\}/);
+});
