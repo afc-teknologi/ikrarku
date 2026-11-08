@@ -183,6 +183,7 @@ export const api = {
     }),
   me: () => request<{ user: ApiUser }>("/me"),
   // TC-245 — password baru wajib pada login pertama akun otomatis.
+  keepPassword: () => request("/auth/keep-password", { method: "POST" }),
   firstPassword: (password: string, passwordConfirm: string) =>
     request<{ ok: boolean }>("/auth/first-password", {
       method: "POST",
@@ -365,6 +366,8 @@ export const api = {
     }>(`/orders/${id}/customer-account`, { method: "POST" }),
   retryFulfillment: (id: string) =>
     request(`/orders/${id}/retry-fulfillment`, { method: "POST" }),
+  expireOrder: (id: string) =>
+    request(`/orders/${encodeURIComponent(id)}/expire`, { method: "POST" }),
   orderAnalytics: () => request<any>("/orders/analytics"),
   exportOrdersCsv: () => download("/orders/export.csv", "ikrarku-orders.csv"),
   exportOrdersExcel: () => download("/orders/export.xls", "ikrarku-orders.xls"),

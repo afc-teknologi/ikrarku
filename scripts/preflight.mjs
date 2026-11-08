@@ -27,6 +27,11 @@ if (process.env.NODE_ENV === 'production') {
     process.exit(1)
   }
   if (!process.env.SMTP_HOST) console.warn('SMTP_HOST is empty. Verification and receipt emails will remain in email_outbox.')
+  // MoM 2 Nov IKR-09 — pengirim email harus identitas bisnis, bukan alamat
+  // developer / domain lokal. Hanya peringatan agar deploy tidak terhenti.
+  const from = String(process.env.SMTP_FROM || '')
+  if (!from || /\.local\b|localhost|example\.|yourdomain|developer@/i.test(from))
+    console.warn(`PERINGATAN: SMTP_FROM "${from || '(kosong)'}" bukan identitas bisnis. Ganti ke alamat resmi ikrarku (lihat PANDUAN_DEPLOY_PRODUCTION.md bagian Email pengirim).`)
 }
 
 console.log('Preflight passed.')

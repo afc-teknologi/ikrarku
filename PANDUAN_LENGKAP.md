@@ -8,6 +8,7 @@ Empat pekerjaan dalam satu dokumen, ditulis untuk diikuti berurutan:
 | **[II. Slug Jurnal](#bagian-ii--slug-jurnal-agar-artikel-terbaca-mesin-pencari)** | agar artikel punya URL sendiri dan terbaca mesin pencari | login CMS sebagai Administrator |
 | **[III. Pembayaran Mayar](#bagian-iii--pembayaran-mayar)** | menyambungkan payment gateway | dashboard Mayar (atau bantuan pemegang akun) |
 | **[IV. Retest QA di editor](#bagian-iv--retest-qa-di-editor)** | memastikan perbaikan QA terakhir benar-benar jalan | login sebagai Web Designer |
+| **[V. Beta testing W2 November](#bagian-v--beta-testing-w2-november)** | roleplay alur order setelah perbaikan MoM 2 Nov & QC 8 Nov | akun Customer, CS, Web Designer, Administrator |
 
 Bagian I, II, dan IV bisa dikerjakan sendiri hari ini. Bagian III sebagian
 bergantung pihak lain.
@@ -1231,6 +1232,71 @@ curl -s -o /dev/null -w '%{content_type}\n' https://dev.ikrarku.id/robots.txt
     bash menjawab `syntax error near unexpected token`, karena `<` dibaca
     sebagai redirect berkas. Ganti dulu dengan nilai sebenarnya, tanpa
     tanda `< >`.
+
+# BAGIAN V — Beta testing W2 November
+
+Perubahan 8 November (MoM 2 Nov + QC) dan cara mengujinya. Jalankan di
+dev.ikrarku.id dulu, lalu production dengan transaksi nominal kecil
+(mis. Rp10.000, sesuai MoM).
+
+## V.1 — Akses tanpa login (IKR-01)
+
+- [ ] Buka `https://dev.ikrarku.id/workspace` di jendela Incognito → harus
+      langsung ke halaman **Masuk ke ikrarku**.
+- [ ] Login → kembali ke workspace sesuai role. Sign out → buka `/workspace`
+      lagi → kembali ke halaman login.
+
+## V.2 — Customer: order, hangus, bayar
+
+- [ ] Pesan template tanpa membayar → **My Order** menampilkan
+      "Bayar sebelum … (sisa … jam … menit)".
+- [ ] Order yang lewat 24 jam berlabel **Hangus (lewat 1x24 jam)** dengan
+      tombol **Pesan ulang**; tombol bayar ditolak dengan pesan order hangus.
+- [ ] Bayar order baru → email "Akun ikrarku Anda sudah siap" berisi password.
+- [ ] Login dengan password dari email → dialog **Ganti password? (opsional)**
+      → klik **Tetap pakai password dari email** → logout → login lagi dengan
+      password yang sama → berhasil, dialog tidak muncul lagi.
+
+## V.3 — Customer: template yang dibeli (IKR-02/03)
+
+- [ ] **Templates & Canvas** hanya punya **satu** card untuk satu pembelian,
+      berisi template yang dibeli (bukan template lain / duplikat).
+- [ ] Bila Web Designer belum menyiapkan canvas, Wedding Dashboard menampilkan
+      "Design Anda sedang disiapkan" + nama template & no. order.
+- [ ] Administrator: Templates & Approval → template yang masih memuat
+      nama contoh berlabel oranye **Nama contoh: …**. Ganti nama di cover
+      sebelum dijual (IKR-04, tim desain).
+
+## V.4 — CS & Web Designer (IKR-05/08)
+
+- [ ] Setelah order dibayar, CS dan Web Designer yang ditugaskan menerima
+      email **Order baru untuk Anda: IKR-…**.
+- [ ] CS menulis catatan internal di tiket → Web Designer menerima email
+      **Catatan internal baru** (dan sebaliknya). Customer tidak menerimanya.
+- [ ] Web Designer mengubah tiket ke **In Progress** → customer menerima
+      email "Pengerjaan dimulai" + pesan di live chat.
+
+## V.5 — Administrator (IKR-11)
+
+- [ ] Orders: order belum bayar menampilkan **Batas bayar**, tombol
+      **Cek ke Mayar** dan **Hanguskan**.
+- [ ] Cek komisi (Commissions) dan permission tiap role sesuai matriks
+      — tetap QA manual.
+
+## V.6 — Favicon & email pengirim
+
+- [ ] Tab browser menampilkan ikon ikrarku (hard refresh / buka Incognito;
+      favicon lama sering tersimpan di cache browser).
+- [ ] Email yang masuk memakai pengirim resmi (lihat
+      [PANDUAN_DEPLOY_PRODUCTION.md bagian G](PANDUAN_DEPLOY_PRODUCTION.md)).
+
+## V.7 — Belum dikerjakan dari MoM (butuh keputusan / bukan kode)
+
+- IKR-06 form permintaan konten & upload foto/CSV — menunggu keputusan
+  Google Form vs upload langsung.
+- IKR-07 transaksi uji nominal kecil & reimbursement — operasional.
+- IKR-12–15 (P2): motion masuk/keluar & animasi teks, ±4 template baru,
+  format handoff desain, grup koordinasi.
 
 # Keamanan
 

@@ -173,6 +173,38 @@ bash deploy/scripts/deploy-production.sh
 `prod-seed-from-staging.mjs` hanya untuk peluncuran pertama: database production
 yang sudah ada ditolak kecuali `--force`, dan `--force` menghapus semua order production.
 
+## G. Email pengirim (MoM 2 Nov IKR-09)
+
+Email ke customer dan tim (receipt, info akun, order baru, catatan internal)
+dikirim dengan identitas di `SMTP_FROM`. Jangan memakai alamat developer.
+
+1. Tentukan alamat resmi, mis. `hello@ikrarku.id` atau `noreply@ikrarku.id`.
+2. Gmail / Google Workspace hanya mengizinkan alamat akun SMTP itu sendiri
+   atau alias yang sudah diverifikasi:
+   - login ke akun `SMTP_USER` → Gmail → Settings → **Accounts** →
+     **Send mail as** → *Add another email address* → verifikasi; atau
+   - buat user Workspace baru untuk alamat resmi, lalu pakai App Password-nya
+     sebagai `SMTP_USER`/`SMTP_PASS`.
+3. Isi di `.env.production` (dan `.env.staging` bila perlu):
+
+```bash
+SMTP_FROM="ikrarku <hello@ikrarku.id>"
+SMTP_REPLY_TO=hello@ikrarku.id   # opsional: balasan customer masuk ke sini
+```
+
+4. Deploy ulang (`bash deploy/scripts/deploy-production.sh`). Preflight
+   menampilkan `PERINGATAN: SMTP_FROM ... bukan identitas bisnis` bila masih
+   alamat developer / domain lokal.
+5. Uji: `docker compose -f docker-compose.production.yml exec ikrarku node scripts/smtp-check.mjs <email-anda>`
+   lalu cek pengirim di inbox.
+
+## H. Order hangus 1x24 jam (QC 8 Nov)
+
+Order yang belum dibayar hangus otomatis setelah `ORDER_PAYMENT_HOURS` jam
+(bawaan 24, sama dengan masa berlaku invoice Mayar `MAYAR_INVOICE_EXPIRY_HOURS`).
+Server mengecek setiap 5 menit (`ORDER_EXPIRY_CHECK_MS`). Tidak perlu
+mengubah `.env` bila 24 jam sudah sesuai; bila diubah, samakan kedua nilai.
+
 ## F. Rollback
 
 ```bash

@@ -1,3 +1,24 @@
+## 0.17.1 — 8 November 2026 (MoM 2 Nov + QC tambahan)
+
+Persiapan beta testing ke user asli (W2 November).
+
+**Prioritas MoM 2 November**
+- IKR-01 (P0): `/workspace` dan halaman workspace lain tanpa login kini dialihkan ke halaman login. Dulu tampil kerangka Customer Workspace kosong; data tidak pernah bocor — 33 endpoint GET terautentikasi diuji dan semuanya menolak 401.
+- IKR-02/03: website customer yang diisi dari template yang dibeli kini diberi penanda order & template, sehingga Template & Canvas menampilkan **satu card** per pembelian (dulu card "Sedang disiapkan" plus 1–2 card duplikat). Data lama ikut dirapikan saat ditampilkan.
+- IKR-02: dashboard customer yang design-nya belum siap menampilkan "Design Anda sedang disiapkan" + nama template & no. order (dulu "Tambahkan Canvas dari menu Templates").
+- IKR-02/04: nama contoh bawaan cover diganti netral ("Mempelai Wanita & Pria"); kartu Templates & Approval memberi label peringatan bila template masih memuat nama contoh ("Chyntia & Rian", "Aurelia & Reynard").
+- IKR-05: catatan internal pada tiket dikirim lewat email ke CS / Web Designer lain yang ditugaskan pada order yang sama (handoff).
+- IKR-08: CS dan Web Designer menerima email "Order baru untuk Anda" saat order dibayar, saat antrean dibagikan, dan saat Administrator reassign. Customer menerima email saat tiket berstatus In Progress dan Waiting Customer (dulu hanya live chat).
+- IKR-09: pengirim email mendukung `SMTP_REPLY_TO`; preflight memperingatkan bila `SMTP_FROM` masih alamat developer / domain lokal.
+- IKR-11: Orders (Administrator) — batas bayar, tombol **Cek ke Mayar**, dan **Hanguskan** untuk order belum bayar.
+
+**QC tambahan 8 November**
+- Favicon memakai ikon ikrarku (dipotong dari logo): `favicon.ico`, `favicon.png`, `apple-touch-icon.png`. Ikon Vite ungu dihapus.
+- Password dari email akun otomatis bisa dipakai terus. Dialog login pertama kini opsional ("Tetap pakai password dari email"); email akun menjelaskan password tetap berlaku.
+- Order yang tidak dibayar dalam 1x24 jam **hangus otomatis** (seperti marketplace). My Order menampilkan batas bayar + sisa waktu; order hangus berlabel "Hangus" dengan tombol Pesan ulang. Order Mayar dicek ke Mayar sebelum dihanguskan; pembayaran yang tetap masuk setelah hangus tetap diproses lunas. Atur lewat `ORDER_PAYMENT_HOURS` (bawaan 24).
+
+**Pengujian**: qa:integration 40/40, qa:layout 137/137, qa:db 38/38, qa-browser 2/2, TypeScript + build lolos, oxlint 0 error.
+
 ## 0.16.0
 
 - Fixed Buka Undangan text-color mismatch between Canvas Editor and Preview.
