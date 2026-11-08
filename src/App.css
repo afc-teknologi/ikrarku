@@ -2485,3 +2485,11 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
    aslinya (seperti canvas lain): tidak dipotong, tidak diperkecil, tanpa blur.
    Canvas yang lebih tinggi dari layar digulir di dalam layar cover. */
 .wedding-site.cover-as-canvas{overflow-y:auto}
+/* MoM 2 Nov — template masih memakai nama contoh bawaan. */
+.status-chip.sample-content-warning{background:#fff4e5;color:#9a5b00;border:1px solid #f1d3a2;cursor:help}
+/* QC 8 Nov — order hangus setelah 1x24 jam tanpa pembayaran. */
+.status.expired{background:#f6e7e5;color:#9b3d33}
+.order-pay-note.expired{background:#fbefed;border-color:#efc9c3}
+.order-pay-note .order-deadline{color:#6b4a12}
+.payment-countdown{color:#9a6a12;font-weight:600}
+.payment-countdown.late{color:#9b3d33}

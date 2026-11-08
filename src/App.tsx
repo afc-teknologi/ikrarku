@@ -1640,6 +1640,40 @@ function applyDevicePatch<T extends { mobile?: Partial<T> }>(
   return { ...target, mobile: nextMobile } as T;
 }
 
+/** Nama contoh bawaan editor/template demo. Bila masih ada di template yang
+ *  dijual, customer melihat nama yang tidak sesuai tema setelah membeli
+ *  (MoM 2 Nov IKR-02/04). */
+const SAMPLE_COUPLE_NAMES = [
+  "Chyntia & Rian",
+  "Aurelia & Reynard",
+  "Mempelai Wanita & Pria",
+];
+function sampleNamesIn(template: Template): string[] {
+  if (!template.canvasSections?.length) return [];
+  const text = JSON.stringify(template.canvasSections);
+  return SAMPLE_COUPLE_NAMES.filter((name) => text.includes(name));
+}
+
+/** Halaman yang boleh dibuka tanpa login (MoM 2 Nov IKR-01). Selain ini
+ *  dianggap workspace dan dialihkan ke login bila belum ada sesi. */
+const PUBLIC_VIEWS = new Set<View>([
+  "landing",
+  "login",
+  "signup",
+  "forgot-password",
+  "reset-password",
+  "verify-email",
+  "not-found",
+  "templates",
+  "template-detail",
+  "checkout",
+  "payment-success",
+  "articles",
+  "journal",
+  "designs",
+  "rsvp-confirmation",
+]);
+
 function makeFeature(
   type: FeatureType,
   title?: string,
@@ -1658,8 +1692,10 @@ function makeFeature(
     ],
     quote: ["Favorite Quote", "Two souls, one beautiful journey."],
     gift: ["Wedding Gift", "Doa dan restu Anda adalah hadiah terindah."],
+    // MoM 2 Nov IKR-02 — dulu "Chyntia & Rian" ikut terbawa ke template
+    // bertema apa pun dan terlihat customer setelah membeli.
     "invitation-cover": [
-      "Chyntia & Rian",
+      "Mempelai Wanita & Pria",
       "Dengan penuh kebahagiaan kami mengundang Anda",
     ],
     countdown: ["Save The Date", "20 Agustus 2026 · 09.00 WIB"],
@@ -3310,6 +3346,14 @@ function App() {
       localStorage.setItem("ikrarku-notification-muted", String(stored));
     }
   }, [currentAccountId, currentAccount?.settings]);
+  // MoM 2 Nov IKR-01 — halaman workspace (dashboard, order, editor, admin,
+  // dst.) hanya untuk pengguna yang sudah login. Dulu /workspace dari browser
+  // tanpa sesi menampilkan kerangka Customer Workspace (tanpa data — semua API
+  // sudah menolak 401). Kini pengunjung tanpa sesi dialihkan ke halaman login.
+  useEffect(() => {
+    if (loading || currentAccount || publicSiteData || notFound) return;
+    if (!PUBLIC_VIEWS.has(view)) setView("login");
+  }, [loading, currentAccount, publicSiteData, notFound, view]);
   const hasPermission = (permission: string) =>
     Boolean(
       currentAccount?.permissions?.includes("*") ||
@@ -5607,6 +5651,10 @@ function App() {
               setMustChangePassword(false);
               flash("Password baru tersimpan. Gunakan password ini untuk login berikutnya.");
             }}
+            onKeep={() => {
+              setMustChangePassword(false);
+              flash("Password dari email tetap berlaku. Anda bisa menggantinya kapan saja di Settings.");
+            }}
           />
         )}
         {toast && <Toast message={toast} />}
@@ -6058,6 +6106,10 @@ function App() {
           onDone={() => {
             setMustChangePassword(false);
             flash("Password baru tersimpan. Gunakan password ini untuk login berikutnya.");
+          }}
+          onKeep={() => {
+            setMustChangePassword(false);
+            flash("Password dari email tetap berlaku. Anda bisa menggantinya kapan saja di Settings.");
           }}
         />
       )}
@@ -8868,18 +8920,42 @@ function Dashboard({
   });
   const copyLink = () =>
     void navigator.clipboard?.writeText(`${window.location.origin}/${slug}`);
-  if (!selectedCanvas)
+  if (!selectedCanvas) {
+    // MoM 2 Nov IKR-02 — customer yang sudah membayar tidak lagi disuruh
+    // "menambahkan Canvas dari menu Templates": design-nya sedang disiapkan
+    // Web Designer dari template yang ia beli.
+    const paidOrder = (orders || []).find(
+      (order: any) => order?.payment_status === "Paid",
+    );
     return (
       <div className="page">
         <div className="empty-state">
           <Layers3 size={34} />
-          <h2>Belum ada Canvas</h2>
-          <p>
-            Tambahkan Canvas dari menu Templates untuk mulai membangun website.
-          </p>
+          {paidOrder ? (
+            <>
+              <h2>Design Anda sedang disiapkan</h2>
+              <p>
+                Web Designer sedang menyiapkan undangan dari template{" "}
+                <strong>{paidOrder.template_name || "yang Anda pesan"}</strong>{" "}
+                ({paidOrder.order_no}). Anda akan diberi tahu lewat live chat
+                begitu canvas siap diedit.
+              </p>
+              <button className="secondary-btn" onClick={() => setView("my-orders")}>
+                Lihat status order
+              </button>
+            </>
+          ) : (
+            <>
+              <h2>Belum ada Canvas</h2>
+              <p>
+                Pilih template di katalog untuk mulai membangun website.
+              </p>
+            </>
+          )}
         </div>
       </div>
     );
+  }
   return (
     <div className="page dashboard-page">
       {/* MoM A9 — customer tahu tim sedang membantu mengedit undangannya. */}
@@ -9732,7 +9808,7 @@ function buildCustomerDesignGroups(
     const instanceId = owned[0]?.templateInstanceId;
     const claimed = instanceId
       ? sections.filter((section) => section.templateInstanceId === instanceId)
-      : owned.slice(0, 0);
+      : owned;
     claimed.forEach((section) =>
       used.add(section.templateInstanceId || section.id),
     );
@@ -9750,9 +9826,20 @@ function buildCustomerDesignGroups(
     } satisfies WebsiteDesignGroup;
   });
   // Section yang tidak terkait order mana pun (design custom) tetap ditampilkan.
-  const leftovers = sections.filter(
+  let leftovers = sections.filter(
     (section) => !used.has(section.templateInstanceId || section.id),
   );
+  // MoM 2 Nov IKR-03 — website yang diisi server dari template yang dibeli
+  // dulu tidak diberi penanda template, sehingga customer yang membeli SATU
+  // template melihat card "Sedang disiapkan" plus satu atau dua card
+  // "Custom Design" berisi canvas yang sama. Bila hanya satu order yang
+  // belum punya canvas, seluruh canvas tanpa pemilik adalah miliknya.
+  const pendingGroups = groups.filter((group) => group.pending);
+  if (pendingGroups.length === 1 && leftovers.length) {
+    pendingGroups[0].sections = leftovers;
+    pendingGroups[0].pending = false;
+    leftovers = [];
+  }
   if (leftovers.length)
     groups.push(
       ...buildWebsiteDesignGroups(
@@ -24488,6 +24575,18 @@ function OrdersAnalyticsPage({
       setAccountBusy(null);
     }
   };
+  const runOrderAction = async (id: string, action: () => Promise<unknown>) => {
+    setRetrying(id);
+    setError("");
+    try {
+      await action();
+      await onRefresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Aksi order gagal.");
+    } finally {
+      setRetrying(null);
+    }
+  };
   const retry = async (id: string) => {
     setRetrying(id);
     setError("");
@@ -24650,6 +24749,46 @@ function OrdersAnalyticsPage({
                               ? "Perlu dicoba ulang"
                               : "Menunggu"}
                         </small>
+                      )}
+                      {/* QC 8 Nov / MoM IKR-11 — order belum bayar: batas
+                          bayar, cek manual ke Mayar, dan hanguskan. */}
+                      {row.payment_status === "Pending" && (
+                        <>
+                          {row.payment_deadline && (
+                            <small>
+                              Batas bayar {formatDateTime(row.payment_deadline)}
+                            </small>
+                          )}
+                          <button
+                            disabled={retrying !== null}
+                            onClick={() =>
+                              void runOrderAction(row.id, async () => {
+                                const result = await api.checkPayment(row.id);
+                                if (result?.status !== "Paid")
+                                  setError(
+                                    `${row.order_no}: belum ada pembayaran di Mayar.`,
+                                  );
+                              })
+                            }
+                          >
+                            {retrying === row.id ? "Mengecek…" : "Cek ke Mayar"}
+                          </button>
+                          <button
+                            disabled={retrying !== null}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `Hanguskan order ${row.order_no}? Customer harus memesan ulang.`,
+                                )
+                              )
+                                void runOrderAction(row.id, () =>
+                                  api.expireOrder(row.id),
+                                );
+                            }}
+                          >
+                            Hanguskan
+                          </button>
+                        </>
                       )}
                       {row.payment_status === "Paid" &&
                         row.fulfillment_status !== "Complete" && (
@@ -25226,6 +25365,35 @@ function CustomerServiceDatabase({
   );
 }
 
+/** QC 8 Nov — sisa waktu bayar sebelum order hangus. */
+function PaymentCountdown({ deadline }: { deadline: string }) {
+  const [nowMs, setNowMs] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNowMs(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const left = new Date(deadline).getTime() - nowMs;
+  if (!(left > 0)) return <span className="payment-countdown late">(waktu habis)</span>;
+  const hours = Math.floor(left / 3600_000);
+  const minutes = Math.floor((left % 3600_000) / 60_000);
+  return (
+    <span className="payment-countdown">
+      (sisa {hours > 0 ? `${hours} jam ` : ""}
+      {minutes} menit)
+    </span>
+  );
+}
+
+function formatDateTime(value: string) {
+  return new Intl.DateTimeFormat("id-ID", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
 function MyOrdersPage({
   orders,
   setView,
@@ -25243,7 +25411,7 @@ function MyOrdersPage({
   // yang pending (maks. 15 menit), saat tab kembali aktif, dan lewat tombol.
   const [checkingId, setCheckingId] = useState("");
   const pendingInvoiceIds = orders
-    .filter((order) => order.payment_status !== "Paid" && order.gateway_ref)
+    .filter((order) => order.payment_status === "Pending" && order.gateway_ref)
     .map((order) => order.id)
     .join(",");
   const reloadRef = useRef(onReload);
@@ -25393,6 +25561,12 @@ function MyOrdersPage({
         {orders.map((order) => {
           const progress = taskProgress(order);
           const paid = order.payment_status === "Paid";
+          const expired = order.payment_status === "Expired";
+          const paymentText = paid
+            ? "Lunas"
+            : expired
+              ? "Hangus (lewat 1x24 jam)"
+              : "Menunggu pembayaran";
           return (
           <article key={order.id} className="project-order-card">
             <header>
@@ -25406,7 +25580,7 @@ function MyOrdersPage({
               <span
                 className={`status ${String(order.payment_status).toLowerCase()}`}
               >
-                {paid ? "Lunas" : "Menunggu pembayaran"}
+                {paymentText}
               </span>
             </header>
             {/* QA TC-176: progress pengerjaan ditampilkan sebagai bar, bukan
@@ -25439,7 +25613,7 @@ function MyOrdersPage({
               </div>
               <div>
                 <dt>Status pembayaran</dt>
-                <dd>{paid ? "Lunas" : "Menunggu pembayaran"}</dd>
+                <dd>{paymentText}</dd>
               </div>
               {order.payment_method && (
                 <div>
@@ -25470,10 +25644,39 @@ function MyOrdersPage({
                 <dd>{formatRupiah(order.amount)}</dd>
               </div>
             </dl>
-            {!paid && (
+            {expired && (
+              <div className="order-pay-note expired">
+                <p>
+                  <strong>Order ini hangus.</strong> Pembayaran tidak diterima
+                  dalam 1x24 jam sejak dipesan
+                  {order.payment_deadline
+                    ? ` (batas ${formatDateTime(order.payment_deadline)})`
+                    : ""}
+                  . Tagihan lamanya tidak berlaku lagi — silakan pesan ulang
+                  template ini.
+                </p>
+                <button
+                  type="button"
+                  className="order-check-payment"
+                  onClick={() => setView("templates")}
+                >
+                  <RefreshCw size={14} />
+                  Pesan ulang
+                </button>
+              </div>
+            )}
+            {!paid && !expired && (
               <div className="order-pay-note">
                 {Number(order.amount) > 0 ? (
                   <>
+                    {/* QC 8 Nov — batas bayar 1x24 jam, lewat itu hangus. */}
+                    {order.payment_deadline && (
+                      <p className="order-deadline">
+                        <strong>Bayar sebelum {formatDateTime(order.payment_deadline)}</strong>{" "}
+                        <PaymentCountdown deadline={order.payment_deadline} />.
+                        Lewat batas ini order hangus otomatis.
+                      </p>
+                    )}
                     <p>
                       <strong>Belum dibayar?</strong> Silakan cek email{" "}
                       <b>{order.email}</b> (termasuk folder Spam/Promosi) untuk
@@ -26586,7 +26789,13 @@ function resetFileInput(event: React.MouseEvent<HTMLInputElement>) {
 }
 
 /** TC-245 — dialog yang tidak bisa ditutup sampai password baru dibuat. */
-function FirstPasswordDialog({ onDone }: { onDone: () => void }) {
+function FirstPasswordDialog({
+  onDone,
+  onKeep,
+}: {
+  onDone: () => void;
+  onKeep: () => void;
+}) {
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [error, setError] = useState("");
@@ -26620,10 +26829,11 @@ function FirstPasswordDialog({ onDone }: { onDone: () => void }) {
         }}
       >
         <KeyRound size={26} />
-        <h2 id="first-password-title">Buat password baru</h2>
+        <h2 id="first-password-title">Ganti password? (opsional)</h2>
         <p>
-          Akun Anda dibuat otomatis setelah pembayaran dengan password
-          sementara. Buat password baru sebelum melanjutkan.
+          Akun Anda dibuat otomatis setelah pembayaran. Password dari email
+          tetap bisa dipakai untuk login berikutnya — ganti sekarang hanya
+          bila ingin memakai password sendiri.
         </p>
         <label>
           Password baru
@@ -26651,7 +26861,26 @@ function FirstPasswordDialog({ onDone }: { onDone: () => void }) {
           </p>
         )}
         <button className="primary-btn" type="submit" disabled={busy}>
-          {busy ? "Menyimpan..." : "Simpan password"}
+          {busy ? "Menyimpan..." : "Simpan password baru"}
+        </button>
+        {/* QC 8 Nov — password dari email boleh dipakai terus. */}
+        <button
+          className="secondary-btn"
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await api.keepPassword();
+            } catch {
+              /* tetap tutup: password lama memang masih berlaku */
+            } finally {
+              setBusy(false);
+              onKeep();
+            }
+          }}
+        >
+          Tetap pakai password dari email
         </button>
       </form>
     </div>
@@ -30876,6 +31105,17 @@ function TemplateApprovalManager({
               {template.pendingReview && template.status !== "Pending" && (
                 <em className="status-chip revision-pending">
                   Revisi menunggu approval
+                </em>
+              )}
+              {/* MoM 2 Nov IKR-02/04 — customer melihat isi template apa
+                  adanya setelah membeli; nama contoh bawaan editor (mis.
+                  "Chyntia & Rian") di template bertema lain terlihat salah. */}
+              {sampleNamesIn(template).length > 0 && (
+                <em
+                  className="status-chip sample-content-warning"
+                  title={`Masih memakai nama contoh bawaan: ${sampleNamesIn(template).join(", ")}. Ganti agar sesuai tema sebelum template dijual.`}
+                >
+                  Nama contoh: {sampleNamesIn(template).join(", ")}
                 </em>
               )}
             </div>

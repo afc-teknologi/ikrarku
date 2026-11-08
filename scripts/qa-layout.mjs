@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { designerStyle } from "../src/components/designerLayout.ts";
 
 test("Image docks to either top corner with explicit inset and width", () => {
@@ -1307,7 +1307,7 @@ test("TC-157: diskusi internal per tiket CS & Web Designer", () => {
 });
 test("TC-073: SMTP port 465 otomatis TLS, email tertahan dikirim ulang", () => {
   assert.match(serverMjs, /secure: port === 465 \|\| String\(process\.env\.SMTP_SECURE\) === "true"/);
-  assert.match(serverMjs, /retryPendingEmails\(\);\n[\s\S]{0,500}app\.listen/);
+  assert.match(serverMjs, /retryPendingEmails\(\);\n[\s\S]{0,1200}app\.listen/);
 });
 test("TC-270: preview Mobile dialog tanpa padding vertikal", () => {
   assert.match(appCss, /\.template-dialog-actual-preview\.live\.device-mobile\{padding-top:0;padding-bottom:0\}/);
@@ -1417,5 +1417,40 @@ test("Preview = editor: gagang editor tidak menambah tinggi fitur, teks kosong t
 });
 test("Preview = editor: layar Buka Undangan = canvas cover tinggi asli, tanpa blur, bisa digulir", () => {
   assert.match(appTsx, /const section = prepareSection\(rawSection\);/);
-  assert.match(appCss, /\.wedding-site\.cover-as-canvas\{overflow-y:auto\}\s*$/);
+  assert.match(appCss, /\.wedding-site\.cover-as-canvas\{overflow-y:auto\}/);
+});
+
+test("MoM 2 Nov IKR-01: halaman workspace tanpa login dialihkan ke login", () => {
+  assert.match(appTsx, /const PUBLIC_VIEWS = new Set<View>\(\[/);
+  assert.match(appTsx, /if \(!PUBLIC_VIEWS\.has\(view\)\) setView\("login"\);/);
+});
+test("MoM 2 Nov IKR-02/03: satu card per template yang dibeli, canvas diberi penanda order", () => {
+  assert.match(serverJs, /templateInstanceId: instanceId,\s*sourceTemplateId: template\.id,/);
+  assert.match(appTsx, /if \(pendingGroups\.length === 1 && leftovers\.length\)/);
+  assert.match(appTsx, /<h2>Design Anda sedang disiapkan<\/h2>/);
+  assert.match(appTsx, /function sampleNamesIn\(template: Template\)/);
+});
+test("QC 8 Nov: password dari email bisa dipakai terus", () => {
+  assert.match(serverJs, /app\.post\("\/api\/auth\/keep-password", auth/);
+  assert.match(appTsx, /Tetap pakai password dari email/);
+});
+test("QC 8 Nov: order belum dibayar hangus otomatis 1x24 jam", () => {
+  assert.match(serverJs, /const ORDER_PAYMENT_HOURS = Math\.max\(/);
+  assert.match(serverJs, /async function expireUnpaidOrders\(\)/);
+  assert.match(serverJs, /status\(410\)/);
+  assert.match(appTsx, /function PaymentCountdown\(/);
+  assert.match(appTsx, /Hangus \(lewat 1x24 jam\)/);
+});
+test("QC 8 Nov: favicon memakai ikon ikrarku", () => {
+  const html = readFileSync(new URL("../index.html", import.meta.url), "utf8");
+  assert.match(html, /<link rel="icon" href="\/favicon\.ico" sizes="any" \/>/);
+  assert.doesNotMatch(html, /favicon\.svg/);
+  assert.ok(existsSync(new URL("../public/favicon.ico", import.meta.url)));
+  assert.ok(existsSync(new URL("../public/apple-touch-icon.png", import.meta.url)));
+});
+test("MoM 2 Nov IKR-05/08/09: email staff, email In Progress, reply-to bisnis", () => {
+  assert.match(serverJs, /function notifyOrderAssignment\(orderId, userId, roleLabel\)/);
+  assert.match(serverJs, /`Catatan internal baru: \$\{order\.order_no\}`/);
+  assert.match(serverJs, /\["In Progress", "Waiting Customer", "Pending"\]\.includes\(nextStatus\)/);
+  assert.match(serverJs, /replyTo: process\.env\.SMTP_REPLY_TO/);
 });

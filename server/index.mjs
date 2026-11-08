@@ -1523,6 +1523,16 @@ app.post("/api/auth/first-password", auth, (req, res) => {
   auditLog(row.id, "account.first_password", "user", row.id, {});
   res.json({ ok: true });
 });
+// QC 8 Nov — password dari email boleh dipakai terus. Customer yang memilih
+// "Tetap pakai password ini" tidak ditanya lagi; password sementara tetap
+// berlaku sampai ia menggantinya sendiri (Settings atau Lupa password).
+app.post("/api/auth/keep-password", auth, (req, res) => {
+  db.prepare(
+    "UPDATE users SET must_change_password=0,updated_at=? WHERE id=?",
+  ).run(now(), req.user.id);
+  auditLog(req.user.id, "account.keep_initial_password", "user", req.user.id, {});
+  res.json({ ok: true });
+});
 app.post("/api/auth/logout", auth, (req, res) => {
   db.prepare("DELETE FROM sessions WHERE token=?").run(req.token);
   res.json({ ok: true });
@@ -1650,6 +1660,56 @@ function brandedEmail({
 </body></html>`;
 }
 
+// MoM 2 Nov IKR-05/08 — email ke staff (CS / Web Designer) saat order
+// ditugaskan atau ada catatan internal baru. Dulu staff hanya tahu dari
+// halaman Tasks, sehingga order baru "tidak terlihat" sampai dicek manual.
+function notifyStaff(userId, subject, heading, intro, bodyHtml = "") {
+  try {
+    if (!userId) return;
+    const user = db
+      .prepare("SELECT email,first_name,active FROM users WHERE id=?")
+      .get(userId);
+    if (!user?.email || !user.active) return;
+    queueEmail(
+      user.email,
+      subject,
+      brandedEmail({
+        preheader: subject,
+        heading,
+        intro: "Halo " + escapeHtml(user.first_name || "tim ikrarku") + ", " + intro,
+        bodyHtml,
+        ctaLabel: "Buka workspace",
+        ctaUrl: CLIENT_ORIGIN.replace(/\/$/, "") + "/workspace",
+        footnote: "Email otomatis untuk tim ikrarku. Jangan diteruskan ke customer.",
+      }),
+    );
+  } catch (error) {
+    console.error("[staff-notify] gagal:", error.message);
+  }
+}
+function orderSummaryHtml(order, templateName) {
+  return (
+    '<p style="margin:0 0 14px;font-size:15px;line-height:1.8;color:#163a30;">' +
+    `<strong>Order:</strong> ${escapeHtml(order.order_no || "-")}<br>` +
+    `<strong>Template:</strong> ${escapeHtml(templateName || "-")}<br>` +
+    `<strong>Customer:</strong> ${escapeHtml(order.customer_name || "-")} · ${escapeHtml(order.email || "")}</p>`
+  );
+}
+function notifyOrderAssignment(orderId, userId, roleLabel) {
+  const order = db
+    .prepare(
+      "SELECT o.*,t.name template_name FROM orders o LEFT JOIN templates t ON t.id=o.template_id WHERE o.id=?",
+    )
+    .get(orderId);
+  if (!order) return;
+  notifyStaff(
+    userId,
+    `Order baru untuk Anda: ${order.order_no}`,
+    `Order baru (${roleLabel})`,
+    `order ${escapeHtml(order.order_no)} sudah dibayar dan ditugaskan kepada Anda sebagai ${escapeHtml(roleLabel)}.`,
+    orderSummaryHtml(order, order.template_name),
+  );
+}
 function queueEmail(toEmail, subject, html, attachmentPath = null) {
   const outboxId = id("mail");
   db.prepare(
@@ -3543,6 +3603,7 @@ function assignQueuedOrder(task, editorId) {
     order?.user_id ||
     db.prepare("SELECT id FROM users WHERE lower(email)=lower(?)").get(order?.email || "")?.id;
   if (order && ownerId) policy.assignPaidSite(order, ownerId);
+  if (order) notifyOrderAssignment(order.id, editorId, "Web Designer");
 }
 function drainEditorQueue() {
   try {
@@ -3662,6 +3723,9 @@ async function deliverEmail(outboxId) {
     const transporter = smtpTransport();
     await transporter.sendMail({
       from: process.env.SMTP_FROM || "ikrarku Sites <noreply@ikrarku.local>",
+      // MoM 2 Nov IKR-09 — balasan customer diarahkan ke alamat bisnis,
+      // terpisah dari akun SMTP pengirim (mis. akun Gmail developer).
+      ...(process.env.SMTP_REPLY_TO ? { replyTo: process.env.SMTP_REPLY_TO } : {}),
       to: mail.to_email,
       subject: mail.subject,
       html: mail.html,
@@ -3783,6 +3847,16 @@ function seedCustomerSiteFromTemplate(userId, order, template) {
     }
   })();
   if (hasDesign) return;
+  // MoM 2 Nov IKR-02/03 — setiap canvas diberi penanda template & order yang
+  // dibeli. Tanpa penanda ini dashboard customer menampilkan card "Sedang
+  // disiapkan" dan card "Custom Design" terpisah untuk template yang sama.
+  const instanceId = `order-${order.id}`;
+  sections = sections.map((section) => ({
+    ...section,
+    templateInstanceId: instanceId,
+    sourceTemplateId: template.id,
+    sourceTemplateName: template.name,
+  }));
   const title = order.customer_name || template.name;
   const baseSlug =
     (order.email || template.name || "undangan")
@@ -3977,6 +4051,11 @@ async function fulfillPaidOrder(order, methodCode) {
         );
       });
       void deliverEmail(outboxId);
+      // MoM 2 Nov IKR-08 — CS dan Web Designer yang ditugaskan diberi tahu
+      // lewat email, tidak hanya muncul di halaman Tasks.
+      if (!fresh.assigned_cs_id) notifyOrderAssignment(fresh.id, csId, "Customer Service");
+      if (editorId && !fresh.assigned_editor_id)
+        notifyOrderAssignment(fresh.id, editorId, "Web Designer");
       if (autoAccount) {
         const loginUrl = `${CLIENT_ORIGIN.replace(/\/$/, "")}/login`;
         queueEmail(
@@ -3995,7 +4074,7 @@ async function fulfillPaidOrder(order, methodCode) {
               `<p style="margin:0 0 14px;font-size:15px;line-height:1.8;color:#163a30;"><strong>Email:</strong> ${escapeHtml(autoAccount.user.email)}<br>` +
               `<strong>Username:</strong> ${escapeHtml(autoAccount.user.username)}<br>` +
               `<strong>Password sementara:</strong> <code style="font-size:16px;background:#eef4f1;padding:2px 8px;border-radius:6px;letter-spacing:1px;">${escapeHtml(autoAccount.tempPassword)}</code></p>` +
-              '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#4d6159;">Saat login pertama, Anda akan diminta membuat password baru.</p>',
+              '<p style="margin:0 0 18px;font-size:15px;line-height:1.7;color:#4d6159;">Password ini tetap bisa dipakai untuk login berikutnya. Anda boleh menggantinya kapan saja lewat menu Settings.</p>',
             ctaLabel: "Login sekarang",
             ctaUrl: loginUrl,
             footnote:
@@ -4455,6 +4534,15 @@ app.post(
       .prepare("SELECT * FROM orders WHERE id=?")
       .get(req.params.id);
     if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+    // QC 8 Nov — order yang lewat 1x24 jam tanpa pembayaran sudah hangus.
+    if (order.payment_status === "Expired" || isPaymentOverdue(order)) {
+      if (order.payment_status === "Pending") markOrderExpired(order);
+      return res.status(410).json({
+        error:
+          "Order ini sudah hangus karena tidak dibayar dalam 1x24 jam. Silakan pesan ulang template-nya.",
+        expired: true,
+      });
+    }
     const method = db
       .prepare("SELECT * FROM payment_methods WHERE code=? AND enabled=1")
       .get(req.body.paymentMethod);
@@ -4702,6 +4790,86 @@ app.post(
     }
   },
 );
+// QC 8 Nov — order yang belum dibayar HANGUS otomatis setelah 1x24 jam
+// (seperti marketplace), jadi tidak menggantung "Menunggu pembayaran"
+// selamanya. Sebelum dihanguskan, order Mayar dicek sekali lagi ke Mayar
+// supaya pembayaran yang webhook-nya terlambat tidak ikut hangus. Bila
+// customer ternyata membayar setelah hangus (mis. tautan lama), webhook /
+// cek status tetap memproses order itu sebagai lunas — uangnya sudah masuk.
+const ORDER_PAYMENT_HOURS = Math.max(
+  1,
+  Number(process.env.ORDER_PAYMENT_HOURS || 24),
+);
+function paymentDeadline(order) {
+  const created = new Date(order?.created_at || 0).getTime();
+  return new Date(created + ORDER_PAYMENT_HOURS * 3600_000).toISOString();
+}
+function isPaymentOverdue(order) {
+  return (
+    order?.payment_status === "Pending" &&
+    new Date(paymentDeadline(order)).getTime() <= Date.now()
+  );
+}
+function markOrderExpired(order) {
+  const result = db
+    .prepare(
+      "UPDATE orders SET payment_status='Expired',order_status='Expired' WHERE id=? AND payment_status='Pending'",
+    )
+    .run(order.id);
+  if (result.changes)
+    auditLog(null, "order.expired", "order", order.id, {
+      hours: ORDER_PAYMENT_HOURS,
+    });
+  return Boolean(result.changes);
+}
+let orderExpiryRunning = false;
+async function expireUnpaidOrders() {
+  if (orderExpiryRunning) return 0;
+  orderExpiryRunning = true;
+  let expired = 0;
+  try {
+    const cutoff = new Date(
+      Date.now() - ORDER_PAYMENT_HOURS * 3600_000,
+    ).toISOString();
+    const stale = db
+      .prepare(
+        "SELECT * FROM orders WHERE payment_status='Pending' AND created_at<=? ORDER BY created_at ASC LIMIT 100",
+      )
+      .all(cutoff);
+    for (const order of stale) {
+      try {
+        const check = await checkMayarPayment(order);
+        if (check.status === "Paid") continue;
+        // Mayar tidak bisa dihubungi: jangan hanguskan dulu, coba lagi nanti.
+        if (check.reason === "unreachable" || /^http-5/.test(check.reason || ""))
+          continue;
+      } catch {
+        continue;
+      }
+      if (markOrderExpired(order)) expired += 1;
+    }
+  } finally {
+    orderExpiryRunning = false;
+  }
+  return expired;
+}
+// MoM 2 Nov IKR-11 — Administrator bisa menghanguskan order belum bayar
+// lebih awal (mis. order uji / dobel). Order yang ternyata sudah dibayar di
+// Mayar tidak dihanguskan.
+app.post("/api/orders/:id/expire", auth, permit("orders.view"), async (req, res) => {
+  if (!hasPermission(req.user, "*"))
+    return res.status(403).json({ error: "Hanya Administrator dapat menghanguskan order" });
+  const order = db.prepare("SELECT * FROM orders WHERE id=?").get(req.params.id);
+  if (!order) return res.status(404).json({ error: "Order tidak ditemukan" });
+  if (order.payment_status !== "Pending")
+    return res.status(409).json({ error: `Order berstatus ${order.payment_status}, tidak bisa dihanguskan` });
+  const check = await checkMayarPayment(order).catch(() => ({ status: order.payment_status }));
+  if (check.status === "Paid")
+    return res.status(409).json({ error: "Order ternyata sudah dibayar di Mayar dan kini tercatat lunas." });
+  markOrderExpired(order);
+  auditLog(req.user.id, "order.expire.manual", "order", order.id, {});
+  res.json({ ok: true });
+});
 let mayarReconcileRunning = false;
 async function reconcileMayarOrders() {
   if (mayarReconcileRunning || process.env.PAYMENT_MODE !== "mayar") return;
@@ -4734,6 +4902,10 @@ app.get("/api/me/orders", auth, (req, res) => {
     rows.map((o) => ({
       ...o,
       guest_token: undefined,
+      payment_deadline:
+        o.payment_status === "Pending" || o.payment_status === "Expired"
+          ? paymentDeadline(o)
+          : undefined,
       tasks: db
         .prepare(
           "SELECT id,title,status,priority,assigned_role_id,created_at,updated_at FROM tasks WHERE order_id=? ORDER BY created_at",
@@ -4759,7 +4931,12 @@ app.get("/api/orders/analytics", auth, permit("orders.view"), (_req, res) => {
     .prepare(
       `SELECT o.id,o.user_id,o.fulfillment_status,o.order_no,o.customer_name,o.email,o.phone,t.name template_name,o.amount,o.currency,o.payment_status,o.order_status,o.payment_method,o.created_at,o.paid_at,cs.first_name||' '||cs.last_name cs_name,ed.first_name||' '||ed.last_name editor_name FROM orders o JOIN templates t ON t.id=o.template_id LEFT JOIN users cs ON cs.id=o.assigned_cs_id LEFT JOIN users ed ON ed.id=o.assigned_editor_id ORDER BY o.created_at DESC`,
     )
-    .all();
+    .all()
+    .map((row) => ({
+      ...row,
+      payment_deadline:
+        row.payment_status === "Pending" ? paymentDeadline(row) : undefined,
+    }));
   res.json({ summary, rows });
 });
 function csvCell(value) {
@@ -4921,6 +5098,33 @@ function notifyTaskStatusChange(task, nextStatus, actorUserId) {
         conversation.id,
       );
     }
+    // MoM 2 Nov IKR-08 — "In Progress" dan "menunggu materi" juga dikirim
+    // lewat email; dulu hanya muncul di live chat, sehingga customer yang
+    // tidak membuka dashboard tidak tahu pengerjaan sudah dimulai.
+    if (["In Progress", "Waiting Customer", "Pending"].includes(nextStatus)) {
+      const orderLabel = order?.order_no ? ` (${order.order_no})` : "";
+      const started = nextStatus === "In Progress";
+      queueEmail(
+        customerEmail,
+        `${started ? "Pengerjaan dimulai" : "Kami menunggu materi Anda"}${orderLabel} — ikrarku Sites`,
+        brandedEmail({
+          preheader: started
+            ? "Tim ikrarku mulai mengerjakan undangan Anda."
+            : "Tim ikrarku menunggu konfirmasi atau materi dari Anda.",
+          heading: started
+            ? "Undangan Anda mulai dikerjakan"
+            : "Kami menunggu materi dari Anda",
+          intro:
+            "Halo " +
+            escapeHtml(order?.customer_name || "Customer") +
+            ", " +
+            escapeHtml(body),
+          ctaLabel: "Buka dashboard",
+          ctaUrl: CLIENT_ORIGIN.replace(/\/$/, "") + "/login",
+          footnote: "Balas lewat Live Chat di dashboard bila ada pertanyaan.",
+        }),
+      );
+    }
     if (nextStatus === "Done") {
       const orderLabel = order?.order_no ? ` (${order.order_no})` : "";
       queueEmail(
@@ -4999,6 +5203,16 @@ app.patch("/api/tasks/:id", auth, permit("tasks.update"), (req, res) => {
     now(),
     req.params.id,
   );
+  if (
+    before?.order_id &&
+    req.body.assignedUserId &&
+    req.body.assignedUserId !== before.assigned_user_id
+  )
+    notifyOrderAssignment(
+      before.order_id,
+      req.body.assignedUserId,
+      before.assigned_role_id === "role_cs" ? "Customer Service" : "Web Designer",
+    );
   // Hanya kirim saat status benar-benar berubah, supaya menyimpan ulang
   // prioritas tidak membanjiri live chat customer dengan pesan yang sama.
   if (before && before.status !== nextStatus)
@@ -5114,6 +5328,26 @@ app.post("/api/tasks/:id/notes", auth, permit("tasks.view"), (req, res) => {
   auditLog(req.user.id, "task.note", "task", task.id, {
     conversationId: conversation.id,
   });
+  // MoM 2 Nov IKR-05 — handoff CS ⇄ Web Designer: catatan internal baru
+  // dikirim lewat email ke rekan yang ditugaskan pada order yang sama (bukan
+  // ke penulisnya sendiri), jadi permintaan foto/daftar tamu tidak terlewat.
+  const senderName =
+    `${req.user.firstName || req.user.first_name || ""} ${req.user.lastName || req.user.last_name || ""}`.trim() ||
+    "Tim ikrarku";
+  for (const [userId, label] of [
+    [order.assigned_cs_id, "Customer Service"],
+    [order.assigned_editor_id, "Web Designer"],
+  ]) {
+    if (!userId || userId === req.user.id) continue;
+    notifyStaff(
+      userId,
+      `Catatan internal baru: ${order.order_no}`,
+      "Catatan internal baru",
+      `${escapeHtml(senderName)} menulis catatan pada tiket "${escapeHtml(task.title || "order")}" untuk Anda sebagai ${label}.`,
+      orderSummaryHtml(order, null) +
+        `<blockquote style="margin:0 0 16px;padding:10px 14px;border-left:3px solid #d5ae69;background:#faf6ee;color:#163a30;font-size:14px;line-height:1.6;">${escapeHtml(body).replace(/\n/g, "<br>")}</blockquote>`,
+    );
+  }
   res.status(201).json({ id: messageId });
 });
 app.get(
@@ -5742,6 +5976,12 @@ setInterval(
   Math.max(30_000, Number(process.env.MAYAR_RECONCILE_MS || 120_000)),
 ).unref();
 setTimeout(() => reconcileMayarOrders().catch(() => {}), 15_000).unref();
+// QC 8 Nov — hanguskan order tak dibayar > ORDER_PAYMENT_HOURS (bawaan 24).
+setInterval(
+  () => expireUnpaidOrders().catch(() => {}),
+  Math.max(60_000, Number(process.env.ORDER_EXPIRY_CHECK_MS || 300_000)),
+).unref();
+setTimeout(() => expireUnpaidOrders().catch(() => {}), 20_000).unref();
 app.listen(PORT, () =>
   console.log(`ikrarku v0.15 API listening on http://localhost:${PORT}`),
 );

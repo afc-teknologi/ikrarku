@@ -1358,6 +1358,104 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
     },
   );
   await t.test(
+    "QC 8 Nov / MoM 2 Nov: password dari email bisa dipakai terus, staff diberi tahu, order hangus 24 jam",
+    async () => {
+      const guest = await call("POST", "/orders", {
+        customerName: "Guest Keep",
+        email: "guestkeep@example.test",
+        phone: "08123456780",
+        templateId: template.id,
+      });
+      assert.equal(guest.status, 201);
+      assert.equal(
+        (
+          await webhook({
+            event: "paid",
+            reference: guest.data.id,
+            amount: 100000,
+            currency: "IDR",
+          })
+        ).status,
+        200,
+      );
+      const mail = db
+        .prepare(
+          "SELECT html FROM email_outbox WHERE to_email=? AND subject='Akun ikrarku Anda sudah siap'",
+        )
+        .get("guestkeep@example.test");
+      const temp = mail.html.match(/Password sementara:<\/strong> <code[^>]*>([^<]+)<\/code>/)[1];
+      assert.match(mail.html, /tetap bisa dipakai untuk login berikutnya/);
+      // IP terpisah (X-Forwarded-For) supaya tidak menghabiskan kuota
+      // rate-limit login milik test lain di suite ini.
+      const ownIp = { "X-Forwarded-For": "203.0.113.80" };
+      const first = await call(
+        "POST",
+        "/auth/login",
+        { username: "guestkeep@example.test", password: temp },
+        undefined,
+        ownIp,
+      );
+      assert.equal(first.status, 200);
+      assert.equal(first.data.user.mustChangePassword, true);
+      assert.equal(
+        (await call("POST", "/auth/keep-password", {}, first.data.token)).status,
+        200,
+      );
+      // Login kedua dan seterusnya dengan password dari email tetap berhasil.
+      for (let i = 0; i < 2; i += 1) {
+        const again = await call(
+          "POST",
+          "/auth/login",
+          { username: "guestkeep@example.test", password: temp },
+          undefined,
+          ownIp,
+        );
+        assert.equal(again.status, 200);
+        assert.equal(again.data.user.mustChangePassword, false);
+      }
+      // IKR-08 — CS & Web Designer yang ditugaskan menerima email order baru.
+      const paidOrder = db.prepare("SELECT * FROM orders WHERE id=?").get(guest.data.id);
+      const staffMail = db
+        .prepare(
+          "SELECT to_email FROM email_outbox WHERE subject=?",
+        )
+        .all(`Order baru untuk Anda: ${paidOrder.order_no}`)
+        .map((row) => row.to_email);
+      const csEmail = db.prepare("SELECT email FROM users WHERE id=?").get(paidOrder.assigned_cs_id).email;
+      assert.ok(staffMail.includes(csEmail), JSON.stringify(staffMail));
+      // IKR-03 — canvas yang diisi dari template diberi penanda order & template.
+      const site = db
+        .prepare("SELECT canvas_json FROM sites s JOIN users u ON u.id=s.user_id WHERE u.email=?")
+        .get("guestkeep@example.test");
+      for (const section of JSON.parse(site?.canvas_json || "[]")) {
+        assert.equal(section.sourceTemplateId, template.id);
+        assert.equal(section.templateInstanceId, `order-${guest.data.id}`);
+      }
+      // Order belum dibayar lewat 24 jam hangus dan tidak bisa dibayar lagi.
+      const late = await call("POST", "/orders", {
+        customerName: "Guest Late",
+        email: "guestlate@example.test",
+        phone: "08123456781",
+        templateId: template.id,
+      });
+      assert.equal(late.status, 201);
+      db.prepare("UPDATE orders SET created_at=? WHERE id=?").run(
+        new Date(Date.now() - 25 * 3600_000).toISOString(),
+        late.data.id,
+      );
+      const pay = await call("POST", `/orders/${late.data.id}/pay`, {
+        paymentMethod: "QRIS",
+        guestToken: late.data.guestToken,
+      });
+      assert.equal(pay.status, 410);
+      assert.equal(
+        db.prepare("SELECT payment_status FROM orders WHERE id=?").get(late.data.id)
+          .payment_status,
+        "Expired",
+      );
+    },
+  );
+  await t.test(
     "Approval publishes pending content atomically from the reviewer's perspective",
     async () => {
       assert.equal(
