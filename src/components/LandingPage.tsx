@@ -741,9 +741,26 @@ export default function LandingPage({
                   <span className="ikr-preview-action">
                     {tx.viewDesign} <ArrowRight size={16} />
                   </span>
-                  {t.recommended && (
-                    <span className="ikr-template-badge">
-                      <Star size={12} /> Recommended
+                  {/* QA 14 TC-318 — label Recommended, New, dan Diskon. */}
+                  {(t.recommended || t.isNew || t.originalPrice) && (
+                    <span className="ikr-template-badges">
+                      {t.recommended && (
+                        <span className="ikr-template-badge">
+                          <Star size={12} /> Recommended
+                        </span>
+                      )}
+                      {t.isNew && (
+                        <span className="ikr-template-badge is-new">New</span>
+                      )}
+                      {t.originalPrice ? (
+                        <span className="ikr-template-badge is-sale">
+                          Diskon{" "}
+                          {Math.round(
+                            (1 - (t.price || 0) / t.originalPrice) * 100,
+                          )}
+                          %
+                        </span>
+                      ) : null}
                     </span>
                   )}
                 </button>
@@ -752,7 +769,10 @@ export default function LandingPage({
                     <small>{t.category}</small>
                     <h3>{t.name}</h3>
                   </div>
-                  <span>{rupiah(t.price)}</span>
+                  <span className="ikr-template-price">
+                    {t.originalPrice ? <s>{rupiah(t.originalPrice)}</s> : null}
+                    {rupiah(t.price)}
+                  </span>
                 </div>
               </article>
             ))}

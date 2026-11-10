@@ -796,3 +796,19 @@
   .ikr-lang-menu button{min-width:56px;min-height:48px;font-size:14px}
 }
 .ikr-nav .ikr-login,.ikr-nav .ikr-login span{font-size:12px;font-weight:600;line-height:1}
+/* QA 14 TC-312 — katalog template: 4 kolom di desktop lebar, tetap 2 kolom
+   di ponsel kecil (sebelumnya 1 kolom di ≤380 px sehingga kartu terlalu
+   besar dan katalog sangat panjang), info kartu lebih ringkas. */
+@media (min-width: 1280px) {
+  .ikr-template-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; }
+}
+@media (max-width: 380px) {
+  .ikr-template-grid { grid-template-columns: 1fr 1fr; gap: 18px 10px; }
+  .ikr-template-info h3 { font-size: 13px; }
+  .ikr-template-badges { top: 8px; left: 8px; gap: 4px; }
+  .ikr-template-badge { font-size: 9px; padding: 4px 7px; }
+}
+@media (max-width: 640px) {
+  .ikr-template-info { display: flex; flex-direction: column; gap: 4px; }
+  .ikr-template-price { align-items: flex-start; }
+}

@@ -12,6 +12,7 @@ import {
   Suspense,
   Fragment,
   memo,
+  useSyncExternalStore,
 } from "react";
 import {
   AlignCenter,
@@ -34,6 +35,8 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronUp,
+  ChevronsUp,
+  ChevronsDown,
   ChevronRight,
   CircleHelp,
   Clock3,
@@ -54,6 +57,7 @@ import {
   LayoutDashboard,
   LogOut,
   MessageCircle,
+  Phone,
   MessageSquareText,
   Monitor,
   MoveDown,
@@ -137,6 +141,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
+import { createPortal } from "react-dom";
 import "./App.css";
 import LandingPageView, { JournalCard } from "./components/LandingPage";
 import DesignerControls from "./components/DesignerControls";
@@ -500,7 +505,9 @@ type GalleryLayoutTemplate =
   | "masonry"
   | "hero-left"
   | "hero-top"
-  | "mosaic";
+  | "mosaic"
+  /** QA 14 TC-314 — satu lingkaran dibagi dua foto (kiri & kanan). */
+  | "circle-split";
 type SaveTheDateStyle = "classic" | "card" | "ribbon" | "minimal" | "circle";
 type FormFieldKind =
   | "text"
@@ -519,6 +526,10 @@ type FormFieldSpec = {
 };
 
 type Feature = DesignerLayout & {
+  /** QA 14 TC-321 — gradien transparan (fade) pada foto Image & Our Gallery. */
+  mediaFade?: "none" | "bottom" | "top" | "left" | "right" | "edges";
+  /** Titik mulai memudar, 0–95 (%). */
+  mediaFadeStart?: number;
   id: string;
   type: FeatureType;
   title: string;
@@ -923,6 +934,9 @@ type CanvasSection = {
   minHeight: number;
   layoutMode: CanvasLayoutMode;
   invitees: Invitee[];
+  /** QA 14 TC-326 — template pesan WhatsApp (undangan & reminder RSVP). */
+  waInviteMessage?: string;
+  waReminderMessage?: string;
   templateInstanceId?: string;
   sourceTemplateId?: string;
   sourceTemplateName?: string;
@@ -956,6 +970,14 @@ type CanvasSection = {
   desktopColumnRatio?: "fixed" | "70-30";
   desktopSideTitle?: string;
   desktopSideBody?: string;
+  /** QA 14 TC-329 — gaya tata letak nama CPP & CPW / teks pengantar di sisi
+   *  visual ala Serein, dan gambar layer 2 (PNG transparan, mis. bingkai
+   *  atau bunga) di atas background, di belakang teks. */
+  desktopSideStyle?: "standard" | "stacked" | "framed" | "monogram";
+  desktopSideOverlayUrl?: string;
+  desktopSideOverlayKey?: string;
+  desktopSideOverlaySize?: number;
+  desktopSideOverlayPosition?: "center" | "top" | "bottom";
   desktopSideTextColor?: string;
   /** TC-249 — gaya header & supporting text sisi visual 70/30. */
   desktopSideTitleFont?: string;
@@ -1166,6 +1188,9 @@ export type Template = {
   premium: boolean;
   // QA TC-151 — ditandai Administrator sebagai pilihan rekomendasi.
   recommended?: boolean;
+  /** QA 14 TC-318 — harga coret (sebelum diskon) & label New. */
+  originalPrice?: number | null;
+  isNew?: boolean;
   preset?: "classic" | "split" | "cinematic" | "storybook";
   preview?: string;
   createdBy?: string;
@@ -1283,22 +1308,26 @@ function getBackgroundFilter(effect: BackgroundEffect = "none") {
 }
 
 /** TC-233 — katalog font undangan. `google` = dimuat dari Google Fonts saat
- *  dipakai (tidak membebani halaman yang tidak memakainya). */
+ *  dipakai (tidak membebani halaman yang tidak memakainya).
+ *  QA 14 TC-310 — setiap font yang punya varian tebal kini memuat bobot 700
+ *  agar tombol Bold benar-benar menebalkan; font script yang hanya punya
+ *  satu bobot (Great Vibes, Parisienne, Alex Brush, Allura) ditebalkan
+ *  secara sintetis oleh browser (lihat font-synthesis di App.css). */
 const FONT_OPTIONS: { name: string; group: string; google?: string }[] = [
-  { name: "Playfair Display", group: "Serif elegan", google: "Playfair+Display:ital,wght@0,400;0,600;1,400" },
-  { name: "Cormorant Garamond", group: "Serif elegan", google: "Cormorant+Garamond:ital,wght@0,400;0,600;1,400" },
-  { name: "Cinzel", group: "Serif elegan", google: "Cinzel:wght@400;600" },
-  { name: "Lora", group: "Serif elegan", google: "Lora:ital,wght@0,400;0,600;1,400" },
-  { name: "Libre Baskerville", group: "Serif elegan", google: "Libre+Baskerville:ital,wght@0,400;1,400" },
+  { name: "Playfair Display", group: "Serif elegan", google: "Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,700" },
+  { name: "Cormorant Garamond", group: "Serif elegan", google: "Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,700" },
+  { name: "Cinzel", group: "Serif elegan", google: "Cinzel:wght@400;600;700" },
+  { name: "Lora", group: "Serif elegan", google: "Lora:ital,wght@0,400;0,600;0,700;1,400;1,700" },
+  { name: "Libre Baskerville", group: "Serif elegan", google: "Libre+Baskerville:ital,wght@0,400;0,700;1,400" },
   { name: "Great Vibes", group: "Script / kaligrafi", google: "Great+Vibes" },
   { name: "Parisienne", group: "Script / kaligrafi", google: "Parisienne" },
   { name: "Alex Brush", group: "Script / kaligrafi", google: "Alex+Brush" },
-  { name: "Dancing Script", group: "Script / kaligrafi", google: "Dancing+Script:wght@400;600" },
+  { name: "Dancing Script", group: "Script / kaligrafi", google: "Dancing+Script:wght@400;600;700" },
   { name: "Allura", group: "Script / kaligrafi", google: "Allura" },
   { name: "DM Sans", group: "Sans modern", google: "DM+Sans:wght@400;500;700" },
   { name: "Montserrat", group: "Sans modern", google: "Montserrat:wght@400;500;700" },
-  { name: "Poppins", group: "Sans modern", google: "Poppins:wght@400;500;600" },
-  { name: "Josefin Sans", group: "Sans modern", google: "Josefin+Sans:wght@400;600" },
+  { name: "Poppins", group: "Sans modern", google: "Poppins:wght@400;500;600;700" },
+  { name: "Josefin Sans", group: "Sans modern", google: "Josefin+Sans:wght@400;600;700" },
   { name: "Georgia", group: "Font sistem" },
   { name: "Times New Roman", group: "Font sistem" },
   { name: "Arial", group: "Font sistem" },
@@ -1340,6 +1369,51 @@ const toPickerHex = (value?: string) => {
     );
   return null;
 };
+/** QA 14 TC-316 — "Warna yang Digunakan": warna yang terakhir dipakai
+ *  designer disimpan di browser (maks. 16) dan tersedia di setiap color
+ *  picker, jadi kode Hex tidak perlu disalin-tempel berulang. */
+const RECENT_COLOR_KEY = "ikrarku-recent-colors";
+let recentColors: string[] = (() => {
+  try {
+    const saved = JSON.parse(localStorage.getItem(RECENT_COLOR_KEY) || "[]");
+    return Array.isArray(saved)
+      ? saved.filter((item) => /^#[0-9a-f]{6}$/i.test(item)).slice(0, 16)
+      : [];
+  } catch {
+    return [];
+  }
+})();
+const recentColorListeners = new Set<() => void>();
+function rememberColor(value?: string) {
+  const hex = toPickerHex(value)?.toLowerCase();
+  if (!hex) return;
+  if (recentColors[0] === hex) return;
+  recentColors = [hex, ...recentColors.filter((item) => item !== hex)].slice(0, 16);
+  try {
+    localStorage.setItem(RECENT_COLOR_KEY, JSON.stringify(recentColors));
+  } catch {
+    /* penyimpanan browser tidak tersedia: riwayat hanya untuk sesi ini */
+  }
+  recentColorListeners.forEach((listener) => listener());
+}
+function useRecentColors() {
+  return useSyncExternalStore(
+    (listener) => {
+      recentColorListeners.add(listener);
+      return () => recentColorListeners.delete(listener);
+    },
+    () => recentColors,
+  );
+}
+/** Teks Hex bebas → "#rrggbb" (menerima "1B4D3E", "#1b4d3e", "#abc"). */
+function parseHexInput(text: string) {
+  const raw = text.trim().replace(/^#/, "");
+  if (/^[0-9a-f]{3}$/i.test(raw))
+    return `#${raw.replace(/./g, "$&$&")}`.toLowerCase();
+  if (/^[0-9a-f]{6}$/i.test(raw)) return `#${raw}`.toLowerCase();
+  return null;
+}
+
 function ColorInput({
   value,
   onChange,
@@ -1357,6 +1431,22 @@ function ColorInput({
   const painted = isPaintColor(value);
   const hex = (painted && toPickerHex(value)) || fallback;
   const explicitNone = Boolean(noneValue) && value === noneValue;
+  const recent = useRecentColors();
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // QA 14 TC-316 — kolom Hex sendiri yang menyimpan saat fokus keluar
+  // (klik di luar) atau Enter. Kotak Hex di dalam picker bawaan browser
+  // tidak selalu mengirim perubahan bila popup ditutup dengan klik di luar.
+  const shown = painted ? (toPickerHex(value) || value || "").toUpperCase() : "";
+  const [draft, setDraft] = useState<string | null>(null);
+  const commitDraft = () => {
+    if (draft === null) return;
+    const next = parseHexInput(draft);
+    setDraft(null);
+    if (next && next !== toPickerHex(value)?.toLowerCase()) {
+      onChange(next);
+      rememberColor(next);
+    }
+  };
   return (
     <span className={`color-input ${painted ? "" : "is-none"}`}>
       <span className="color-swatch">
@@ -1365,15 +1455,76 @@ function ColorInput({
           value={hex}
           aria-label={label || "Pilih warna"}
           onChange={(event) => onChange(event.target.value)}
+          onBlur={(event) => {
+            if (painted) rememberColor(event.target.value);
+          }}
         />
         {!painted && <i className="color-none-mark" aria-hidden />}
       </span>
-      <span className="color-value">
-        {painted
-          ? (toPickerHex(value) || value || "").toUpperCase()
-          : explicitNone
-            ? "Tanpa warna"
-            : "Tidak ada warna"}
+      <input
+        className="color-value color-hex-input"
+        value={draft ?? shown}
+        placeholder={explicitNone ? "Tanpa warna" : "Tidak ada warna"}
+        aria-label={`${label || "Warna"} (kode Hex)`}
+        spellCheck={false}
+        maxLength={7}
+        onFocus={(event) => {
+          setDraft(shown);
+          event.currentTarget.select();
+        }}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commitDraft}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            (event.currentTarget as HTMLInputElement).blur();
+          }
+          if (event.key === "Escape") {
+            setDraft(null);
+            (event.currentTarget as HTMLInputElement).blur();
+          }
+        }}
+      />
+      <span className="color-recent-wrap">
+        <button
+          type="button"
+          className="color-action"
+          title="Warna yang digunakan"
+          aria-label="Warna yang digunakan"
+          aria-expanded={paletteOpen}
+          onClick={() => setPaletteOpen((open) => !open)}
+        >
+          <Palette size={12} />
+        </button>
+        {paletteOpen && (
+          <span
+            className="color-recent"
+            role="dialog"
+            aria-label="Warna yang digunakan"
+            onMouseLeave={() => setPaletteOpen(false)}
+          >
+            <small>Warna yang digunakan</small>
+            {recent.length ? (
+              <span className="color-recent-grid">
+                {recent.map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    title={item.toUpperCase()}
+                    style={{ background: item }}
+                    onClick={() => {
+                      onChange(item);
+                      rememberColor(item);
+                      setPaletteOpen(false);
+                    }}
+                  />
+                ))}
+              </span>
+            ) : (
+              <em>Belum ada. Warna yang Anda pilih akan muncul di sini.</em>
+            )}
+          </span>
+        )}
       </span>
       {noneValue && !explicitNone && (
         <button
@@ -3105,6 +3256,47 @@ function App() {
     rows: [],
   });
   const [myOrders, setMyOrders] = useState<any[]>([]);
+  // QA 14 (SSBug3/4) — design milik customer = satu per order yang dibayar.
+  const customerDesigns = useMemo(
+    () =>
+      role === "User"
+        ? buildCustomerDesignGroups(myOrders, sections, templateCatalog).filter(
+            (design) => !design.pending && design.sections.length > 0,
+          )
+        : [],
+    [role, myOrders, sections, templateCatalog],
+  );
+  // QA 14 TC-320 — selama pekerjaan Web Designer pada order customer belum
+  // selesai (task Web Designer belum Done), setiap preview yang dilihat
+  // customer diberi watermark DRAFT agar desain tidak diambil sebelum
+  // pesanan selesai. Undangan publik (sudah Published) tidak terpengaruh.
+  const customerDesignDraft = useMemo(() => {
+    if (role !== "User") return false;
+    const paid = myOrders.filter((order: any) => order?.payment_status === "Paid");
+    if (!paid.length) return false;
+    return !paid.some((order: any) => {
+      const editorTasks = (order.tasks || []).filter(
+        (task: any) => task.assigned_role_id === "role_editor",
+      );
+      return (
+        editorTasks.length > 0 &&
+        editorTasks.every((task: any) => task.status === "Done")
+      );
+    });
+  }, [role, myOrders]);
+  // Canvas aktif dashboard customer selalu canvas daftar undangan dari
+  // design-nya, supaya Dashboard, List Undangan, dan RSVP membaca data yang
+  // sama.
+  useEffect(() => {
+    if (!customerDesigns.length) return;
+    const design =
+      customerDesigns.find((item) =>
+        item.sections.some((section) => section.id === selectedDashboardCanvasId),
+      ) || customerDesigns[0];
+    const target = designGuestCanvas(design)?.id;
+    if (target && target !== selectedDashboardCanvasId)
+      setSelectedDashboardCanvasId(target);
+  }, [customerDesigns, selectedDashboardCanvasId]);
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const [notificationMuted, setNotificationMuted] = useState<boolean>(
     () => localStorage.getItem("ikrarku-notification-muted") === "true",
@@ -4791,6 +4983,26 @@ function App() {
     }
   };
 
+  // QA 14 TC-311 — Administrator menghapus template. Template yang pernah
+  // dipesan diarsipkan server (riwayat order & website customer utuh).
+  const deleteTemplateById = async (templateId: string) => {
+    try {
+      const result = await api.deleteTemplate(templateId);
+      setTemplateCatalog((previous) =>
+        previous.filter((item) => item.id !== templateId),
+      );
+      setPublicTemplates((previous) =>
+        previous.filter((item) => item.id !== templateId),
+      );
+      flash(
+        result?.archived
+          ? `Template dihapus dari katalog. ${result.orders} order lama tetap tersimpan.`
+          : "Template dihapus permanen.",
+      );
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Gagal menghapus template.");
+    }
+  };
   // QA TC-075 & TC-076: takedown / republish template yang sudah live.
   const takedownTemplate = async (templateId: string, reason: string) => {
     try {
@@ -4856,6 +5068,8 @@ function App() {
       flash(`${label} harus berupa image.`);
       return;
     }
+    // QA 14 TC-313 — gambar besar dikompres otomatis, bukan ditolak.
+    file = await shrinkImageToLimit(file, 2 * 1024 * 1024);
     if (file.size > 2 * 1024 * 1024) {
       flash(`${label} maksimal 2 MB.`);
       return;
@@ -4907,12 +5121,21 @@ function App() {
   const uploadTemplateThumbnail = (templateId: string, file: File) =>
     uploadTemplateImage(templateId, file, "thumbnail");
   // QA TC-151 — tandai/lepas tanda rekomendasi pada katalog publik.
-  const setTemplatePrice = async (templateId: string, price: number) => {
+  const setTemplatePrice = async (
+    templateId: string,
+    price: number,
+    originalPrice?: number,
+  ) => {
     try {
-      const updated = await api.setTemplatePrice(templateId, price);
+      const updated = await api.setTemplatePrice(templateId, price, originalPrice);
       const patch = (item: Template) =>
         item.id === templateId
-          ? { ...item, price: updated.price, premium: updated.premium }
+          ? {
+              ...item,
+              price: updated.price,
+              premium: updated.premium,
+              originalPrice: updated.originalPrice,
+            }
           : item;
       setTemplateCatalog((previous) => previous.map(patch));
       setPublicTemplates((previous) => previous.map(patch));
@@ -5142,6 +5365,8 @@ function App() {
     customerName: string,
     email: string,
     phone: string,
+    weddingDate = "",
+    weddingTime = "",
   ) => {
     if (!selectedPublicTemplate) return null;
     try {
@@ -5149,6 +5374,8 @@ function App() {
         customerName,
         email,
         phone,
+        weddingDate,
+        weddingTime,
         templateId: selectedPublicTemplate.id,
       });
       setCheckoutOrder(order);
@@ -5673,6 +5900,7 @@ function App() {
   }
 
   return (
+    <DraftWatermarkContext value={customerDesignDraft}>
     <div className="app-shell">
       {sidebarOpen && (
         <div
@@ -5715,12 +5943,23 @@ function App() {
               siteTitle={siteTitle}
               guests={guests}
               sections={sections}
+              designs={customerDesigns}
               orders={myOrders}
               selectedCanvasId={selectedDashboardCanvasId}
               setSelectedCanvasId={setSelectedDashboardCanvasId}
               setGuestsOpen={setGuestsOpen}
               setPreviewOpen={setPreviewOpen}
               teamEdit={teamEdit}
+              customerName={currentAccount?.name || ""}
+              onContactSupport={() => setChatWidgetOpen(true)}
+              onOrdersChanged={async () => {
+                try {
+                  setMyOrders(await api.myOrders());
+                } catch {
+                  /* biarkan data lama */
+                }
+              }}
+              flash={flash}
             />
           )}
         {view === "dashboard" && hasPermission("dashboard.editor") && (
@@ -5769,6 +6008,9 @@ function App() {
             currentAccountId={currentAccountId}
             canApprove={hasPermission("templates.approve")}
             onTakedown={takedownTemplate}
+            onDeleteTemplate={
+              hasPermission("*") ? deleteTemplateById : undefined
+            }
             onRepublish={republishTemplate}
             onUploadSample={uploadTemplateSample}
             onUploadThumbnail={uploadTemplateThumbnail}
@@ -5875,7 +6117,7 @@ function App() {
                 <div className="eyebrow">GUEST MANAGEMENT</div>
                 <h1>List Undangan</h1>
                 <p>
-                  Kelola daftar tamu per Canvas, impor dari CSV, dan ekspor
+                  Kelola daftar tamu undangan, impor dari CSV, dan ekspor
                   kembali kapan saja. Perubahan tersimpan otomatis.
                 </p>
               </div>
@@ -5885,6 +6127,7 @@ function App() {
             </div>
             <InviteeManagementPage
               sections={sections}
+              designs={customerDesigns}
               selectedSectionId={selectedDashboardCanvasId}
               selectSection={(section) =>
                 setSelectedDashboardCanvasId(section.id)
@@ -6086,9 +6329,17 @@ function App() {
       )}
       {guestsOpen && (
         <GuestsModal
-          guests={guests.filter(
-            (guest) => guest.canvasId === selectedDashboardCanvasId,
-          )}
+          guests={guests.filter((guest) => {
+            // QA 14 — customer: RSVP dari canvas mana pun dalam design aktif.
+            const design = customerDesigns.find((item) =>
+              item.sections.some(
+                (section) => section.id === selectedDashboardCanvasId,
+              ),
+            );
+            return design
+              ? design.sections.some((section) => section.id === guest.canvasId)
+              : guest.canvasId === selectedDashboardCanvasId;
+          })}
           onClose={() => setGuestsOpen(false)}
         />
       )}
@@ -6132,6 +6383,7 @@ function App() {
       )}
       {toast && <Toast message={toast} />}
     </div>
+    </DraftWatermarkContext>
   );
 }
 
@@ -6431,9 +6683,29 @@ function AllDesignsPage({
                 <span className="ikr-preview-action">
                   Lihat desain <ArrowRight size={16} />
                 </span>
-                {template.recommended && (
-                  <span className="ikr-template-badge">
-                    <Star size={12} /> Recommended
+                {/* QA 14 TC-318 — label Recommended, New, dan Diskon. */}
+                {(template.recommended ||
+                  template.isNew ||
+                  template.originalPrice) && (
+                  <span className="ikr-template-badges">
+                    {template.recommended && (
+                      <span className="ikr-template-badge">
+                        <Star size={12} /> Recommended
+                      </span>
+                    )}
+                    {template.isNew && (
+                      <span className="ikr-template-badge is-new">New</span>
+                    )}
+                    {template.originalPrice ? (
+                      <span className="ikr-template-badge is-sale">
+                        Diskon{" "}
+                        {Math.round(
+                          (1 - (template.price || 0) / template.originalPrice) *
+                            100,
+                        )}
+                        %
+                      </span>
+                    ) : null}
                   </span>
                 )}
               </button>
@@ -6442,7 +6714,12 @@ function AllDesignsPage({
                   <small>{template.category}</small>
                   <h3>{template.name}</h3>
                 </div>
-                <span>{formatRupiah(template.price || 0)}</span>
+                <span className="ikr-template-price">
+                  {template.originalPrice ? (
+                    <s>{formatRupiah(template.originalPrice)}</s>
+                  ) : null}
+                  {formatRupiah(template.price || 0)}
+                </span>
               </div>
             </article>
           ))}
@@ -7396,6 +7673,8 @@ function CheckoutPage({
     name: string,
     email: string,
     phone: string,
+    weddingDate?: string,
+    weddingTime?: string,
   ) => Promise<OrderResult | null>;
   payOrder: (method: string) => Promise<boolean>;
   onSignIn: () => void;
@@ -7413,15 +7692,30 @@ function CheckoutPage({
   const [name, setName] = useState(String(draft.name || ""));
   const [email, setEmail] = useState(String(draft.email || ""));
   const [phone, setPhone] = useState(String(draft.phone || ""));
+  // QA 14 TC-324 — tanggal & jam pernikahan untuk countdown di dashboard.
+  const [weddingDate, setWeddingDate] = useState(String(draft.weddingDate || ""));
+  const [weddingTime, setWeddingTime] = useState(String(draft.weddingTime || ""));
+  const todayIso = new Date(Date.now() - new Date().getTimezoneOffset() * 60000)
+    .toISOString()
+    .slice(0, 10);
+  const validWeddingDate =
+    /^\d{4}-\d{2}-\d{2}$/.test(weddingDate) && weddingDate >= todayIso;
   const [method, setMethod] = useState(paymentMethods[0]?.code || "");
   const [working, setWorking] = useState(false);
   const [payError, setPayError] = useState("");
   useEffect(() => {
     sessionStorage.setItem(
       "ikrarku-checkout-draft",
-      JSON.stringify({ templateId: template.id, name, email, phone }),
+      JSON.stringify({
+        templateId: template.id,
+        name,
+        email,
+        phone,
+        weddingDate,
+        weddingTime,
+      }),
     );
-  }, [template.id, name, email, phone]);
+  }, [template.id, name, email, phone, weddingDate, weddingTime]);
   const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   const validPhone = phone.replace(/\D/g, "").length >= 9;
   // QA TC-072: sistem mengenali status akun dari email pemesan lalu mengarahkan ke Sign In (auto-fill) atau Sign Up.
@@ -7564,12 +7858,49 @@ function CheckoutPage({
                   </small>
                 )}
               </label>
+              <div className="checkout-wedding-row">
+                <label>
+                  Tanggal pernikahan
+                  <input
+                    type="date"
+                    value={weddingDate}
+                    min={todayIso}
+                    onChange={(e) => setWeddingDate(e.target.value)}
+                    required
+                  />
+                  {weddingDate && !validWeddingDate && (
+                    <small className="password-error">
+                      Tanggal pernikahan tidak boleh sebelum hari ini.
+                    </small>
+                  )}
+                </label>
+                <label>
+                  Jam acara
+                  <input
+                    type="time"
+                    value={weddingTime}
+                    onChange={(e) => setWeddingTime(e.target.value)}
+                    required
+                  />
+                </label>
+              </div>
+              <small className="checkout-wedding-note">
+                Dipakai untuk hitung mundur di dashboard Anda dan bisa diubah
+                nanti.
+              </small>
               <button
                 className="primary-btn checkout-next"
-                disabled={!name.trim() || !validEmail || !validPhone || working}
+                disabled={
+                  !name.trim() ||
+                  !validEmail ||
+                  !validPhone ||
+                  !validWeddingDate ||
+                  !/^\d{2}:\d{2}$/.test(weddingTime) ||
+                  working
+                }
                 onClick={async () => {
                   setWorking(true);
-                  await createOrder(name, email, phone);
+                  await createOrder(name, email, phone, weddingDate, weddingTime);
                   setWorking(false);
                 }}
               >
@@ -8715,7 +9046,10 @@ function Sidebar({
         ))}
       </nav>
       <div className="sidebar-bottom">
-        {role === "User" && (
+        {/* QA 14 (SSBug2) — kartu "ikrarku Signature" disembunyikan dulu:
+            paket langganan belum ada dan tombolnya tidak mengarah ke mana
+            pun. Ubah SHOW_SIGNATURE_UPSELL menjadi true saat paket siap. */}
+        {SHOW_SIGNATURE_UPSELL && role === "User" && (
           <div className="upgrade-card">
             <Crown size={18} />
             <strong>ikrarku Signature</strong>
@@ -8841,19 +9175,255 @@ function Topbar({
   );
 }
 
+function timeGreeting(date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 11) return "Selamat pagi";
+  if (hour < 15) return "Selamat siang";
+  if (hour < 18) return "Selamat sore";
+  return "Selamat malam";
+}
+
+/** QA 14 TC-323 — sisa waktu menuju hari pernikahan (per detik). */
+function useCountdown(target: Date | null) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!target) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [target]);
+  if (!target) return null;
+  const diff = Math.max(0, target.getTime() - now);
+  return {
+    done: diff === 0,
+    days: Math.floor(diff / 86_400_000),
+    hours: Math.floor(diff / 3_600_000) % 24,
+    minutes: Math.floor(diff / 60_000) % 60,
+    seconds: Math.floor(diff / 1000) % 60,
+  };
+}
+
+/**
+ * QA 14 — beranda customer: sambutan + countdown hari pernikahan (TC-323)
+ * dan kontak CS & Web Designer yang menangani order (TC-325). Tanggal
+ * pernikahan diambil dari form checkout (TC-324); order lama dapat
+ * mengisinya di sini.
+ */
+function CustomerWelcome({
+  orders,
+  customerName,
+  onContactSupport,
+  onOrdersChanged,
+  flash,
+}: {
+  orders: any[];
+  customerName: string;
+  onContactSupport?: () => void;
+  onOrdersChanged?: () => void;
+  flash?: (message: string) => void;
+}) {
+  const order =
+    orders.find(
+      (item: any) => item?.payment_status === "Paid" && item?.wedding_date,
+    ) || orders.find((item: any) => item?.payment_status === "Paid");
+  const [editing, setEditing] = useState(false);
+  const [date, setDate] = useState(order?.wedding_date || "");
+  const [time, setTime] = useState(order?.wedding_time || "");
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    setDate(order?.wedding_date || "");
+    setTime(order?.wedding_time || "");
+  }, [order?.wedding_date, order?.wedding_time]);
+  const target = useMemo(() => {
+    if (!order?.wedding_date) return null;
+    const parsed = new Date(
+      `${order.wedding_date}T${order.wedding_time || "00:00"}:00`,
+    );
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }, [order?.wedding_date, order?.wedding_time]);
+  const left = useCountdown(target);
+  if (!order) return null;
+  const firstName =
+    (customerName || order.customer_name || "").trim().split(/\s+/)[0] || "";
+  const save = async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      flash?.("Isi tanggal pernikahan terlebih dahulu.");
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.updateWeddingDate(order.id, date, time);
+      flash?.("Tanggal pernikahan tersimpan.");
+      setEditing(false);
+      onOrdersChanged?.();
+    } catch (error) {
+      flash?.(
+        error instanceof Error ? error.message : "Gagal menyimpan tanggal.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  };
+  const whatsapp = String(order.support_whatsapp || "").replace(/\D/g, "");
+  const waNumber = whatsapp.startsWith("0") ? `62${whatsapp.slice(1)}` : whatsapp;
+  const team = [
+    { role: "Customer Service", name: order.cs_name?.trim() },
+    { role: "Web Designer", name: order.editor_name?.trim() },
+  ];
+  const dateLabel = target
+    ? new Intl.DateTimeFormat("id-ID", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+      }).format(target) + (order.wedding_time ? ` · ${order.wedding_time} WIB` : "")
+    : "";
+  return (
+    <div className="customer-welcome">
+      <section className="welcome-card">
+        <div className="welcome-text">
+          <span className="welcome-kicker">
+            <Sparkles size={13} /> ikrarku untuk Anda
+          </span>
+          <h2>Hai{firstName ? `, ${firstName}` : ""}!</h2>
+          <p>
+            Selamat datang di ikrarku. Tim kami sedang menyiapkan undangan
+            digital yang menceritakan kisah Anda — pantau progresnya, kelola
+            daftar tamu, dan hubungi tim kapan saja dari halaman ini.
+          </p>
+        </div>
+        <div className="welcome-countdown">
+          {target && !editing ? (
+            <>
+              <small>{left?.done ? "Hari bahagia telah tiba" : "Menuju hari pernikahan"}</small>
+              <div className="countdown-grid" aria-live="off">
+                {(
+                  [
+                    ["Hari", left?.days ?? 0],
+                    ["Jam", left?.hours ?? 0],
+                    ["Menit", left?.minutes ?? 0],
+                    ["Detik", left?.seconds ?? 0],
+                  ] as [string, number][]
+                ).map(([label, value]) => (
+                  <span key={label}>
+                    <strong>{String(value).padStart(2, "0")}</strong>
+                    <em>{label}</em>
+                  </span>
+                ))}
+              </div>
+              <div className="countdown-foot">
+                <span>{dateLabel}</span>
+                <button type="button" onClick={() => setEditing(true)}>
+                  Ubah
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="countdown-form">
+              <small>
+                {target ? "Ubah tanggal pernikahan" : "Kapan hari bahagia Anda?"}
+              </small>
+              <div>
+                <input
+                  type="date"
+                  value={date}
+                  aria-label="Tanggal pernikahan"
+                  onChange={(event) => setDate(event.target.value)}
+                />
+                <input
+                  type="time"
+                  value={time}
+                  aria-label="Jam acara"
+                  onChange={(event) => setTime(event.target.value)}
+                />
+              </div>
+              <div className="countdown-actions">
+                {target && (
+                  <button type="button" onClick={() => setEditing(false)}>
+                    Batal
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="primary"
+                  disabled={saving}
+                  onClick={() => void save()}
+                >
+                  {saving ? "Menyimpan..." : "Simpan & mulai hitung mundur"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+      <section className="team-card">
+        <header>
+          <strong>Tim yang menangani undangan Anda</strong>
+          <span>{order.order_no}</span>
+        </header>
+        <ul>
+          {team.map((member) => (
+            <li key={member.role}>
+              <span className="team-avatar" aria-hidden>
+                {(member.name || member.role)
+                  .split(/\s+/)
+                  .map((part: string) => part[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase()}
+              </span>
+              <div>
+                <strong>{member.name || "Sedang ditentukan"}</strong>
+                <small>{member.role}</small>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="team-actions">
+          {onContactSupport && (
+            <button type="button" className="primary" onClick={onContactSupport}>
+              <MessageCircle size={14} /> Chat dengan tim
+            </button>
+          )}
+          {waNumber && (
+            <a
+              href={`https://wa.me/${waNumber}?text=${encodeURIComponent(`Halo ikrarku, saya ${order.customer_name} (${order.order_no}).`)}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Phone size={14} /> WhatsApp CS
+            </a>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function Dashboard({
   setView,
   slug,
   siteTitle,
   guests,
-  sections,
+  sections: allSections,
+  designs = [],
   orders,
   selectedCanvasId,
   setSelectedCanvasId,
   setGuestsOpen,
   setPreviewOpen,
   teamEdit = null,
+  customerName = "",
+  onContactSupport,
+  onOrdersChanged,
+  flash,
 }: {
+  customerName?: string;
+  onContactSupport?: () => void;
+  onOrdersChanged?: () => void;
+  flash?: (message: string) => void;
+  /** QA 14 (SSBug4) — design customer (satu per order). Bila ada, dashboard
+   *  menampilkan dan menghitung per design, bukan per canvas internal. */
+  designs?: WebsiteDesignGroup[];
   teamEdit?: { name: string; at: string } | null;
   setView: (view: View) => void;
   slug: string;
@@ -8866,12 +9436,31 @@ function Dashboard({
   setGuestsOpen: (value: boolean) => void;
   setPreviewOpen: (value: boolean) => void;
 }) {
-  const selectedCanvas =
-    sections.find((section) => section.id === selectedCanvasId) || sections[0];
-  const canvasGuests = guests.filter(
-    (guest) => guest.canvasId === selectedCanvas?.id,
+  const activeDesign = designs.length
+    ? designs.find((design) =>
+        design.sections.some((section) => section.id === selectedCanvasId),
+      ) || designs[0]
+    : undefined;
+  const sections = activeDesign ? activeDesign.sections : allSections;
+  const selectedCanvas = activeDesign
+    ? designGuestCanvas(activeDesign)
+    : sections.find((section) => section.id === selectedCanvasId) ||
+      sections[0];
+  const scopeIds = new Set(
+    (activeDesign ? sections : selectedCanvas ? [selectedCanvas] : []).map(
+      (section) => section.id,
+    ),
   );
-  const invited = selectedCanvas?.invitees.length || 0;
+  const canvasGuests = guests.filter((guest) => scopeIds.has(guest.canvasId || ""));
+  const invited = activeDesign
+    ? sections.reduce((total, section) => total + section.invitees.length, 0)
+    : selectedCanvas?.invitees.length || 0;
+  const featureCount = (activeDesign ? sections : selectedCanvas ? [selectedCanvas] : []).reduce(
+    (total, section) =>
+      total +
+      section.columns.reduce((sum, column) => sum + column.features.length, 0),
+    0,
+  );
   const hadir = canvasGuests
     .filter((guest) => guest.status === "Hadir")
     .reduce((total, guest) => total + Math.max(guest.pax, 1), 0);
@@ -8992,28 +9581,60 @@ function Dashboard({
       )}
       <div className="page-heading">
         <div>
-          <div className="eyebrow">GOOD AFTERNOON</div>
+          <div className="eyebrow">{timeGreeting().toUpperCase()}</div>
           <h1>Wedding dashboard</h1>
-          <p>Data di bawah mengikuti Canvas yang dipilih secara real-time.</p>
+          <p>
+            {activeDesign
+              ? "Ringkasan undangan, daftar tamu, dan RSVP Anda secara real-time."
+              : "Data di bawah mengikuti Canvas yang dipilih secara real-time."}
+          </p>
         </div>
         <div className="heading-actions">
-          <label className="canvas-dashboard-select">
-            <span>Active Canvas</span>
-            <select
-              value={selectedCanvas.id}
-              onChange={(event) => setSelectedCanvasId(event.target.value)}
-            >
-              {sections.map((section) => (
-                <option value={section.id} key={section.id}>
-                  {section.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          {/* QA 14 (SSBug3/4) — customer memilih UNDANGAN (design yang
+              dibeli), hanya bila punya lebih dari satu; nama canvas internal
+              seperti "Main Canvas (salinan)" tidak ditampilkan. */}
+          {activeDesign ? (
+            designs.length > 1 && (
+              <label className="canvas-dashboard-select">
+                <span>Undangan</span>
+                <select
+                  value={selectedCanvas.id}
+                  onChange={(event) => setSelectedCanvasId(event.target.value)}
+                >
+                  {designs.map((design) => (
+                    <option
+                      value={designGuestCanvas(design).id}
+                      key={design.id}
+                    >
+                      {design.name}
+                      {design.orderNo ? ` · ${design.orderNo}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )
+          ) : (
+            <label className="canvas-dashboard-select">
+              <span>Active Canvas</span>
+              <select
+                value={selectedCanvas.id}
+                onChange={(event) => setSelectedCanvasId(event.target.value)}
+              >
+                {sections.map((section) => (
+                  <option value={section.id} key={section.id}>
+                    {section.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
           <button
             className="primary-btn"
             onClick={() => {
-              sessionStorage.setItem("ikrarku-edit-canvas", selectedCanvas.id);
+              sessionStorage.setItem(
+                "ikrarku-edit-canvas",
+                activeDesign ? sections[0].id : selectedCanvas.id,
+              );
               setView("editor");
             }}
           >
@@ -9021,8 +9642,31 @@ function Dashboard({
           </button>
         </div>
       </div>
-      <div className="site-status-card">
-        <CanvasThumbnail section={selectedCanvas} title={siteTitle} />
+      {orders.some((order: any) => order?.payment_status === "Paid") && (
+        <CustomerWelcome
+          orders={orders}
+          customerName={customerName}
+          onContactSupport={onContactSupport}
+          onOrdersChanged={onOrdersChanged}
+          flash={flash}
+        />
+      )}
+      <div className={`site-status-card${activeDesign ? " design-mode" : ""}`}>
+        {/* QA 14 (SSBug4) — pratinjau = render undangan yang sebenarnya
+            (sama dengan card Template & Canvas), bukan sketsa canvas yang
+            memakai teks contoh. */}
+        {activeDesign ? (
+          <div className="site-status-preview">
+            <WebsiteTemplatePreview
+              template={activeDesign.template}
+              title={siteTitle}
+              sections={sections}
+              bare
+            />
+          </div>
+        ) : (
+          <CanvasThumbnail section={selectedCanvas} title={siteTitle} />
+        )}
         <div className="site-status-info">
           <div className="published-badge">
             <span />
@@ -9030,13 +9674,18 @@ function Dashboard({
           </div>
           <h3>{siteTitle}</h3>
           <p>
-            {selectedCanvas.name} · ikrarku.id/{slug} ·{" "}
-            {selectedCanvas.columns.length} column ·{" "}
-            {selectedCanvas.columns.reduce(
-              (total, column) => total + column.features.length,
-              0,
-            )}{" "}
-            features
+            {activeDesign ? (
+              <>
+                {activeDesign.name} · ikrarku.id/{slug} · {sections.length}{" "}
+                canvas · {featureCount} fitur
+              </>
+            ) : (
+              <>
+                {selectedCanvas.name} · ikrarku.id/{slug} ·{" "}
+                {selectedCanvas.columns.length} column · {featureCount}{" "}
+                features
+              </>
+            )}
           </p>
           <div className="inline-actions">
             <button onClick={() => setPreviewOpen(true)}>
@@ -9086,7 +9735,7 @@ function Dashboard({
           icon={Users}
           label="Tamu diundang"
           value={String(invited)}
-          note="Berdasarkan list Canvas"
+          note={activeDesign ? "Berdasarkan daftar tamu" : "Berdasarkan list Canvas"}
         />
         <Stat
           icon={Check}
@@ -9111,8 +9760,15 @@ function Dashboard({
         <div className="panel chart-panel">
           <div className="panel-head">
             <div>
-              <h3>RSVP activity · {selectedCanvas.name}</h3>
-              <p>Aktivitas respons pada Canvas terpilih</p>
+              <h3>
+                RSVP activity ·{" "}
+                {activeDesign ? activeDesign.name : selectedCanvas.name}
+              </h3>
+              <p>
+                {activeDesign
+                  ? "Aktivitas respons pada undangan Anda"
+                  : "Aktivitas respons pada Canvas terpilih"}
+              </p>
             </div>
             <span className="data-live">
               <i /> Live data
@@ -9128,7 +9784,10 @@ function Dashboard({
           <div className="panel-head">
             <div>
               <h3>RSVP terbaru</h3>
-              <p>{canvasGuests.length} respons pada Canvas ini</p>
+              <p>
+                {canvasGuests.length} respons pada{" "}
+                {activeDesign ? "undangan ini" : "Canvas ini"}
+              </p>
             </div>
             <button
               className="text-btn interactive-link"
@@ -9149,8 +9808,8 @@ function Dashboard({
               <Users size={24} />
               <strong>Belum ada respons</strong>
               <span>
-                Respons RSVP akan muncul setelah tamu mengisi form pada Canvas
-                ini.
+                Respons RSVP akan muncul setelah tamu mengisi form pada{" "}
+                {activeDesign ? "undangan" : "Canvas"} ini.
               </span>
             </div>
           )}
@@ -9792,6 +10451,20 @@ type WebsiteDesignGroup = {
 };
 
 /**
+ * QA 14 (SSBug3) — canvas tempat daftar undangan sebuah design disimpan.
+ * Daftar undangan secara teknis milik canvas, tetapi customer mengelolanya
+ * per design (undangan yang ia beli), bukan per "Main Canvas", "New Canvas
+ * (salinan)", dst. Canvas pertama yang sudah berisi undangan dipakai supaya
+ * daftar lama tidak "hilang"; bila belum ada, canvas pertama design.
+ */
+function designGuestCanvas(design: WebsiteDesignGroup) {
+  return (
+    design.sections.find((section) => section.invitees.length > 0) ||
+    design.sections[0]
+  );
+}
+
+/**
  * Daftar design pada dashboard customer dibangun dari ORDER, bukan dari isi
  * canvas yang kebetulan tersimpan.
  *
@@ -9801,6 +10474,9 @@ type WebsiteDesignGroup = {
  * miliknya ikut ditampilkan; kalau belum, card-nya tampil sebagai "sedang
  * disiapkan" supaya customer tahu pesanannya terdaftar.
  */
+/** QA 14 (SSBug2) — kartu upsell paket Signature di sidebar customer. */
+const SHOW_SIGNATURE_UPSELL = false;
+
 function buildCustomerDesignGroups(
   orders: any[],
   sections: CanvasSection[],
@@ -9857,14 +10533,20 @@ function buildCustomerDesignGroups(
     pendingGroups[0].pending = false;
     leftovers = [];
   }
-  if (leftovers.length)
-    groups.push(
-      ...buildWebsiteDesignGroups(
-        leftovers,
-        templateCatalog,
-        templateCatalog[0] || ({} as Template),
-      ),
+  // QA 14 (SSBug1 / TC-327) — canvas tanpa pemilik (canvas awal "Main
+  // Canvas", salinan, atau canvas yang ditambahkan tim) dulu tampil sebagai
+  // card "Applied Template · <template lain>" sendiri, sehingga customer yang
+  // membeli SATU template melihat dua design. Bagi customer, jumlah card =
+  // jumlah order: canvas tanpa pemilik digabung ke design order terbaru yang
+  // sudah punya canvas (urutan order dari server: terbaru dulu).
+  if (leftovers.length) {
+    const host = groups.find((group) => !group.pending) || groups[0];
+    host.sections = [...host.sections, ...leftovers].sort(
+      (a, b) => sections.indexOf(a) - sections.indexOf(b),
     );
+    host.pending = false;
+    leftovers = [];
+  }
   return groups;
 }
 
@@ -9893,6 +10575,8 @@ const ThumbnailContext = createContext(false);
  * icon musik yang nyangkut pada cover thumbnail. Di dalam preview tombolnya
  * ditempel pada kotak preview itu sendiri.
  */
+/** QA 14 TC-320 — preview untuk customer yang pesanannya belum selesai. */
+const DraftWatermarkContext = createContext(false);
 const PreviewSurfaceContext = createContext(false);
 /** TC-244 — skala preview Desktop. Desain tetap ditata pada lebar canvas
  *  editor, lalu diperbesar/diperkecil agar pas dengan lebar layar: tidak ada
@@ -10411,6 +11095,7 @@ function Templates({
   currentAccountId,
   canApprove = false,
   onTakedown,
+  onDeleteTemplate,
   onRepublish,
   onUploadSample,
   onUploadThumbnail,
@@ -10446,13 +11131,18 @@ function Templates({
   currentAccountId?: string;
   canApprove?: boolean;
   onTakedown?: (templateId: string, reason: string) => Promise<void>;
+  onDeleteTemplate?: (templateId: string) => Promise<void>;
   onRepublish?: (templateId: string) => Promise<void>;
   onUploadSample?: (templateId: string, file: File) => Promise<void>;
   onUploadThumbnail?: (templateId: string, file: File) => Promise<void>;
   onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
   onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
-  onSetPrice?: (templateId: string, price: number) => Promise<void>;
+  onSetPrice?: (
+    templateId: string,
+    price: number,
+    originalPrice?: number,
+  ) => Promise<void>;
   onReviewRevision?: (
     templateId: string,
     status: "Approved" | "Rejected",
@@ -10631,8 +11321,15 @@ function Templates({
                 <div className="website-canvas-meta">
                   <div>
                     <span className="published-dot">
-                      {design.template ? "Applied Template" : "Custom Design"} ·{" "}
-                      {design.name}
+                      {/* QA 14 — bagi customer selalu "Template dibeli";
+                          "Custom Design" membingungkan bila template yang
+                          dibeli sudah tidak tampil di katalog. */}
+                      {role === "User"
+                        ? "Template dibeli"
+                        : design.template
+                          ? "Applied Template"
+                          : "Custom Design"}{" "}
+                      · {design.name}
                     </span>
                     <h3>{siteTitle}</h3>
                     <p>{design.sections.length} Canvas di dalam design</p>
@@ -10641,9 +11338,14 @@ function Templates({
                     </small>
                   </div>
                   <div className="website-canvas-actions">
-                    <button onClick={() => duplicateCanvas(ids)}>
-                      <Copy size={15} /> Copy
-                    </button>
+                    {/* QA 14 (SSBug1) — Copy & Delete tidak tersedia untuk
+                        customer: menyalin membuat design kedua (card ganda),
+                        menghapus mengosongkan undangan yang sudah dibeli. */}
+                    {role !== "User" && (
+                      <button onClick={() => duplicateCanvas(ids)}>
+                        <Copy size={15} /> Copy
+                      </button>
+                    )}
                     <button
                       className="primary"
                       onClick={() =>
@@ -10652,12 +11354,14 @@ function Templates({
                     >
                       <WandSparkles size={15} /> Edit
                     </button>
-                    <button
-                      className="danger"
-                      onClick={() => deleteCanvas(ids)}
-                    >
-                      <Trash2 size={15} /> Delete
-                    </button>
+                    {role !== "User" && (
+                      <button
+                        className="danger"
+                        onClick={() => deleteCanvas(ids)}
+                      >
+                        <Trash2 size={15} /> Delete
+                      </button>
+                    )}
                     {onContactSupport && (
                       <button onClick={onContactSupport}>
                         <Headphones size={15} /> Hubungi Support
@@ -10744,6 +11448,7 @@ function Templates({
           currentAccountId={currentAccountId}
           canApprove={canApprove}
           onTakedown={onTakedown}
+          onDeleteTemplate={onDeleteTemplate}
           onRepublish={onRepublish}
           onUploadSample={onUploadSample}
           onUploadThumbnail={onUploadThumbnail}
@@ -12371,13 +13076,24 @@ function Editor({
       flash("Background harus berupa image, GIF, atau video (MP4/WebM).");
       return;
     }
-    const limit = isVideo ? 10 * 1024 * 1024 : 4 * 1024 * 1024;
-    if (!isVideo) file = await shrinkImageToLimit(file, limit);
+    if (!isVideo && file.size > BACKGROUND_SOURCE_LIMIT) {
+      flash("Background image maksimal 25 MB.");
+      return;
+    }
+    const limit = isVideo ? 10 * 1024 * 1024 : BACKGROUND_IMAGE_LIMIT;
+    if (!isVideo) {
+      const original = file.size;
+      file = await shrinkImageToLimit(file, limit, BACKGROUND_IMAGE_SIDE);
+      if (file.size < original)
+        flash(
+          `Background dikompres otomatis (${(original / 1048576).toFixed(1)} MB → ${(file.size / 1048576).toFixed(1)} MB) dengan resolusi tetap HD.`,
+        );
+    }
     if (file.size > limit) {
       flash(
         isVideo
           ? "Background video maksimal 10 MB."
-          : "Background image/GIF maksimal 4 MB.",
+          : "Background GIF maksimal 8 MB (GIF tidak bisa dikompres otomatis).",
       );
       return;
     }
@@ -13356,7 +14072,8 @@ function Editor({
             <p>
               Revision tersimpan saat manual save. Restore akan memuat versi
               tersebut sebagai draft dan tidak menimpa data sampai Anda menekan
-              Save.
+              Save. Versi bertanda <b>Versi tim</b> adalah tampilan terakhir
+              buatan tim sebelum customer mengubahnya.
             </p>
             <div className="revision-list">
               {revisionsLoading ? (
@@ -13371,13 +14088,21 @@ function Editor({
                     className={
                       String(revision.reason || "").startsWith("Draft dibuang")
                         ? "revision-discarded"
-                        : undefined
+                        : revision.reason === "Versi tim sebelum diubah customer"
+                          ? "revision-team"
+                          : undefined
                     }
                     onClick={() => restoreRevision(revision)}
                   >
                     <HistoryIcon size={16} />
                     <span>
-                      <strong>{revision.reason || "Saved version"}</strong>
+                      <strong>
+                        {revision.reason || "Saved version"}
+                        {/* QA 14 TC-319 — titik pulih versi buatan tim. */}
+                        {revision.reason === "Versi tim sebelum diubah customer" && (
+                          <em className="revision-team-chip">Versi tim</em>
+                        )}
+                      </strong>
                       <small>
                         {new Date(revision.created_at).toLocaleString("id-ID")}{" "}
                         · {revision.actor_name || "System"}
@@ -14593,6 +15318,9 @@ function FeatureInspector({
         {feature.type === "image" && (
           <ImageLayoutEditor feature={feature} update={update} />
         )}
+        {(feature.type === "image" || feature.type === "gallery") && (
+          <MediaFadeEditor feature={feature} update={update} />
+        )}
         {feature.type === "gallery" && (
           <GallerySlideshowEditor feature={feature} update={update} />
         )}
@@ -15251,6 +15979,11 @@ function FeatureInspector({
               { value: "hero-left", label: "Hero Kiri", hint: "Satu besar di kiri" },
               { value: "hero-top", label: "Hero Atas", hint: "Satu besar di atas" },
               { value: "mosaic", label: "Multi-Size", hint: "Mosaic campuran" },
+              {
+                value: "circle-split",
+                label: "Lingkaran 2 Foto",
+                hint: "Satu lingkaran dibagi dua foto",
+              },
               { value: "carousel", label: "Carousel", hint: "Satu per satu, geser" },
               { value: "filmstrip", label: "Filmstrip", hint: "Gulir mendatar" },
             ]}
@@ -15943,14 +16676,43 @@ function RsvpConfirmationPage({
   );
 }
 
+const DEFAULT_WA_INVITE = `Kepada Yth.
+Bapak/Ibu/Saudara/i {nama}
+
+Tanpa mengurangi rasa hormat, kami bermaksud mengundang Anda untuk hadir di acara pernikahan kami.
+
+Informasi lengkap acara dan konfirmasi kehadiran dapat dilihat melalui tautan berikut:
+{link}
+
+Merupakan suatu kebahagiaan bagi kami apabila Bapak/Ibu/Saudara/i berkenan hadir dan memberikan doa restu.
+
+Terima kasih.`;
+const DEFAULT_WA_REMINDER = `Halo {nama},
+
+Kami ingin mengingatkan kembali undangan pernikahan kami. Mohon kesediaannya untuk mengisi konfirmasi kehadiran (RSVP) melalui tautan berikut:
+{link}
+
+Konfirmasi Anda sangat membantu persiapan acara kami. Terima kasih.`;
+function fillWaMessage(template: string, name: string, link: string) {
+  return template.replace(/\{nama\}/gi, name).replace(/\{link\}/gi, link);
+}
+/** Nomor lokal 08xx → format internasional 628xx untuk wa.me. */
+function waPhone(phone = "") {
+  const digits = phone.replace(/\D/g, "");
+  return digits.startsWith("0") ? `62${digits.slice(1)}` : digits;
+}
+
 function InviteeManagementPage({
   sections,
+  designs = [],
   selectedSectionId,
   selectSection,
   updateSection,
   flash,
   slug = "",
 }: {
+  /** QA 14 (SSBug3) — customer: daftar undangan per design yang dibeli. */
+  designs?: WebsiteDesignGroup[];
   sections: CanvasSection[];
   selectedSectionId: string;
   selectSection: (section: CanvasSection) => void;
@@ -15958,10 +16720,18 @@ function InviteeManagementPage({
   flash: (message: string) => void;
   slug?: string;
 }) {
-  const section =
-    sections.find((item) => item.id === selectedSectionId) || sections[0];
+  const activeDesign = designs.length
+    ? designs.find((design) =>
+        design.sections.some((item) => item.id === selectedSectionId),
+      ) || designs[0]
+    : undefined;
+  const section = activeDesign
+    ? designGuestCanvas(activeDesign)
+    : sections.find((item) => item.id === selectedSectionId) || sections[0];
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [waMode, setWaMode] = useState<"invite" | "reminder">("invite");
   const csvRef = useRef<HTMLInputElement>(null);
   if (!section)
     return (
@@ -15980,14 +16750,15 @@ function InviteeManagementPage({
           id: uid("invitee"),
           name: name.trim(),
           email: email.trim(),
-          phone: "",
+          phone: phone.trim(),
           city: "",
         },
       ],
     });
     setName("");
     setEmail("");
-    flash("Undangan ditambahkan ke Canvas.");
+    setPhone("");
+    flash("Tamu ditambahkan ke daftar undangan.");
   };
   const importCsv = async (file?: File) => {
     if (!file) return;
@@ -16057,12 +16828,39 @@ function InviteeManagementPage({
       <header>
         <div>
           <span>LIST UNDANGAN</span>
-          <h2>Guest management per Canvas</h2>
+          <h2>
+            {activeDesign
+              ? `Daftar tamu · ${activeDesign.name}`
+              : "Guest management per Canvas"}
+          </h2>
           <p>
             Daftar ini digunakan untuk personalisasi Buka Undangan dan pelacakan
             RSVP.
           </p>
         </div>
+        {activeDesign ? (
+          designs.length > 1 && (
+            <label>
+              Undangan
+              <select
+                value={section.id}
+                onChange={(event) => {
+                  const design = designs.find(
+                    (item) => designGuestCanvas(item).id === event.target.value,
+                  );
+                  if (design) selectSection(designGuestCanvas(design));
+                }}
+              >
+                {designs.map((design) => (
+                  <option key={design.id} value={designGuestCanvas(design).id}>
+                    {design.name}
+                    {design.orderNo ? ` · ${design.orderNo}` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        ) : (
         <label>
           Canvas
           <select
@@ -16081,6 +16879,7 @@ function InviteeManagementPage({
             ))}
           </select>
         </label>
+        )}
       </header>
       <section className="invitee-summary">
         <article>
@@ -16118,6 +16917,12 @@ function InviteeManagementPage({
             onChange={(event) => setEmail(event.target.value)}
             placeholder="Email (opsional)"
           />
+          <input
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+            placeholder="No. WhatsApp (opsional)"
+            inputMode="tel"
+          />
           <button onClick={add}>
             <UserPlus size={15} />
             Add
@@ -16153,6 +16958,81 @@ function InviteeManagementPage({
             tamu, sehingga nama pada Buka Undangan menyesuaikan penerima.
           </p>
         </div>
+        {/* QA 14 TC-326 — template pesan WhatsApp untuk undangan digital
+            dan reminder RSVP. {nama} & {link} diganti otomatis per tamu. */}
+        <div className="wa-template-card">
+          <div className="wa-template-head">
+            <div>
+              <strong>Template pesan WhatsApp</strong>
+              <span>
+                Pilih jenis pesan, sesuaikan teksnya, lalu kirim lewat tombol
+                WhatsApp di tiap tamu. <code>{"{nama}"}</code> dan{" "}
+                <code>{"{link}"}</code> terisi otomatis.
+              </span>
+            </div>
+            <div className="filter-tabs" role="tablist">
+              <button
+                role="tab"
+                aria-selected={waMode === "invite"}
+                className={waMode === "invite" ? "active" : ""}
+                onClick={() => setWaMode("invite")}
+              >
+                Undangan digital
+              </button>
+              <button
+                role="tab"
+                aria-selected={waMode === "reminder"}
+                className={waMode === "reminder" ? "active" : ""}
+                onClick={() => setWaMode("reminder")}
+              >
+                Reminder RSVP
+              </button>
+            </div>
+          </div>
+          <div className="wa-template-body">
+            <textarea
+              aria-label="Teks pesan WhatsApp"
+              value={
+                waMode === "invite"
+                  ? (section.waInviteMessage ?? DEFAULT_WA_INVITE)
+                  : (section.waReminderMessage ?? DEFAULT_WA_REMINDER)
+              }
+              onChange={(event) =>
+                updateSection(
+                  section.id,
+                  waMode === "invite"
+                    ? { waInviteMessage: event.target.value }
+                    : { waReminderMessage: event.target.value },
+                )
+              }
+            />
+            <div className="wa-template-preview">
+              <small>Pratinjau untuk tamu pertama</small>
+              <p className="chat-text">
+                {fillWaMessage(
+                  waMode === "invite"
+                    ? (section.waInviteMessage ?? DEFAULT_WA_INVITE)
+                    : (section.waReminderMessage ?? DEFAULT_WA_REMINDER),
+                  section.invitees[0]?.name || "Nama Tamu",
+                  buildGuestLink(slug, section.invitees[0]?.name || "Nama Tamu"),
+                )}
+              </p>
+              <button
+                type="button"
+                onClick={() =>
+                  updateSection(
+                    section.id,
+                    waMode === "invite"
+                      ? { waInviteMessage: undefined }
+                      : { waReminderMessage: undefined },
+                  )
+                }
+              >
+                <RotateCcw size={12} /> Kembalikan teks bawaan
+              </button>
+            </div>
+          </div>
+        </div>
         <div className="invitee-table with-link">
           <div className="invitee-table-head">
             <span>Name</span>
@@ -16184,8 +17064,20 @@ function InviteeManagementPage({
                     <Copy size={13} />
                   </button>
                   <a
-                    title="Kirim via WhatsApp"
-                    href={`https://wa.me/${item.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Kepada Yth. ${item.name}, kami mengundang Anda. Buka undangan: ${personalLink}`)}`}
+                    title={
+                      waMode === "invite"
+                        ? "Kirim undangan via WhatsApp"
+                        : "Kirim reminder RSVP via WhatsApp"
+                    }
+                    href={`https://wa.me/${waPhone(item.phone)}?text=${encodeURIComponent(
+                      fillWaMessage(
+                        waMode === "invite"
+                          ? (section.waInviteMessage ?? DEFAULT_WA_INVITE)
+                          : (section.waReminderMessage ?? DEFAULT_WA_REMINDER),
+                        item.name,
+                        personalLink,
+                      ),
+                    )}`}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -16216,7 +17108,7 @@ function InviteeManagementPage({
           })}
           {!section.invitees.length && (
             <div className="invitee-empty">
-              Belum ada undangan pada Canvas ini.
+              Belum ada tamu pada daftar undangan ini.
             </div>
           )}
         </div>
@@ -16554,6 +17446,25 @@ function SectionDecorationEditor({
     commit((current) =>
       current.map((item) => (item.id === id ? { ...item, ...next } : item)),
     );
+  // QA 14 TC-307 — urutan tumpukan ornamen. Ornamen dalam lapisan yang sama
+  // ditumpuk sesuai urutan daftar (yang terakhir paling atas), jadi
+  // memindahkan posisinya di daftar = mengubah z-index tanpa hapus & upload
+  // ulang. "Paling depan" juga memindahkan ornamen ke lapisan di depan isi
+  // (di atas background & isi fitur), "Paling belakang" ke belakang isi.
+  const restack = (id: string, move: "front" | "forward" | "backward" | "back") =>
+    commit((current) => {
+      const index = current.findIndex((item) => item.id === id);
+      if (index < 0) return current;
+      const list = [...current];
+      const [item] = list.splice(index, 1);
+      if (move === "front")
+        return [...list, { ...item, layer: "front" as const }];
+      if (move === "back")
+        return [{ ...item, layer: "back" as const }, ...list];
+      const target = move === "forward" ? index + 1 : index - 1;
+      list.splice(Math.max(0, Math.min(list.length, target)), 0, item);
+      return list;
+    });
   return (
     <div className="decoration-editor">
       <div className="group-heading">
@@ -16857,6 +17768,21 @@ function SectionDecorationEditor({
                 <option value="fade">Muncul perlahan</option>
               </select>
             </label>
+          </div>
+          <div className="deco-order" role="group" aria-label="Urutan lapisan ornamen">
+            <span>Urutan lapisan</span>
+            <button type="button" title="Paling depan — di atas semua isi & ornamen lain" onClick={() => restack(item.id, "front")}>
+              <ChevronsUp size={13} /> Paling depan
+            </button>
+            <button type="button" title="Maju satu tingkat" onClick={() => restack(item.id, "forward")}>
+              <ChevronUp size={13} /> Maju
+            </button>
+            <button type="button" title="Mundur satu tingkat" onClick={() => restack(item.id, "backward")}>
+              <ChevronDown size={13} /> Mundur
+            </button>
+            <button type="button" title="Paling belakang — di belakang isi & ornamen lain" onClick={() => restack(item.id, "back")}>
+              <ChevronsDown size={13} /> Paling belakang
+            </button>
           </div>
           <label className="checkbox-row">
             <span>Tetap di layar saat digulir (seperti Background tetap)</span>
@@ -18733,6 +19659,7 @@ function DesktopSideEditor({
 }) {
   const slideInput = useRef<HTMLInputElement | null>(null);
   const videoInput = useRef<HTMLInputElement | null>(null);
+  const overlayInput = useRef<HTMLInputElement | null>(null);
   const [busy, setBusy] = useState("");
   const slides = first.desktopSideSlides || [];
   const addSlides = async (files: File[]) => {
@@ -18744,9 +19671,13 @@ function DesktopSideEditor({
           flash(`${raw.name} bukan gambar.`);
           continue;
         }
-        const file = await shrinkImageToLimit(raw, 4 * 1024 * 1024);
-        if (file.size > 4 * 1024 * 1024) {
-          flash(`${raw.name} lebih dari 4 MB.`);
+        const file = await shrinkImageToLimit(
+          raw,
+          BACKGROUND_IMAGE_LIMIT,
+          BACKGROUND_IMAGE_SIDE,
+        );
+        if (file.size > BACKGROUND_IMAGE_LIMIT) {
+          flash(`${raw.name} lebih dari 8 MB.`);
           continue;
         }
         const saved = await uploadToServer(file, "canvas-background");
@@ -18806,6 +19737,109 @@ function DesktopSideEditor({
           onChange={(event) => update({ desktopSideBody: event.target.value })}
         />
       </label>
+      <label>
+        Gaya nama & teks pengantar
+        <select
+          value={first.desktopSideStyle || "standard"}
+          onChange={(event) =>
+            update({
+              desktopSideStyle: event.target
+                .value as CanvasSection["desktopSideStyle"],
+            })
+          }
+        >
+          <option value="standard">Standar — header & teks</option>
+          <option value="stacked">Nama bertumpuk dengan "&" besar</option>
+          <option value="framed">Dalam bingkai garis ganda</option>
+          <option value="monogram">Monogram inisial + nama</option>
+        </select>
+      </label>
+      <label>
+        Gambar layer 2 (PNG transparan)
+        <span className="side-overlay-row">
+          <button
+            type="button"
+            onClick={() => overlayInput.current?.click()}
+            disabled={busy === "overlay"}
+          >
+            <Upload size={13} />{" "}
+            {busy === "overlay"
+              ? "Mengunggah…"
+              : first.desktopSideOverlayUrl
+                ? "Ganti gambar"
+                : "Upload gambar"}
+          </button>
+          {first.desktopSideOverlayUrl && (
+            <button
+              type="button"
+              onClick={() =>
+                update({
+                  desktopSideOverlayUrl: undefined,
+                  desktopSideOverlayKey: undefined,
+                })
+              }
+            >
+              <Trash2 size={13} /> Hapus
+            </button>
+          )}
+        </span>
+        <input
+          ref={overlayInput}
+          hidden
+          type="file"
+          accept="image/png,image/webp,image/svg+xml,image/gif,image/jpeg"
+          onClick={resetFileInput}
+          onChange={async (event) => {
+            const raw = event.target.files?.[0];
+            if (!raw) return;
+            setBusy("overlay");
+            try {
+              const file = await shrinkImageToLimit(raw, 4 * 1024 * 1024);
+              const saved = await uploadToServer(file, "canvas-background");
+              update({
+                desktopSideOverlayUrl: saved.url,
+                desktopSideOverlayKey: saved.key,
+              });
+            } catch (error) {
+              flash(error instanceof Error ? error.message : "Upload gambar gagal.");
+            } finally {
+              setBusy("");
+            }
+          }}
+        />
+      </label>
+      {first.desktopSideOverlayUrl && (
+        <div className="two-inputs">
+          <label>
+            Ukuran layer 2<b>{first.desktopSideOverlaySize || 70}%</b>
+            <input
+              type="range"
+              min={20}
+              max={140}
+              value={first.desktopSideOverlaySize || 70}
+              onChange={(event) =>
+                update({ desktopSideOverlaySize: Number(event.target.value) })
+              }
+            />
+          </label>
+          <label>
+            Posisi layer 2
+            <select
+              value={first.desktopSideOverlayPosition || "center"}
+              onChange={(event) =>
+                update({
+                  desktopSideOverlayPosition: event.target
+                    .value as CanvasSection["desktopSideOverlayPosition"],
+                })
+              }
+            >
+              <option value="center">Tengah</option>
+              <option value="top">Atas</option>
+              <option value="bottom">Bawah</option>
+            </select>
+          </label>
+        </div>
+      )}
       <label>
         Warna teks
         <ColorInput value={first.desktopSideTextColor} fallback="#ffffff" onChange={(next) => update({ desktopSideTextColor: next })} />
@@ -19104,14 +20138,35 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
     return () => window.clearInterval(timer);
   }, [slides.length, seconds]);
   const hasText = Boolean(first.desktopSideTitle || first.desktopSideBody);
+  const sideStyle = first.desktopSideStyle || "standard";
+  // "Aurelia & Reynard" → ["Aurelia", "Reynard"] untuk gaya bertumpuk/monogram.
+  const nameParts = (first.desktopSideTitle || "")
+    .split(/\s*(?:&|\+|\bdan\b|\band\b)\s*/i)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  const initials = nameParts.map((part) => part.charAt(0).toUpperCase());
   useEffect(() => {
     if (first.desktopSideTitleFont) ensureFont(first.desktopSideTitleFont);
     if (first.desktopSideBodyFont) ensureFont(first.desktopSideBodyFont);
   }, [first.desktopSideTitleFont, first.desktopSideBodyFont]);
-  if (!slides.length && !first.desktopSideVideoUrl && !hasText) return null;
+  if (
+    !slides.length &&
+    !first.desktopSideVideoUrl &&
+    !hasText &&
+    !first.desktopSideOverlayUrl
+  )
+    return null;
   return (
     <div className="desktop-side-panel" aria-hidden={!hasText}>
       <div className="desktop-side-area">
+        {first.desktopSideOverlayUrl && (
+          <img
+            className={`desktop-side-overlay at-${first.desktopSideOverlayPosition || "center"}`}
+            src={assetUrl(first.desktopSideOverlayUrl)}
+            alt=""
+            style={{ width: `${first.desktopSideOverlaySize || 70}%` }}
+          />
+        )}
         {first.desktopSideVideoUrl ? (
           <video
             className="desktop-side-media"
@@ -19136,7 +20191,7 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
         )}
         {hasText && (
           <div
-            className={`desktop-side-text ${slides.length || first.desktopSideVideoUrl ? "on-media" : ""}`}
+            className={`desktop-side-text side-style-${sideStyle} ${slides.length || first.desktopSideVideoUrl ? "on-media" : ""}`}
             style={
               first.desktopSideTextColor
                 ? { color: first.desktopSideTextColor }
@@ -19157,7 +20212,23 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
                         : 400,
                 }}
               >
-                {first.desktopSideTitle}
+                {sideStyle === "monogram" && initials.length >= 2 && (
+                  <span className="side-monogram" aria-hidden>
+                    {initials[0]}
+                    <i>&amp;</i>
+                    {initials[1]}
+                  </span>
+                )}
+                {(sideStyle === "stacked" || sideStyle === "monogram") &&
+                nameParts.length >= 2 ? (
+                  <span className="side-names">
+                    <span>{nameParts[0]}</span>
+                    <em>&amp;</em>
+                    <span>{nameParts.slice(1).join(" & ")}</span>
+                  </span>
+                ) : (
+                  first.desktopSideTitle
+                )}
               </h2>
             )}
             {first.desktopSideBody && (
@@ -19201,8 +20272,13 @@ function DesktopLayoutPanel({
       flash("Background desktop harus berupa gambar.");
       return;
     }
-    if (file.size > 4 * 1024 * 1024) {
-      flash("Background desktop maksimal 4 MB.");
+    file = await shrinkImageToLimit(
+      file,
+      BACKGROUND_IMAGE_LIMIT,
+      BACKGROUND_IMAGE_SIDE,
+    );
+    if (file.size > BACKGROUND_IMAGE_LIMIT) {
+      flash("Background desktop maksimal 8 MB.");
       return;
     }
     try {
@@ -19438,6 +20514,7 @@ function WeddingCanvasBody({
 }) {
   const thumbnail = useContext(ThumbnailContext);
   const previewSurface = useContext(PreviewSurfaceContext);
+  const draftWatermark = useContext(DraftWatermarkContext);
   // background-attachment: fixed memakai ukuran viewport, bukan ukuran elemen.
   // Di thumbnail yang di-scale, efeknya gambar tampak sangat ter-zoom, jadi
   // penguncian background hanya diterapkan pada tampilan publik berukuran penuh.
@@ -19497,6 +20574,50 @@ function WeddingCanvasBody({
   );
   const [opened, setOpened] = useState(editable || !hasCover);
   const [opening, setOpening] = useState(false);
+  // QA 14 TC-317 — frame drop saat preview baru dibuka: gambar background,
+  // layer, dan ornamen (sering beberapa MB) di-decode di main thread tepat
+  // ketika animasi loop & reveal mulai berjalan. Setelah diedit semuanya
+  // sudah ter-cache sehingga "kembali normal". Kini gambar di-decode dulu di
+  // latar (maks. 2,5 detik) sementara animasi ditahan, lalu animasi berjalan
+  // tanpa tersendat.
+  const [warming, setWarming] = useState(() => !editable && !thumbnail);
+  const warmKey = useMemo(() => {
+    if (editable || thumbnail) return "";
+    const urls = new Set<string>();
+    sections.forEach((section) => {
+      if (section.backgroundUrl) urls.add(assetUrl(section.backgroundUrl));
+      (section.backgroundLayers || []).forEach(
+        (layer) => layer.url && urls.add(assetUrl(layer.url)),
+      );
+      (section.decorations || []).forEach(
+        (decoration) =>
+          decoration.imageUrl && urls.add(assetUrl(decoration.imageUrl)),
+      );
+    });
+    return Array.from(urls).slice(0, 24).join("\n");
+  }, [sections, editable, thumbnail]);
+  useEffect(() => {
+    if (!warmKey) {
+      setWarming(false);
+      return;
+    }
+    let alive = true;
+    setWarming(true);
+    const done = () => alive && setWarming(false);
+    const timer = window.setTimeout(done, 2500);
+    void Promise.allSettled(
+      warmKey.split("\n").map((url) => {
+        const image = new Image();
+        image.decoding = "async";
+        image.src = url;
+        return image.decode();
+      }),
+    ).then(done);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
+  }, [warmKey]);
   useEffect(() => {
     setOpened(editable || !hasCover);
   }, [editable, hasCover, coverFeatureId]);
@@ -19725,7 +20846,14 @@ function WeddingCanvasBody({
         .querySelectorAll<HTMLElement>(".canvas-section.has-scroll-deco")
         .forEach((sectionEl) => {
           const rect = sectionEl.getBoundingClientRect();
-          const center = rect.top + rect.height / 2 - viewTop;
+          // QA 14 (SSBug5) — canvas yang lebih tinggi dari layar (mis. cover
+          // Buka Undangan) dulu dianggap "belum masuk" selama titik tengahnya
+          // di bawah layar, sehingga ornamen fade/geser tidak tampil saat
+          // undangan baru dibuka dan baru muncul setelah digulir sedikit.
+          // Titik acuan kini paling jauh setengah layar di bawah tepi atas
+          // canvas: canvas yang sudah mengisi layar sejak awal = progress 0.
+          const center =
+            rect.top + Math.min(rect.height, viewHeight) / 2 - viewTop;
           const progress = Math.max(
             -1,
             Math.min(1, (viewHeight / 2 - center) / Math.max(1, viewHeight)),
@@ -19767,6 +20895,17 @@ function WeddingCanvasBody({
       () => {
         setOpened(true);
         setOpening(false);
+        // QA 14 (SSBug5) — layar cover bisa sudah digulir (cover lebih tinggi
+        // dari layar). Undangan dimulai dari atas canvas berikutnya.
+        const root = revealRootRef.current;
+        let scroller: HTMLElement | null = root?.parentElement || null;
+        while (scroller && scroller !== document.body) {
+          const overflowY = getComputedStyle(scroller).overflowY;
+          if (overflowY === "auto" || overflowY === "scroll") break;
+          scroller = scroller.parentElement;
+        }
+        if (scroller && scroller !== document.body) scroller.scrollTop = 0;
+        else window.scrollTo({ top: 0 });
       },
       Math.max(150, coverExit?.coverExitDuration ?? 700),
     );
@@ -19795,8 +20934,14 @@ function WeddingCanvasBody({
     ? undefined
     : [...sections]
         .reverse()
-        .find((rawSection) =>
-          liveSectionVisible(prepareSection(rawSection), false),
+        .find(
+          (rawSection) =>
+            !(
+              !thumbnail &&
+              hasCover &&
+              opened &&
+              rawSection.id === coverEntry?.section.id
+            ) && liveSectionVisible(prepareSection(rawSection), false),
         )?.id;
   const pinnedCredits = editable
     ? []
@@ -19872,7 +21017,7 @@ function WeddingCanvasBody({
   return (
     <div
       ref={revealRootRef}
-      className={`wedding-site device-${device} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${sections.some((entry) => entry.decorations?.some((item) => item.pinned)) ? "has-pinned-deco" : ""} ${showBottomNav && !lockedCover ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}${lockedCover ? ` invitation-locked cover-as-canvas${opening ? ` cover-opening cover-exit-${coverExit?.coverExitEffect || "fade"}` : ""}` : ""}`}
+      className={`wedding-site device-${device}${warming ? " is-warming" : ""}${draftWatermark && !editable && !thumbnail ? " has-draft-watermark" : ""} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${sections.some((entry) => entry.decorations?.some((item) => item.pinned)) ? "has-pinned-deco" : ""} ${showBottomNav && !lockedCover ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}${lockedCover ? ` invitation-locked cover-as-canvas${opening ? ` cover-opening cover-exit-${coverExit?.coverExitEffect || "fade"}` : ""}` : ""}`}
       style={
         {
           "--accent": selectedTemplate.accent,
@@ -19933,6 +21078,18 @@ function WeddingCanvasBody({
         })}
       {sections.map((rawSection) => {
         if (lockedCover && rawSection.id !== coverEntry?.section.id)
+          return null;
+        // QA 14 (SSBug5) — setelah "Buka Undangan" diklik, canvas cover tidak
+        // dirender lagi: tamu langsung masuk ke canvas berikutnya, bukan
+        // melihat layar Buka Undangan untuk kedua kalinya. Di editor canvas
+        // cover tetap tampil agar bisa disunting.
+        if (
+          !editable &&
+          !thumbnail &&
+          hasCover &&
+          opened &&
+          rawSection.id === coverEntry?.section.id
+        )
           return null;
         // Revisi preview = editor — canvas cover tetap melukis background-nya
         // sendiri (persis editor).
@@ -20467,10 +21624,19 @@ function SectionDecorations({
                 aria-hidden
               >
                 {decoration.imageUrl ? (
+                  // QA 14 (SSBug5 / TC-317) — ornamen dulu `loading="lazy"`.
+                  // Ornamen diposisikan absolut di tepi/luar canvas, sehingga
+                  // browser menganggapnya belum terlihat dan baru memuatnya
+                  // setelah halaman digulir: pohon/bunga di layar pertama
+                  // "muncul tiba-tiba" setelah scroll, dan pemuatan
+                  // bersamaan di tengah animasi membuat preview tersendat.
+                  // Ornamen kini dimuat langsung dan di-decode di latar.
                   <img
                     src={assetUrl(decoration.imageUrl)}
                     alt=""
-                    loading="lazy"
+                    loading="eager"
+                    decoding="async"
+                    draggable={false}
                   />
                 ) : (
                   <DecorGlyphIcon glyph={decoration.glyph} />
@@ -20622,6 +21788,10 @@ function FeatureBlock({
         }
       : {}),
     "--effect-intensity": `${(feature.effectIntensity ?? 55) / 100}`,
+    ...((feature.type === "image" || feature.type === "gallery") &&
+    mediaFadeMask(feature)
+      ? { "--media-fade-mask": mediaFadeMask(feature) }
+      : {}),
   } as unknown as React.CSSProperties;
   // QA TC-080 (header/supporting dapat dihapus + line break), TC-090 (font size
   // non-header), TC-118 (Heading 2 & Supporting Text 2), TC-121/TC-122 (warna per elemen).
@@ -20989,7 +22159,9 @@ function FeatureBlock({
         <ImageLayoutFeature feature={feature} editableText={editableText} />
       )}
       {feature.type === "video" && <VideoFeature feature={feature} />}
-      {feature.type === "gallery" && <GalleryFeature feature={feature} />}
+      {feature.type === "gallery" && (
+        <GalleryFeature feature={feature} interactive={!editable} />
+      )}
       {feature.type === "form" && (
         <CanvasForm
           feature={feature}
@@ -22501,8 +23673,196 @@ function galleryBoxProps(feature: Feature, base: string) {
   };
 }
 
-function GalleryFeature({ feature }: { feature: Feature }) {
+/**
+ * QA 14 TC-322 — lightbox Our Gallery: klik foto membuka tampilan besar,
+ * geser kanan-kiri (tombol, panah keyboard, atau swipe di ponsel), Esc /
+ * klik latar untuk menutup. Dirender ke <body> agar tidak terpotong oleh
+ * canvas atau kotak preview yang di-scale.
+ */
+/** QA 14 TC-321 — gradien transparan pada foto (seperti background gradien). */
+function mediaFadeMask(feature: Feature) {
+  const mode = feature.mediaFade || "none";
+  if (mode === "none") return undefined;
+  const start = Math.max(0, Math.min(95, feature.mediaFadeStart ?? 55));
+  if (mode === "edges")
+    return `radial-gradient(ellipse at center, #000 ${start}%, transparent 100%)`;
+  const direction = { bottom: "to bottom", top: "to top", left: "to left", right: "to right" }[mode];
+  return `linear-gradient(${direction}, #000 ${start}%, transparent 100%)`;
+}
+function MediaFadeEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const mode = feature.mediaFade || "none";
+  return (
+    <div className="image-style-group media-fade-editor">
+      <div className="group-heading">
+        <strong>Gradien transparan foto</strong>
+      </div>
+      <label>
+        Arah memudar
+        <select
+          value={mode}
+          onChange={(event) =>
+            update({ mediaFade: event.target.value as Feature["mediaFade"] })
+          }
+        >
+          <option value="none">Tidak ada</option>
+          <option value="bottom">Memudar ke bawah</option>
+          <option value="top">Memudar ke atas</option>
+          <option value="left">Memudar ke kiri</option>
+          <option value="right">Memudar ke kanan</option>
+          <option value="edges">Memudar ke semua tepi</option>
+        </select>
+      </label>
+      {mode !== "none" && (
+        <label>
+          Mulai memudar: {feature.mediaFadeStart ?? 55}%
+          <input
+            type="range"
+            min={0}
+            max={95}
+            value={feature.mediaFadeStart ?? 55}
+            onChange={(event) =>
+              update({ mediaFadeStart: Number(event.target.value) })
+            }
+          />
+        </label>
+      )}
+    </div>
+  );
+}
+
+function GalleryLightbox({
+  images,
+  index,
+  onIndex,
+  onClose,
+}: {
+  images: string[];
+  index: number;
+  onIndex: (next: number) => void;
+  onClose: () => void;
+}) {
+  const startX = useRef<number | null>(null);
+  const step = useCallback(
+    (direction: 1 | -1) =>
+      onIndex((index + direction + images.length) % images.length),
+    [index, images.length, onIndex],
+  );
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+      if (event.key === "ArrowRight") step(1);
+      if (event.key === "ArrowLeft") step(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [onClose, step]);
+  return createPortal(
+    <div
+      className="gallery-lightbox"
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Foto ${index + 1} dari ${images.length}`}
+      onClick={onClose}
+      onPointerDown={(event) => {
+        startX.current = event.clientX;
+      }}
+      onPointerUp={(event) => {
+        if (startX.current === null) return;
+        const delta = event.clientX - startX.current;
+        startX.current = null;
+        if (Math.abs(delta) > 45) step(delta < 0 ? 1 : -1);
+      }}
+    >
+      <img
+        key={images[index]}
+        src={images[index]}
+        alt={`Foto ${index + 1}`}
+        draggable={false}
+        onClick={(event) => event.stopPropagation()}
+      />
+      <button
+        type="button"
+        className="lightbox-close"
+        aria-label="Tutup"
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose();
+        }}
+      >
+        <X size={20} />
+      </button>
+      {images.length > 1 && (
+        <>
+          <button
+            type="button"
+            className="lightbox-nav prev"
+            aria-label="Foto sebelumnya"
+            onClick={(event) => {
+              event.stopPropagation();
+              step(-1);
+            }}
+          >
+            <ChevronLeft size={24} />
+          </button>
+          <button
+            type="button"
+            className="lightbox-nav next"
+            aria-label="Foto berikutnya"
+            onClick={(event) => {
+              event.stopPropagation();
+              step(1);
+            }}
+          >
+            <ChevronRight size={24} />
+          </button>
+          <span className="lightbox-count">
+            {index + 1} / {images.length}
+          </span>
+        </>
+      )}
+    </div>,
+    document.body,
+  );
+}
+
+function GalleryFeature({
+  feature,
+  interactive = false,
+}: {
+  feature: Feature;
+  /** Undangan publik & preview: foto bisa diklik (lightbox) dan ada efek hover. */
+  interactive?: boolean;
+}) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [lightbox, setLightbox] = useState<number | null>(null);
+  const openAt = (index: number) =>
+    interactive
+      ? {
+          onClick: (event: React.MouseEvent) => {
+            event.stopPropagation();
+            setLightbox(index);
+          },
+          role: "button",
+          tabIndex: 0,
+          onKeyDown: (event: React.KeyboardEvent) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              setLightbox(index);
+            }
+          },
+        }
+      : {};
   // Galeri bisa menyimpan path relatif dari upload lama; assetUrl membuat
   // keduanya (relatif maupun absolut) tetap tampil di preview dan di publik.
   const images = (feature.galleryUrls || []).map((url) => assetUrl(url));
@@ -22528,6 +23888,15 @@ function GalleryFeature({ feature }: { feature: Feature }) {
     feature.galleryTransitionMs,
     images.length,
   ]);
+  const lightboxNode =
+    lightbox !== null && images[lightbox] ? (
+      <GalleryLightbox
+        images={images}
+        index={lightbox}
+        onIndex={setLightbox}
+        onClose={() => setLightbox(null)}
+      />
+    ) : null;
   if (!images.length)
     return (
       <div className="media-placeholder">
@@ -22538,7 +23907,13 @@ function GalleryFeature({ feature }: { feature: Feature }) {
     );
   if (feature.galleryStyle === "carousel")
     return (
-      <div {...galleryBoxProps(feature, "gallery-carousel")}>
+      <div
+        {...galleryBoxProps(
+          feature,
+          `gallery-carousel${interactive ? " is-interactive" : ""}`,
+        )}
+      >
+        {lightboxNode}
         <div
           className="gallery-carousel-track"
           style={{
@@ -22552,6 +23927,7 @@ function GalleryFeature({ feature }: { feature: Feature }) {
                 src={url}
                 alt={`Gallery ${index + 1}`}
                 style={galleryImageStyle(feature, index)}
+                {...openAt(index)}
               />
             </div>
           ))}
@@ -22592,13 +23968,20 @@ function GalleryFeature({ feature }: { feature: Feature }) {
     );
   if (feature.galleryStyle === "filmstrip")
     return (
-      <div {...galleryBoxProps(feature, "gallery-filmstrip")}>
+      <div
+        {...galleryBoxProps(
+          feature,
+          `gallery-filmstrip${interactive ? " is-interactive" : ""}`,
+        )}
+      >
+        {lightboxNode}
         {images.map((url, index) => (
           <img
             src={url}
             alt={`Gallery ${index + 1}`}
             key={`${url}-${index}`}
             style={galleryImageStyle(feature, index)}
+            {...openAt(index)}
           />
         ))}
       </div>
@@ -22606,21 +23989,30 @@ function GalleryFeature({ feature }: { feature: Feature }) {
   // QA TC-126: slideshow otomatis sebagai variasi tampilan galeri.
   if (feature.gallerySlideshow)
     return (
-      <GallerySlideshow feature={feature} images={images} />
+      <>
+        <GallerySlideshow
+          feature={feature}
+          images={images}
+          onOpen={interactive ? setLightbox : undefined}
+        />
+        {lightboxNode}
+      </>
     );
   return (
     <div
       {...galleryBoxProps(
         feature,
-        `gallery-grid layout-${feature.galleryLayoutTemplate || "even"}`,
+        `gallery-grid layout-${feature.galleryLayoutTemplate || "even"}${interactive ? " is-interactive" : ""}`,
       )}
     >
+      {lightboxNode}
       {images.map((url, index) => (
         <img
           src={url}
           alt={`Gallery ${index + 1}`}
           key={`${url}-${index}`}
           style={galleryImageStyle(feature, index)}
+          {...openAt(index)}
         />
       ))}
     </div>
@@ -22631,9 +24023,11 @@ function GalleryFeature({ feature }: { feature: Feature }) {
 function GallerySlideshow({
   feature,
   images,
+  onOpen,
 }: {
   feature: Feature;
   images: string[];
+  onOpen?: (index: number) => void;
 }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
@@ -22664,7 +24058,16 @@ function GallerySlideshow({
           src={url}
           alt={`Gallery ${position + 1}`}
           className={position === index ? "active" : ""}
+          onClick={
+            onOpen
+              ? (event) => {
+                  event.stopPropagation();
+                  onOpen(position);
+                }
+              : undefined
+          }
           style={{
+            ...(onOpen ? { cursor: "zoom-in" } : {}),
             ...galleryImageStyle(feature, position),
             transitionDuration: `${feature.galleryTransitionMs || 850}ms`,
           }}
@@ -23419,18 +24822,18 @@ function TaskDiscussion({ taskId }: { taskId: string }) {
                     {new Date(note.created_at).toLocaleString("id-ID")}
                   </small>
                 </header>
-                <p>{note.body}</p>
+                <p className="chat-text">{note.body}</p>
               </article>
             ))}
           </div>
           {error && <small className="password-error">{error}</small>}
           <div className="task-discussion-compose">
-            <textarea
+            <MentionTextarea
               rows={2}
               value={draft}
               maxLength={4000}
-              placeholder="Tulis catatan internal untuk tim (tidak terkirim ke customer)…"
-              onChange={(event) => setDraft(event.target.value)}
+              placeholder="Tulis catatan internal untuk tim… Ketik @ untuk menyebut rekan."
+              onChange={setDraft}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && (event.ctrlKey || event.metaKey))
                   void send();
@@ -23613,7 +25016,7 @@ function ChatWidget({
                 key={message.id}
                 className={`chat-message ${message.sender}`}
               >
-                <p>{message.text}</p>
+                <p className="chat-text">{message.text}</p>
                 <span>{message.time}</span>
               </div>
             ))}
@@ -25181,7 +26584,7 @@ function CustomerServiceDatabase({
                         )}
                       </strong>
                     )}
-                    <p>{message.body}</p>
+                    <p className="chat-text">{message.body}</p>
                     <span>
                       {new Date(message.created_at).toLocaleString("id-ID")}
                     </span>
@@ -25220,12 +26623,13 @@ function CustomerServiceDatabase({
                     <Lock size={13} /> Catatan internal
                   </button>
                 </div>
-                <textarea
+                <MentionTextarea
                   value={reply}
-                  onChange={(event) => setReply(event.target.value)}
+                  onChange={setReply}
+                  enabled={replyMode === "internal"}
                   placeholder={
                     replyMode === "internal"
-                      ? "Catatan untuk tim (CS / Web Designer). Customer tidak melihat ini..."
+                      ? "Catatan untuk tim (CS / Web Designer). Ketik @ untuk menyebut rekan. Customer tidak melihat ini..."
                       : "Balas customer..."
                   }
                 />
@@ -26579,6 +27983,130 @@ function FeatureIcon({ type }: { type: FeatureType }) {
   return <Icon size={14} />;
 }
 
+/**
+ * QA 14 TC-304 — textarea catatan internal dengan saran mention. Ketik "@"
+ * lalu sebagian nama rekan (CS / Web Designer / Admin); pilih dengan klik,
+ * Enter, atau Tab. Staff yang disebut mendapat email notifikasi dari server.
+ */
+let staffMentionCache: Promise<{ id: string; name: string; role: string }[]> | null =
+  null;
+function MentionTextarea({
+  value,
+  onChange,
+  enabled = true,
+  ...rest
+}: Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value"> & {
+  value: string;
+  onChange: (next: string) => void;
+  enabled?: boolean;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const [staff, setStaff] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [query, setQuery] = useState<{ start: number; text: string } | null>(null);
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (!enabled) return;
+    staffMentionCache ||= api.staffMentions().catch(() => {
+      staffMentionCache = null;
+      return [];
+    });
+    let alive = true;
+    void staffMentionCache.then((list) => alive && setStaff(list));
+    return () => {
+      alive = false;
+    };
+  }, [enabled]);
+  const matches = query
+    ? staff
+        .filter((member) =>
+          member.name.toLowerCase().includes(query.text.toLowerCase()),
+        )
+        .slice(0, 6)
+    : [];
+  const detect = (text: string, caret: number) => {
+    if (!enabled) return setQuery(null);
+    const before = text.slice(0, caret);
+    const match = before.match(/(^|\s)@([^\s@]{0,24})$/);
+    if (match) {
+      setQuery({ start: caret - match[2].length - 1, text: match[2] });
+      setActive(0);
+    } else setQuery(null);
+  };
+  const insert = (member: { name: string }) => {
+    if (!query) return;
+    const el = ref.current;
+    const caret = el?.selectionStart ?? value.length;
+    const next = `${value.slice(0, query.start)}@${member.name} ${value.slice(caret)}`;
+    onChange(next);
+    setQuery(null);
+    const position = query.start + member.name.length + 2;
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(position, position);
+    });
+  };
+  return (
+    <span className="mention-field">
+      <textarea
+        {...rest}
+        ref={ref}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          detect(event.target.value, event.target.selectionStart);
+        }}
+        onKeyDown={(event) => {
+          if (matches.length) {
+            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+              event.preventDefault();
+              setActive(
+                (current) =>
+                  (current + (event.key === "ArrowDown" ? 1 : -1) + matches.length) %
+                  matches.length,
+              );
+              return;
+            }
+            if (event.key === "Enter" || event.key === "Tab") {
+              event.preventDefault();
+              insert(matches[active]);
+              return;
+            }
+            if (event.key === "Escape") {
+              setQuery(null);
+              return;
+            }
+          }
+          rest.onKeyDown?.(event);
+        }}
+        onBlur={(event) => {
+          window.setTimeout(() => setQuery(null), 150);
+          rest.onBlur?.(event);
+        }}
+      />
+      {matches.length > 0 && (
+        <span className="mention-menu" role="listbox">
+          {matches.map((member, index) => (
+            <button
+              type="button"
+              key={member.id}
+              role="option"
+              aria-selected={index === active}
+              className={index === active ? "active" : ""}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                insert(member);
+              }}
+            >
+              <strong>@{member.name}</strong>
+              <small>{member.role}</small>
+            </button>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function ConfirmModal({
   title,
   description,
@@ -26761,7 +28289,18 @@ function LoadingScreen() {
  *  Dulu ditolak; kini diperkecil otomatis di browser (sisi terpanjang
  *  maks 2000 px, JPEG/WebP) sampai di bawah batas. GIF tidak disentuh
  *  karena animasinya akan hilang. */
-async function shrinkImageToLimit(file: File, maxBytes: number): Promise<File> {
+/** QA 14 TC-308 — batas background: gambar HD/Full HD (bisa ±15 MB) tetap
+ *  diterima; bila lebih dari BACKGROUND_IMAGE_LIMIT dikompres otomatis di
+ *  browser dengan sisi terpanjang maksimal BACKGROUND_IMAGE_SIDE px. */
+const BACKGROUND_IMAGE_LIMIT = 8 * 1024 * 1024;
+const BACKGROUND_IMAGE_SIDE = 2560;
+const BACKGROUND_SOURCE_LIMIT = 25 * 1024 * 1024;
+
+async function shrinkImageToLimit(
+  file: File,
+  maxBytes: number,
+  maxSide = 2000,
+): Promise<File> {
   if (
     file.size <= maxBytes ||
     !file.type.startsWith("image/") ||
@@ -26773,7 +28312,7 @@ async function shrinkImageToLimit(file: File, maxBytes: number): Promise<File> {
     const bitmap = await createImageBitmap(file);
     const keepAlpha = file.type === "image/png" || file.type === "image/webp";
     const outType = keepAlpha ? "image/webp" : "image/jpeg";
-    let side = 2000;
+    let side = maxSide;
     for (let attempt = 0; attempt < 6; attempt++) {
       const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement("canvas");
@@ -26966,6 +28505,20 @@ function startFreeMove(
     baseX = feature.posX ?? 5,
     baseY = feature.posY ?? 12;
   let armed = threshold === 0;
+  // QA 14 TC-315 — smart snapping: saat titik tengah objek mendekati titik
+  // tengah kolom/canvas (±6 px di layar), objek menempel presisi di tengah
+  // dan garis bantu tampil. Tahan Alt untuk menggeser tanpa snapping.
+  const guides = (["v", "h"] as const).map((axis) => {
+    const line = document.createElement("span");
+    line.className = `free-snap-guide ${axis}`;
+    line.setAttribute("aria-hidden", "true");
+    return line;
+  });
+  if (getComputedStyle(parent).position === "static")
+    parent.style.position = "relative";
+  guides.forEach((line) => parent.appendChild(line));
+  const showGuide = (axis: 0 | 1, on: boolean) =>
+    guides[axis].classList.toggle("on", on);
   const move = (e: PointerEvent) => {
     if (!armed) {
       if (
@@ -26979,20 +28532,39 @@ function startFreeMove(
     }
     const dx = ((e.clientX - startX) / Math.max(1, rect.width)) * 100,
       dy = (e.clientY - startY) / Math.max(0.01, scale);
-    onUpdate({
-      posX:
-        Math.round(
-          Math.max(
-            -100,
-            Math.min(100, baseX + dx * (feature.anchorX === "right" ? -1 : 1)),
-          ) * 10,
-        ) / 10,
-      posY: Math.round(
-        Math.max(-5000, baseY + dy * (feature.anchorY === "bottom" ? -1 : 1)),
-      ),
-    });
+    let posX =
+      Math.round(
+        Math.max(
+          -100,
+          Math.min(100, baseX + dx * (feature.anchorX === "right" ? -1 : 1)),
+        ) * 10,
+      ) / 10;
+    let posY = Math.round(
+      Math.max(-5000, baseY + dy * (feature.anchorY === "bottom" ? -1 : 1)),
+    );
+    let snapX = false,
+      snapY = false;
+    if (!e.altKey) {
+      const parentW = Math.max(1, parent.clientWidth),
+        parentH = Math.max(1, parent.clientHeight);
+      const centerX = 50 - (block.offsetWidth / parentW) * 50;
+      const tolX = (6 / Math.max(1, rect.width)) * 100;
+      if (Math.abs(posX - centerX) <= tolX) {
+        posX = Math.round(centerX * 10) / 10;
+        snapX = true;
+      }
+      const centerY = Math.round((parentH - block.offsetHeight) / 2);
+      if (Math.abs(posY - centerY) <= 6 / Math.max(0.01, scale)) {
+        posY = centerY;
+        snapY = true;
+      }
+    }
+    showGuide(0, snapX);
+    showGuide(1, snapY);
+    onUpdate({ posX, posY });
   };
   const end = () => {
+    guides.forEach((line) => line.remove());
     document.body.style.userSelect = "";
     window.removeEventListener("pointermove", move);
     window.removeEventListener("pointerup", end);
@@ -29545,6 +31117,13 @@ function GalleryLayoutGlyph({ layout }: { layout: GalleryLayoutTemplate }) {
           <GlyphBlock x="36" y="19" width="9" height="13" />
         </GlyphFrame>
       );
+    case "circle-split":
+      return (
+        <GlyphFrame>
+          <circle cx="24" cy="18" r="14" fill="currentColor" opacity=".35" />
+          <path d="M24 4v28" stroke="#fff" strokeWidth="2" />
+        </GlyphFrame>
+      );
     case "even":
     default:
       return (
@@ -30850,13 +32429,16 @@ function CommissionPanel({
 
 function TemplatePriceControl({
   price,
+  originalPrice = 0,
   onSave,
 }: {
   price: number;
-  onSave: (price: number) => Promise<void>;
+  originalPrice?: number;
+  onSave: (price: number, originalPrice: number) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(String(price));
+  const [original, setOriginal] = useState(originalPrice ? String(originalPrice) : "");
   const [busy, setBusy] = useState(false);
   if (!editing)
     return (
@@ -30864,6 +32446,7 @@ function TemplatePriceControl({
         className="template-price-edit"
         onClick={() => {
           setValue(String(price));
+          setOriginal(originalPrice ? String(originalPrice) : "");
           setEditing(true);
         }}
       >
@@ -30873,7 +32456,7 @@ function TemplatePriceControl({
   const save = async () => {
     setBusy(true);
     try {
-      await onSave(Number(value) || 0);
+      await onSave(Number(value) || 0, Number(original) || 0);
       setEditing(false);
     } catch {
       /* pesan sudah ditampilkan */
@@ -30898,6 +32481,16 @@ function TemplatePriceControl({
         value={value}
         onChange={(event) => setValue(event.target.value)}
       />
+      <input
+        type="number"
+        min={0}
+        step={1000}
+        aria-label="Harga sebelum diskon (opsional)"
+        placeholder="Harga coret (opsional)"
+        title="Isi bila template sedang diskon: harga sebelum diskon, lebih tinggi dari harga jual. Kosongkan untuk menghapus label Diskon."
+        value={original}
+        onChange={(event) => setOriginal(event.target.value)}
+      />
       <button type="submit" disabled={busy}>
         Simpan
       </button>
@@ -30913,6 +32506,7 @@ function TemplateApprovalManager({
   currentAccountId,
   canApprove,
   onTakedown,
+  onDeleteTemplate,
   onRepublish,
   onUploadSample,
   onUploadThumbnail,
@@ -30926,13 +32520,18 @@ function TemplateApprovalManager({
   currentAccountId?: string;
   canApprove: boolean;
   onTakedown?: (templateId: string, reason: string) => Promise<void>;
+  onDeleteTemplate?: (templateId: string) => Promise<void>;
   onRepublish?: (templateId: string) => Promise<void>;
   onUploadSample?: (templateId: string, file: File) => Promise<void>;
   onUploadThumbnail?: (templateId: string, file: File) => Promise<void>;
   onCaptureSample?: (templateId: string) => Promise<void>;
   onEditTemplate?: (template: Template) => void;
   onToggleRecommended?: (templateId: string, next: boolean) => Promise<void>;
-  onSetPrice?: (templateId: string, price: number) => Promise<void>;
+  onSetPrice?: (
+    templateId: string,
+    price: number,
+    originalPrice?: number,
+  ) => Promise<void>;
   onReviewRevision?: (
     templateId: string,
     status: "Approved" | "Rejected",
@@ -30940,6 +32539,7 @@ function TemplateApprovalManager({
   ) => Promise<void>;
 }) {
   const [takedownTarget, setTakedownTarget] = useState<Template | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Template | null>(null);
   const [reason, setReason] = useState("");
   const [preview, setPreview] = useState<Template | null>(null);
   // QA TC-160 (revisi): dialog Preview pada Templates & Approval juga perlu
@@ -31094,12 +32694,21 @@ function TemplateApprovalManager({
                   {template.price
                     ? formatRupiah(template.price)
                     : "Harga belum ditetapkan"}
+                  {template.originalPrice ? (
+                    <s className="template-price-was">
+                      {" "}
+                      {formatRupiah(template.originalPrice)}
+                    </s>
+                  ) : null}
                 </span>
                 {/* MoM A7 — harga ditetapkan & diubah cepat oleh Administrator. */}
                 {onSetPrice && (
                   <TemplatePriceControl
                     price={template.price || 0}
-                    onSave={(price) => onSetPrice(template.id, price)}
+                    originalPrice={template.originalPrice || 0}
+                    onSave={(price, original) =>
+                      onSetPrice(template.id, price, original)
+                    }
                   />
                 )}
                 {/* VN 6 — admin perlu tahu siapa yang mengajukan. Pembuat
@@ -31252,6 +32861,14 @@ function TemplateApprovalManager({
                   {canApprove ? "Publish" : "Ajukan republish"}
                 </button>
               )}
+              {onDeleteTemplate && (
+                <button
+                  className="danger"
+                  onClick={() => setDeleteTarget(template)}
+                >
+                  <Trash2 size={14} /> Hapus template
+                </button>
+              )}
             </div>
             <small className="template-status-hint">
               {template.pendingReview && template.status !== "Pending"
@@ -31309,6 +32926,19 @@ function TemplateApprovalManager({
             {visible.length}
           </span>
         </nav>
+      )}
+      {deleteTarget && (
+        <ConfirmModal
+          title={`Hapus template "${deleteTarget.name}"?`}
+          description="Template hilang dari katalog, landing page, dan Templates & Approval. Bila template ini pernah dipesan, order, invoice, dan website customer yang memakainya tetap utuh. Tindakan ini tidak dapat dibatalkan."
+          confirmLabel="Hapus template"
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={() => {
+            const target = deleteTarget;
+            setDeleteTarget(null);
+            void onDeleteTemplate?.(target.id);
+          }}
+        />
       )}
       {takedownTarget && (
         <div className="dialog-overlay" onClick={() => setTakedownTarget(null)}>

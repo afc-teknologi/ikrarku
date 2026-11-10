@@ -950,7 +950,7 @@ test("MoM A7/A6/A9: UI harga admin, buat akun customer, banner tim membantu", ()
   assert.match(appTsx, /useState\(canSetPrice \? 499000 : 0\)/);
   assert.match(appTsx, /<input value="Ditetapkan Administrator" disabled readOnly \/>/);
   assert.match(appTsx, /<TemplatePriceControl\n\s*price=\{template\.price \|\| 0\}/);
-  assert.match(apiTs, /setTemplatePrice: \(id: string, price: number\) =>/);
+  assert.match(apiTs, /setTemplatePrice: \(id: string, price: number(, originalPrice\?: number)?\) =>/);
   // A6 — tombol di Orders untuk order lunas tanpa akun.
   assert.match(appTsx, /row\.payment_status === "Paid" &&\n\s*!row\.user_id &&/);
   assert.match(apiTs, /createOrderCustomerAccount: \(id: string\) =>/);
@@ -985,7 +985,7 @@ test("QA 17 Okt TC-218/219: upload tidak macet; undo dari state terbaru, batas j
       /onClick=\{resetFileInput\}|value = ""/.test(block),
       `input file tanpa reset: ${block.slice(0, 80)}`,
     );
-  assert.match(appTsx, /async function shrinkImageToLimit\(file: File, maxBytes: number\)/);
+  assert.match(appTsx, /async function shrinkImageToLimit\(\s*file: File,\s*maxBytes: number/);
   assert.match(appTsx, /if \(type === "image"\) file = await shrinkImageToLimit\(file, limit\);/);
   // Undo: snapshot dari ref state terbaru, batas 30 dan jumlahnya tampil.
   assert.match(appTsx, /const HISTORY_LIMIT = 30;/);
@@ -1460,4 +1460,54 @@ test("Revisi 8 Nov: kartu Templates & Approval rapi & responsif, sidebar laci di
   assert.match(appCss, /\.template-status-meta\{flex-direction:column;align-items:stretch;gap:7px\}/);
   assert.match(appTsx, /useState\(\(\) => !isCompactScreen\(\)\)/);
   assert.match(appCss, /\.main-content,\.main-content\.collapsed\{margin-left:0\}/);
+});
+
+test("QA 14 (TC-303–329 + SSBug1–5): dashboard customer, invoice, editor & katalog", () => {
+  // SSBug5 — ornamen tidak lazy, cover tidak tampil lagi setelah dibuka.
+  assert.match(appTsx, /loading="eager"\s+decoding="async"/);
+  assert.match(appTsx, /hasCover &&\s+opened &&\s+rawSection\.id === coverEntry\?\.section\.id/);
+  assert.match(appTsx, /Math\.min\(rect\.height, viewHeight\) \/ 2/);
+  // SSBug2 — kartu Signature disembunyikan.
+  assert.match(appTsx, /const SHOW_SIGNATURE_UPSELL = false/);
+  // SSBug1/TC-327 — canvas tanpa pemilik digabung ke design order, Copy/Delete customer disembunyikan.
+  assert.match(appTsx, /const host = groups\.find\(\(group\) => !group\.pending\) \|\| groups\[0\]/);
+  assert.match(appTsx, /role === "User"\s+\? "Template dibeli"/);
+  // SSBug3/4 — dashboard & list undangan per design.
+  assert.match(appTsx, /function designGuestCanvas\(design: WebsiteDesignGroup\)/);
+  assert.match(appTsx, /<WebsiteTemplatePreview\s+template=\{activeDesign\.template\}/);
+  // TC-303 — template disalin menimpa canvas awal kosong.
+  assert.match(serverJs, /const starterOnly =/);
+  // Invoice A4 baru.
+  assert.match(serverJs, /const RECEIPT_LAYOUT = "v2"/);
+  assert.ok(existsSync(new URL("../server/assets/fonts/cormorant-garamond-latin-500-normal.woff", import.meta.url)));
+  // TC-305 — spasi & baris baru pesan.
+  assert.match(appCss, /\.chat-text\{white-space:pre-wrap/);
+  // TC-308 — background HD dikompres otomatis.
+  assert.match(appTsx, /const BACKGROUND_IMAGE_LIMIT = 8 \* 1024 \* 1024/);
+  // TC-310 — bold font header.
+  assert.match(appCss, /\.wedding-site\{font-synthesis:weight style\}/);
+  assert.match(appTsx, /Cinzel:wght@400;600;700/);
+  // TC-313 — gambar sample langsung dipakai.
+  assert.match(serverJs, /const imageOnly =/);
+  // TC-316 — kolom Hex & riwayat warna.
+  assert.match(appTsx, /function rememberColor\(value\?: string\)/);
+  assert.match(appTsx, /onBlur=\{commitDraft\}/);
+  // TC-323/324/325/326 — beranda customer & WA.
+  assert.match(appTsx, /function CustomerWelcome\(/);
+  assert.match(appTsx, /type="date"\s+value=\{weddingDate\}/);
+  assert.match(appTsx, /const DEFAULT_WA_REMINDER =/);
+  // TC-304/307/311/312/314/315/317/318/319/320/321/322/329.
+  assert.match(appTsx, /function MentionTextarea\(/);
+  assert.match(appTsx, /const restack = \(id: string, move:/);
+  assert.match(appTsx, /onDeleteTemplate=\{onDeleteTemplate\}/);
+  assert.match(landingCss, /QA 14 TC-312/);
+  assert.match(appTsx, /\| "circle-split";/);
+  assert.match(appTsx, /free-snap-guide/);
+  assert.match(appTsx, /const \[warming, setWarming\]/);
+  assert.match(appTsx, /ikr-template-badge is-sale/);
+  assert.match(serverJs, /Versi tim sebelum diubah customer/);
+  assert.match(appTsx, /const DraftWatermarkContext = createContext\(false\)/);
+  assert.match(appTsx, /function mediaFadeMask\(feature: Feature\)/);
+  assert.match(appTsx, /function GalleryLightbox\(/);
+  assert.match(appTsx, /desktopSideStyle\?: "standard" \| "stacked" \| "framed" \| "monogram"/);
 });

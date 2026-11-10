@@ -233,10 +233,12 @@ export const api = {
   republishTemplate: (id: string) =>
     request<any>(`/templates/${id}/republish`, { method: "POST" }),
   // MoM A7 — harga ditetapkan Administrator.
-  setTemplatePrice: (id: string, price: number) =>
+  setTemplatePrice: (id: string, price: number, originalPrice?: number) =>
     request<any>(`/templates/${id}/price`, {
       method: "PATCH",
-      body: JSON.stringify({ price }),
+      body: JSON.stringify(
+        originalPrice === undefined ? { price } : { price, originalPrice },
+      ),
     }),
   // QA TC-151 — kurasi badge "Recommended" pada katalog publik.
   setTemplateRecommended: (id: string, recommended: boolean) =>
@@ -356,6 +358,13 @@ export const api = {
     ),
   order: (id: string) => request<any>(`/orders/${id}`),
   myOrders: () => request<any[]>("/me/orders"),
+  staffMentions: () =>
+    request<{ id: string; name: string; role: string }[]>("/staff/mentions"),
+  updateWeddingDate: (orderId: string, weddingDate: string, weddingTime: string) =>
+    request<{ weddingDate: string; weddingTime: string | null }>(
+      `/me/orders/${orderId}/wedding`,
+      { method: "PATCH", body: JSON.stringify({ weddingDate, weddingTime }) },
+    ),
   // MoM A6 — CS/Admin membuatkan akun customer dari order lunas.
   createOrderCustomerAccount: (id: string) =>
     request<{

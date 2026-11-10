@@ -2532,3 +2532,149 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .orders-table td>button{display:inline-flex;align-items:center;margin:8px 6px 0 0;padding:6px 10px;border-radius:8px;border:1px solid #cfe0d8;background:#fff;color:#125946;font-size:9px;font-weight:700;cursor:pointer}
 .orders-table td>button:hover:not(:disabled){background:#edf6f1}.orders-table td>button:disabled{opacity:.55;cursor:default}
 .orders-table td>button.order-expire-btn{border-color:#ecc9c4;color:#a1433a}
+/* QA 14 (SSBug4) — pratinjau Wedding Dashboard customer = render undangan asli. */
+.site-status-card.design-mode{grid-template-columns:190px 1fr 280px}
+.site-status-preview{width:190px;height:260px;border-radius:12px;overflow:hidden;background:#f3efe6;position:relative}
+.site-status-preview>*{height:100%}
+@media (max-width:900px){.site-status-card.design-mode{grid-template-columns:1fr}.site-status-preview{width:100%;max-width:260px;height:300px;margin:0 auto}}
+.chat-text{white-space:pre-wrap;overflow-wrap:anywhere}
+/* QA 14 TC-316 — kolom Hex & "Warna yang digunakan". */
+input.color-hex-input{flex:1;min-width:0;height:28px;border:1px solid #dfe6e2!important;border-radius:6px;padding:0 7px!important;font:500 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;color:#2d4740;background:#fff;text-transform:uppercase}
+input.color-hex-input::placeholder{text-transform:none;font-style:italic;color:#93a09a;font-family:inherit}
+input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!important}
+.color-recent-wrap{position:relative;flex:0 0 auto}
+.color-recent{position:absolute;right:0;top:calc(100% + 6px);z-index:60;width:186px;background:#fff;border:1px solid #dfe6e2;border-radius:10px;box-shadow:0 12px 28px rgba(20,40,34,.16);padding:10px;display:flex;flex-direction:column;gap:8px}
+.color-recent small{font-size:9px;font-weight:700;letter-spacing:.6px;color:#5f716a;text-transform:uppercase}
+.color-recent em{font-size:10px;color:#87948f;line-height:1.4}
+.color-recent-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:5px}
+.color-recent-grid button{aspect-ratio:1;border-radius:5px;border:1px solid rgba(0,0,0,.12);padding:0;cursor:pointer}
+.color-recent-grid button:hover{outline:2px solid #8fb8a6;outline-offset:1px}
+/* QA 14 TC-310 — :root mematikan font-synthesis untuk UI CMS. Di dalam
+   undangan (editor, preview, publik) Bold & Italic harus tetap berfungsi pada
+   font yang hanya punya satu bobot/gaya, jadi sintesis dinyalakan kembali. */
+.wedding-site{font-synthesis:weight style}
+/* QA 14 TC-323/325 — beranda customer: sambutan, countdown, tim. */
+.customer-welcome{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:16px;margin-bottom:18px}
+.welcome-card{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:22px;align-items:center;padding:22px 24px;border-radius:16px;background:linear-gradient(120deg,#fffaf1 0%,#f6efe1 55%,#eef4ef 100%);border:1px solid #eadfca}
+.welcome-kicker{display:inline-flex;align-items:center;gap:6px;font-size:9px;letter-spacing:1.6px;text-transform:uppercase;font-weight:700;color:#9a7a42}
+.welcome-text h2{font-family:'Playfair Display',Georgia,serif;font-size:26px;color:#183b31;margin:8px 0 6px}
+.welcome-text p{margin:0;font-size:12px;line-height:1.65;color:#5d6d67;max-width:460px}
+.welcome-countdown{min-width:258px;background:#173f33;color:#fff;border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;gap:9px}
+.welcome-countdown small{font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:#cfe0d8}
+.countdown-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}
+.countdown-grid span{display:flex;flex-direction:column;align-items:center;background:rgba(255,255,255,.08);border-radius:9px;padding:8px 4px}
+.countdown-grid strong{font-family:'Playfair Display',Georgia,serif;font-size:22px;line-height:1}
+.countdown-grid em{font-style:normal;font-size:9px;color:#cfe0d8;margin-top:4px}
+.countdown-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10px;color:#e6efe9}
+.countdown-foot button,.countdown-actions button{border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;border-radius:7px;padding:5px 10px;font-size:10px}
+.countdown-form>div:first-of-type{display:flex;gap:6px}
+.countdown-form input{flex:1;min-width:0;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,.3);background:#fff;padding:0 8px;font-size:11px;color:#183b31}
+.countdown-form{display:flex;flex-direction:column;gap:8px}
+.countdown-actions{display:flex;justify-content:flex-end;gap:6px}
+.countdown-actions button.primary{background:#d5ae69;border-color:#d5ae69;color:#173f33;font-weight:700}
+.team-card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:12px}
+.team-card header{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.team-card header strong{font-size:13px;color:#183b31}
+.team-card header span{font-size:9px;color:#8a9691}
+.team-card ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.team-card li{display:flex;gap:10px;align-items:center}
+.team-avatar{width:36px;height:36px;border-radius:50%;background:#e3eee9;color:#165943;display:grid;place-items:center;font-size:11px;font-weight:700;flex:0 0 auto}
+.team-card li div{display:flex;flex-direction:column}
+.team-card li strong{font-size:12px;color:#25463b}
+.team-card li small{font-size:10px;color:#87948f}
+.team-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+.team-actions button,.team-actions a{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;color:#1d5a49;border-radius:8px;padding:8px 12px;font-size:11px;font-weight:600}
+.team-actions .primary{background:var(--green);border-color:var(--green);color:#fff}
+.checkout-wedding-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.checkout-wedding-note{display:block;margin:-4px 0 10px;font-size:10px;color:#87948f}
+@media (max-width:1100px){.customer-welcome{grid-template-columns:1fr}}
+@media (max-width:700px){.welcome-card{grid-template-columns:1fr}.welcome-countdown{min-width:0}.checkout-wedding-row{grid-template-columns:1fr}}
+/* QA 14 TC-326 — template pesan WhatsApp. */
+.invitee-create-row{grid-template-columns:1.2fr 1fr 1fr auto!important}
+.wa-template-card{border:1px solid #dfe8e3;border-radius:12px;padding:14px;margin:14px 0;background:#fbfcfa;display:flex;flex-direction:column;gap:12px}
+.wa-template-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start;flex-wrap:wrap}
+.wa-template-head>div:first-child{display:flex;flex-direction:column;gap:4px;max-width:520px}
+.wa-template-head strong{font-size:13px;color:#183b31}
+.wa-template-head span{font-size:11px;color:#77847f;line-height:1.5}
+.wa-template-head code{background:#eef3f0;border-radius:4px;padding:1px 4px;font-size:10px}
+.wa-template-body{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.wa-template-body textarea{min-height:210px;border:1px solid #d9e2dd;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.55;resize:vertical;color:#25463b;background:#fff}
+.wa-template-preview{background:#e8f3ec;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.wa-template-preview small{font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#4f6f62;font-weight:700}
+.wa-template-preview p{margin:0;background:#fff;border-radius:8px 8px 8px 2px;padding:10px 12px;font-size:11.5px;line-height:1.55;color:#22352f;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+.wa-template-preview button{align-self:flex-start;display:inline-flex;align-items:center;gap:5px;border:1px solid #cfe0d8;background:#fff;border-radius:7px;padding:5px 9px;font-size:10px;color:#1d5a49}
+@media (max-width:800px){.wa-template-body{grid-template-columns:1fr}.invitee-create-row{grid-template-columns:1fr!important}}
+/* QA 14 TC-318 — label New & Diskon pada katalog. */
+.ikr-template-badges{position:absolute;top:12px;left:12px;z-index:3;display:flex;flex-wrap:wrap;gap:6px;max-width:calc(100% - 24px)}
+.ikr-template-badges .ikr-template-badge{position:static}
+.ikr-template-badge.is-new{background:#d5ae69;color:#173f33;font-weight:700}
+.ikr-template-badge.is-sale{background:#b9473c;color:#fff;font-weight:700}
+.ikr-template-price{display:flex;flex-direction:column;align-items:flex-end;line-height:1.2}
+.ikr-template-price s{font-size:.78em;color:#9aa49f;font-weight:400}
+.template-price-was{color:#9aa49f;font-size:.92em}
+.template-price-form input+input{margin-left:4px}
+/* QA 14 TC-322 — Our Gallery: hover & lightbox. */
+.gallery-grid.is-interactive img,.gallery-filmstrip.is-interactive img,.gallery-carousel.is-interactive img{cursor:zoom-in;transition:filter .25s ease,box-shadow .25s ease,opacity .25s ease}
+.gallery-grid.is-interactive img:hover,.gallery-filmstrip.is-interactive img:hover,.gallery-carousel.is-interactive img:hover{filter:brightness(1.08) saturate(1.06);box-shadow:0 10px 26px rgba(0,0,0,.22)}
+.gallery-grid.is-interactive img:focus-visible,.gallery-filmstrip.is-interactive img:focus-visible{outline:2px solid #d5ae69;outline-offset:2px}
+.gallery-lightbox{position:fixed;inset:0;z-index:2147483000;background:rgba(10,14,12,.92);display:flex;align-items:center;justify-content:center;touch-action:pan-y;animation:lightboxIn .2s ease}
+.gallery-lightbox img{max-width:min(92vw,1400px);max-height:86vh;object-fit:contain;border-radius:6px;box-shadow:0 20px 60px rgba(0,0,0,.5);user-select:none;animation:lightboxImg .25s ease}
+.gallery-lightbox button{position:absolute;border:0;border-radius:50%;width:46px;height:46px;display:grid;place-items:center;background:rgba(255,255,255,.14);color:#fff;cursor:pointer}
+.gallery-lightbox button:hover{background:rgba(255,255,255,.28)}
+.lightbox-close{top:18px;right:18px}
+.lightbox-nav.prev{left:18px;top:50%;transform:translateY(-50%)}
+.lightbox-nav.next{right:18px;top:50%;transform:translateY(-50%)}
+.lightbox-count{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);color:#e9efe9;font-size:13px;letter-spacing:1px;background:rgba(0,0,0,.35);padding:4px 12px;border-radius:999px}
+@keyframes lightboxIn{from{opacity:0}to{opacity:1}}
+@keyframes lightboxImg{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+@media (max-width:640px){.lightbox-nav{display:none!important}.gallery-lightbox img{max-width:100vw;border-radius:0}}
+/* QA 14 TC-320 — watermark DRAFT pada preview customer sebelum pesanan selesai. */
+.wedding-site.has-draft-watermark{position:relative}
+.wedding-site.has-draft-watermark::after{content:"";position:absolute;inset:0;z-index:2147480000;pointer-events:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='340' height='220' viewBox='0 0 340 220'%3E%3Cg transform='rotate(-28 170 110)' fill='%23888' fill-opacity='0.3' font-family='Georgia,serif' text-anchor='middle'%3E%3Ctext x='170' y='104' font-size='38' letter-spacing='8'%3EDRAFT%3C/text%3E%3Ctext x='170' y='132' font-size='13' letter-spacing='3'%3Eikrarku %C2%B7 belum final%3C/text%3E%3C/g%3E%3C/svg%3E");background-repeat:repeat}
+/* QA 14 TC-304 — saran mention pada catatan internal. */
+.mention-field{position:relative;display:block;flex:1;min-width:0}
+.mention-field>textarea{width:100%}
+.mention-menu{position:absolute;left:8px;bottom:calc(100% + 4px);z-index:70;min-width:220px;max-width:300px;background:#fff;border:1px solid #dfe6e2;border-radius:10px;box-shadow:0 12px 28px rgba(20,40,34,.16);padding:5px;display:flex;flex-direction:column}
+.mention-menu button{display:flex;flex-direction:column;align-items:flex-start;gap:1px;border:0;background:none;border-radius:7px;padding:7px 9px;text-align:left;cursor:pointer}
+.mention-menu button.active,.mention-menu button:hover{background:#eaf1ee}
+.mention-menu strong{font-size:12px;color:#1d5a49}
+.mention-menu small{font-size:10px;color:#87948f}
+/* QA 14 TC-307 — urutan lapisan ornamen. */
+.deco-order{display:flex;flex-wrap:wrap;align-items:center;gap:5px;margin:6px 0 4px}
+.deco-order>span{width:100%;font-size:10px;font-weight:600;color:#5f716a}
+.deco-order button{display:inline-flex;align-items:center;gap:4px;border:1px solid #dfe6e2;background:#fff;border-radius:6px;padding:5px 7px;font-size:10px;color:#2d4740;cursor:pointer}
+.deco-order button:hover{background:#eaf1ee;border-color:#b9d2c6}
+/* QA 14 TC-321 — gradien transparan pada foto Image & Our Gallery. */
+.feature-block[style*="--media-fade-mask"] img{-webkit-mask-image:var(--media-fade-mask);mask-image:var(--media-fade-mask);-webkit-mask-size:100% 100%;mask-size:100% 100%}
+.gallery-lightbox img{-webkit-mask-image:none;mask-image:none}
+/* QA 14 TC-314 — Our Gallery: satu lingkaran dibagi dua foto. */
+.gallery-grid.layout-circle-split{display:grid!important;grid-template-columns:1fr 1fr!important;grid-auto-rows:auto!important;column-count:auto;gap:3px!important;width:min(100%,460px);aspect-ratio:1;margin-inline:auto;border-radius:50%;overflow:hidden}
+.gallery-grid.layout-circle-split img{width:100%!important;height:100%!important;aspect-ratio:auto!important;object-fit:cover;border-radius:0!important;grid-row:auto!important;grid-column:auto!important}
+.gallery-grid.layout-circle-split img:nth-of-type(n+3){display:none!important}
+/* QA 14 TC-315 — garis bantu snapping saat menggeser objek bebas. */
+.free-snap-guide{position:absolute;z-index:60;pointer-events:none;opacity:0;transition:opacity .08s}
+.free-snap-guide.on{opacity:1}
+.free-snap-guide.v{top:0;bottom:0;left:50%;width:0;border-left:1px dashed #e0457b}
+.free-snap-guide.h{left:0;right:0;top:50%;height:0;border-top:1px dashed #e0457b}
+/* QA 14 TC-319 — versi tim sebelum diubah customer. */
+.revision-list button.revision-team{border-color:#cfe3da;background:#f3f9f6}
+.revision-team-chip{margin-left:8px;font-style:normal;font-size:9px;font-weight:700;letter-spacing:.4px;padding:2px 7px;border-radius:999px;background:#125946;color:#fff;vertical-align:middle}
+/* QA 14 TC-329 — sisi visual ala Serein: gaya nama & gambar layer 2. */
+.desktop-side-overlay{position:absolute;left:50%;transform:translateX(-50%);z-index:1;pointer-events:none;max-height:100%;object-fit:contain}
+.desktop-side-overlay.at-center{top:50%;transform:translate(-50%,-50%)}
+.desktop-side-overlay.at-top{top:4%}
+.desktop-side-overlay.at-bottom{bottom:4%}
+.desktop-side-text{position:relative;z-index:2}
+.side-names{display:flex;flex-direction:column;align-items:center;line-height:1.02}
+.side-names em{font-style:italic;font-weight:400;font-size:.62em;opacity:.85;margin:.08em 0}
+.side-style-stacked h2{text-align:center}
+.side-style-framed{padding:34px 40px;border:1px solid currentColor;outline:1px solid currentColor;outline-offset:6px;text-align:center;max-width:min(80%,620px)}
+.side-style-framed p::before{content:"";display:block;width:56px;height:1px;background:currentColor;margin:0 auto 14px;opacity:.7}
+.side-style-monogram{text-align:center}
+.side-monogram{display:flex;align-items:center;justify-content:center;gap:.12em;width:2.6em;height:2.6em;margin:0 auto .35em;border:1px solid currentColor;border-radius:50%;font-size:.7em;letter-spacing:.04em}
+.side-monogram i{font-size:.55em;opacity:.8}
+.side-style-monogram .side-names{font-size:.7em;letter-spacing:.12em;text-transform:uppercase}
+.side-overlay-row{display:flex;gap:6px;margin-top:4px}
+.side-overlay-row button{display:inline-flex;align-items:center;gap:5px;border:1px solid #dfe6e2;background:#fff;border-radius:7px;padding:6px 9px;font-size:10px}
+/* QA 14 TC-317 — animasi ditahan sampai gambar selesai di-decode (maks 2,5 dtk). */
+.wedding-site.is-warming .section-decoration,.wedding-site.is-warming .background-extra-layer,.wedding-site.is-warming [class*="bg-motion-"],.wedding-site.is-warming .canvas-section[class*=" loop-"]{animation-play-state:paused!important}

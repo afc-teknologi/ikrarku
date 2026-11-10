@@ -813,7 +813,8 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
         new Date().getFullYear() +
         "-" +
         order.orderNo.split("-").at(-1) +
-        ".pdf";
+        // QA 14 — invoice layout baru disimpan dengan penanda versi.
+        "-v2.pdf";
       const conflict = path.join(dir, "receipts", receiptName);
       mkdirSync(conflict);
       assert.equal(
@@ -1634,6 +1635,81 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       const own = await call("GET", "/site", undefined, customer.token);
       assert.match(own.data.teamEdit.name, /Web Designer/);
       assert.ok(own.data.teamEdit.at);
+    },
+  );
+  await t.test(
+    "QA 14: versi tim sebelum diubah customer, tanggal pernikahan, mention, hapus template, invoice baru",
+    async () => {
+      // TC-319 — simpanan customer setelah simpanan tim mencatat versi tim.
+      const current = await call("GET", "/site", undefined, customer.token);
+      const payload = {
+        title: current.data?.title || "Undangan",
+        slug: current.data?.slug || "customer-site",
+        templateId: current.data?.templateId || template.id,
+        sections: current.data?.sections || [],
+        status: "Draft",
+      };
+      assert.equal((await call("PUT", "/site", payload, customer.token)).status, 200);
+      const revisions = await call("GET", "/site/revisions", undefined, customer.token);
+      assert.ok(
+        revisions.data.some((row) => row.reason === "Versi tim sebelum diubah customer"),
+        JSON.stringify(revisions.data.map((row) => row.reason)),
+      );
+      // TC-324 — tanggal & jam pernikahan disimpan dari checkout dan bisa diubah.
+      const order = await call("POST", "/orders", {
+        customerName: "Wedding Date",
+        email: "weddingdate@example.test",
+        phone: "08123456790",
+        templateId: template.id,
+        weddingDate: "2027-02-14",
+        weddingTime: "10:30",
+      });
+      assert.equal(order.status, 201, JSON.stringify(order.data));
+      const stored = db
+        .prepare("SELECT wedding_date,wedding_time FROM orders WHERE id=?")
+        .get(order.data.id);
+      assert.deepEqual({ ...stored }, { wedding_date: "2027-02-14", wedding_time: "10:30" });
+      assert.equal(
+        (
+          await call("POST", "/orders", {
+            customerName: "Bad Date",
+            email: "baddate@example.test",
+            phone: "08123456791",
+            templateId: template.id,
+            weddingDate: "14-02-2027",
+          })
+        ).status,
+        400,
+      );
+      const mine = (await call("GET", "/me/orders", undefined, customer.token)).data;
+      if (mine[0]) {
+        const changed = await call(
+          "PATCH",
+          `/me/orders/${mine[0].id}/wedding`,
+          { weddingDate: "2027-03-01", weddingTime: "09:00" },
+          customer.token,
+        );
+        assert.equal(changed.status, 200);
+      }
+      // TC-304 — daftar staff untuk mention; customer tidak boleh mengakses.
+      assert.equal((await call("GET", "/staff/mentions", undefined, customer.token)).status, 403);
+      const staff = await call("GET", "/staff/mentions", undefined, admin.token);
+      assert.equal(staff.status, 200);
+      assert.ok(staff.data.length > 0);
+      // TC-311 — template yang pernah dipesan diarsipkan saat dihapus Admin.
+      const ordered = db
+        .prepare("SELECT template_id FROM orders WHERE template_id IS NOT NULL LIMIT 1")
+        .get().template_id;
+      const removed = await call("DELETE", `/templates/${ordered}`, undefined, admin.token);
+      assert.equal(removed.status, 200, JSON.stringify(removed.data));
+      assert.equal(removed.data.archived, true);
+      const list = await call("GET", "/templates", undefined, admin.token);
+      assert.ok(!list.data.some((row) => row.id === ordered));
+      // Invoice disimpan dengan layout baru (-v2).
+      const paid = db
+        .prepare("SELECT receipt_path FROM orders WHERE receipt_path IS NOT NULL LIMIT 1")
+        .get();
+      if (paid) assert.match(paid.receipt_path, /-v2\.pdf$/);
     },
   );
 });

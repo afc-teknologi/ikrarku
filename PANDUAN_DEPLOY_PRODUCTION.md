@@ -310,6 +310,26 @@ cp .env.staging.bak-YYYYMMDD .env.staging
 docker compose -f docker-compose.staging.yml up -d --force-recreate
 ```
 
+## J. QA 14 — konfigurasi tambahan (10 Nov)
+
+Opsional, tambahkan ke `.env.staging` / `.env.production` lalu restart:
+
+```env
+CS_WHATSAPP=08xxxxxxxxxx      # nomor WhatsApp CS: footer invoice & dashboard customer
+NEW_TEMPLATE_DAYS=14          # lama label "New" pada katalog
+```
+
+- Kolom database baru dibuat otomatis saat server menyala
+  (`orders.wedding_date`, `orders.wedding_time`, `templates.original_price`,
+  `sites.last_saved_by`). Tidak perlu migrasi manual.
+- Font invoice ada di `server/assets/fonts` (ikut repo); logo invoice
+  diambil dari `dist/brand/ikrarku-logo.png` (hasil build) atau
+  `public/brand/ikrarku-logo.png`.
+- Invoice lama dibuat ulang dengan desain baru saat pertama diunduh
+  (file `RCPT-…-v2.pdf` di folder receipts). File lama boleh dibiarkan.
+- Cek cepat setelah deploy: buka satu order Paid di Orders & Revenue →
+  unduh invoice → pastikan desain baru tampil.
+
 ## F. Rollback
 
 ```bash

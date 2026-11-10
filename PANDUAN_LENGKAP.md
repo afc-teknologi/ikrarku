@@ -1314,6 +1314,91 @@ Langkah lengkap: [PANDUAN_DEPLOY_PRODUCTION.md bagian I](PANDUAN_DEPLOY_PRODUCTI
 - IKR-12–15 (P2): motion masuk/keluar & animasi teks, ±4 template baru,
   format handoff desain, grup koordinasi.
 
+# Bagian W — QA 14 (10 November 2026)
+
+Ringkasan perubahan TC-303 s/d TC-329, revisi WhatsApp SSBug1–5, dan
+invoice baru. Detail teknis ada di CHANGELOG 0.18.0.
+
+## W.1 — Customer: satu undangan, satu card
+
+- **Template & Canvas**: satu card per pembelian. Canvas yang tidak punya
+  penanda order (canvas awal, salinan, canvas tambahan tim) ikut masuk ke
+  design order terbaru. Customer tidak melihat tombol Copy & Delete.
+- **Wedding Dashboard**: pratinjau undangan asli, statistik tamu & RSVP per
+  undangan. Pilihan "Undangan" hanya muncul bila customer punya lebih dari
+  satu pembelian.
+- **List Undangan**: dikelola per undangan, bukan per canvas internal.
+- **Beranda**: sambutan, hitung mundur hari pernikahan, kartu tim (CS &
+  Web Designer + Chat dengan tim, WhatsApp CS bila `CS_WHATSAPP` diisi).
+  Order lama yang belum punya tanggal pernikahan dapat mengisinya langsung
+  di kartu hitung mundur.
+
+## W.2 — Checkout
+
+Form "Data pemesan" mewajibkan **tanggal** (tidak boleh sebelum hari ini)
+dan **jam** pernikahan. Nilainya dipakai untuk hitung mundur dan dapat
+diubah customer kapan saja dari dashboard.
+
+## W.3 — Template pesan WhatsApp (List Undangan)
+
+1. Pilih tab **Undangan digital** atau **Reminder RSVP**.
+2. Ubah teks bila perlu; `{nama}` dan `{link}` diganti otomatis per tamu.
+   Tombol "Kembalikan teks bawaan" mengembalikan teks awal.
+3. Klik ikon kirim (pesawat kertas) pada baris tamu untuk membuka WhatsApp
+   dengan pesan yang sudah terisi. Tamu perlu memiliki nomor WhatsApp
+   (kolom baru saat menambah tamu, atau kolom `phone` pada CSV).
+
+## W.4 — Undangan publik
+
+- Ornamen dimuat sejak awal (dulu baru muncul setelah halaman digulir).
+- Setelah **Buka Undangan** diklik, tamu langsung masuk ke canvas
+  berikutnya; layar Buka Undangan tidak tampil dua kali.
+- Our Gallery: klik foto untuk memperbesar, geser kanan-kiri / swipe,
+  Esc atau klik latar untuk menutup.
+- Preview yang dilihat customer memuat watermark **DRAFT** sampai task Web
+  Designer pada order-nya berstatus Done.
+
+## W.5 — Editor (Web Designer)
+
+- **Ornamen → Urutan lapisan**: Paling depan, Maju, Mundur, Paling
+  belakang.
+- **Posisi bebas**: objek menempel di tengah kolom saat digeser mendekati
+  tengah (garis bantu merah muda). Tahan **Alt** untuk menggeser tanpa
+  snapping.
+- **Color picker**: ketik kode Hex di kolom sebelah swatch lalu klik di
+  luar atau Enter. Ikon palet membuka "Warna yang digunakan".
+- **Image & Our Gallery → Gradien transparan foto**: arah memudar dan
+  titik mulai.
+- **Our Gallery → Lingkaran 2 Foto**: dua foto pertama dalam satu
+  lingkaran.
+- **Page Structure → Desktop layout kolom (ala Serein) → Isi sisi
+  visual**: gaya nama (Standar, Bertumpuk, Bingkai garis ganda, Monogram)
+  dan gambar layer 2 (PNG transparan) dengan ukuran & posisi.
+- **Background**: gambar sampai 25 MB diterima; di atas 8 MB dikompres
+  otomatis (resolusi tetap HD).
+- **Catatan internal**: ketik `@` untuk menyebut rekan; yang disebut
+  menerima email.
+- **Revisions**: versi bertanda **Versi tim** adalah tampilan terakhir
+  buatan tim sebelum customer mengubahnya — pilih lalu Save untuk revert.
+
+## W.6 — Administrator
+
+- **Templates & Approval → Hapus template** (dengan konfirmasi). Template
+  yang pernah dipesan diarsipkan: hilang dari katalog dan daftar, tetapi
+  order, invoice, dan website customer tetap utuh.
+- **Ubah harga → Harga coret (opsional)**: isi harga sebelum diskon untuk
+  memunculkan label **Diskon X%** di katalog. Kosongkan untuk menghapus.
+  Label **New** otomatis untuk template berumur ≤ `NEW_TEMPLATE_DAYS` hari.
+- **Gambar sample / Thumbnail** dari Web Designer langsung tampil tanpa
+  menunggu approval revisi.
+- **Invoice** baru (desain A4). Invoice lama dibuat ulang otomatis saat
+  diunduh; nomor invoice/receipt tidak berubah.
+
+## W.7 — Butuh konfirmasi QA
+
+- TC-309: perilaku padding yang diharapkan saat font diperbesar.
+- TC-328: lokasi dan bukti shadow pemisah slide yang bocor.
+
 # Keamanan
 
 - Jangan mengirim API key lewat chat grup atau dokumen bersama
