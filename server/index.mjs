@@ -318,6 +318,11 @@ function initDb() {
   // 'internal' = hanya terlihat oleh staff, tidak pernah dikirim ke customer
   ensureColumn("messages", "visibility", "TEXT NOT NULL DEFAULT 'public'");
   ensureColumn("orders", "user_id", "TEXT");
+  // QA 14 TC-324 — tanggal & jam pernikahan dari form checkout (countdown).
+  ensureColumn("orders", "wedding_date", "TEXT");
+  ensureColumn("orders", "wedding_time", "TEXT");
+  // QA 14 TC-319 — siapa yang terakhir menyimpan website (staff / customer).
+  ensureColumn("sites", "last_saved_by", "TEXT");
   ensureColumn("orders", "gateway_ref", "TEXT");
   // QA TC-101 idle session, TC-105 reset password, TC-075/076 takedown, TC-106 sample image
   ensureColumn("users", "reset_token", "TEXT");
@@ -329,6 +334,8 @@ function initDb() {
   // QA TC-151: penanda "Recommended" pada katalog desain. Dikurasi Administrator,
   // bukan bagian dari konten template, jadi tidak ikut alur approval.
   ensureColumn("templates", "recommended", "INTEGER NOT NULL DEFAULT 0");
+  // QA 14 TC-318 — harga sebelum diskon (harga coret) untuk label Diskon.
+  ensureColumn("templates", "original_price", "INTEGER");
   // Share fee per Template Creator; NULL = ikut rate default platform.
   ensureColumn("users", "commission_rate", "REAL");
   // MoM A8 — urutan round-robin Web Designer memakai waktu penugasan, bukan
@@ -1546,6 +1553,7 @@ function creatorLabel(userId) {
   if (!row) return null;
   return `${row.first_name || ""} ${row.last_name || ""}`.trim() || null;
 }
+const NEW_TEMPLATE_DAYS = Math.max(1, Number(process.env.NEW_TEMPLATE_DAYS || 14));
 function mapTemplate(row) {
   return {
     createdByName: creatorLabel(row.created_by),
@@ -1565,6 +1573,15 @@ function mapTemplate(row) {
     bg: row.background,
     premium: Boolean(row.premium),
     recommended: Boolean(row.recommended),
+    // QA 14 TC-318 — label "New" (template berumur ≤ NEW_TEMPLATE_DAYS hari)
+    // dan "Diskon" (harga coret lebih tinggi dari harga jual).
+    originalPrice:
+      row.original_price && row.original_price > row.price
+        ? row.original_price
+        : null,
+    isNew:
+      Date.now() - new Date(row.created_at || 0).getTime() <
+      NEW_TEMPLATE_DAYS * 86_400_000,
     preset: row.preset,
     createdBy: row.created_by,
     approvedBy: row.approved_by,
@@ -1660,6 +1677,50 @@ function brandedEmail({
 </body></html>`;
 }
 
+// QA 14 TC-304 — mention (@Nama) pada catatan internal. Staff yang disebut
+// menerima email berisi catatannya. Nama dicocokkan dengan nama lengkap
+// atau nama depan staff aktif (bukan customer).
+function staffDirectory() {
+  return db
+    .prepare(
+      `SELECT u.id,trim(coalesce(u.first_name,'')||' '||coalesce(u.last_name,'')) name,u.first_name,r.name role FROM users u LEFT JOIN roles r ON r.id=u.role_id WHERE u.active=1 AND u.role_id<>'role_user' ORDER BY u.first_name`,
+    )
+    .all();
+}
+function mentionedStaff(body) {
+  const text = String(body || "").toLowerCase();
+  if (!text.includes("@")) return [];
+  return staffDirectory().filter((member) =>
+    [member.name, member.first_name]
+      .filter(Boolean)
+      .some((label) => {
+        const token = `@${String(label).toLowerCase()}`;
+        const at = text.indexOf(token);
+        if (at < 0) return false;
+        const next = text.charAt(at + token.length);
+        return !next || !/[a-z0-9]/.test(next);
+      }),
+  );
+}
+function notifyMentions(body, sender, contextLabel, bodyHtml = "", skip = []) {
+  const senderName =
+    `${sender.firstName || sender.first_name || ""} ${sender.lastName || sender.last_name || ""}`.trim() ||
+    "Tim ikrarku";
+  const notified = [];
+  for (const member of mentionedStaff(body)) {
+    if (member.id === sender.id || skip.includes(member.id)) continue;
+    notifyStaff(
+      member.id,
+      `${senderName} menyebut Anda: ${contextLabel}`,
+      "Anda disebut di catatan internal",
+      `${escapeHtml(senderName)} menyebut Anda pada ${escapeHtml(contextLabel)}.`,
+      bodyHtml +
+        `<blockquote style="margin:0 0 16px;padding:10px 14px;border-left:3px solid #d5ae69;background:#faf6ee;color:#163a30;font-size:14px;line-height:1.6;">${escapeHtml(body).replace(/\n/g, "<br>")}</blockquote>`,
+    );
+    notified.push(member.id);
+  }
+  return notified;
+}
 // MoM 2 Nov IKR-05/08 — email ke staff (CS / Web Designer) saat order
 // ditugaskan atau ada catatan internal baru. Dulu staff hanya tahu dari
 // halaman Tasks, sehingga order baru "tidak terlihat" sampai dicek manual.
@@ -1769,10 +1830,19 @@ function createOrFindConversation({
 
 app.get("/api/templates", auth, (req, res) => {
   const isAdmin = req.user.permissions.includes("*");
+  // QA 14 TC-311 — template yang dihapus Administrator tetapi pernah dipesan
+  // disimpan sebagai 'Archived' (riwayat order tetap utuh) dan tidak tampil
+  // di mana pun.
   const rows = isAdmin
-    ? db.prepare("SELECT * FROM templates ORDER BY created_at DESC").all()
+    ? db
+        .prepare(
+          "SELECT * FROM templates WHERE status<>'Archived' ORDER BY created_at DESC",
+        )
+        .all()
     : db
-        .prepare("SELECT * FROM templates ORDER BY created_at DESC")
+        .prepare(
+          "SELECT * FROM templates WHERE status<>'Archived' ORDER BY created_at DESC",
+        )
         .all()
         // Template milik Web Designer lain tidak boleh terlihat maupun dipilih.
         // Yang tersisa: template sendiri dan template yang dibuat Administrator.
@@ -1913,15 +1983,58 @@ app.patch("/api/templates/:id", auth, (req, res) => {
   const requestedStatus =
     req.body.status === "Approved" ? "Published" : req.body.status;
   const status = canAll && requestedStatus ? requestedStatus : row.status;
+  // QA 14 TC-313 — upload Gambar sample / Thumbnail oleh Web Designer pada
+  // template yang sudah Published dulu masuk draft revisi yang menunggu
+  // approval, sehingga gambarnya "tidak tampil" walau sudah diupload
+  // berkali-kali. Gambar promosi langsung dipakai (tidak mengubah isi
+  // undangan) dan ikut dicatat pada draft yang ada agar approval tidak
+  // mengembalikannya.
+  const bodyKeys = Object.keys(req.body || {});
+  const imageOnly =
+    bodyKeys.length > 0 &&
+    bodyKeys.every((key) => ["sampleImage", "headerImage", "preview"].includes(key));
+  if (imageOnly) {
+    const preview =
+      req.body.preview !== undefined ? req.body.preview : row.preview_url;
+    const sample =
+      req.body.sampleImage !== undefined
+        ? req.body.sampleImage
+        : row.sample_image_url;
+    const header =
+      req.body.headerImage !== undefined
+        ? req.body.headerImage
+        : row.header_image_url;
+    db.prepare(
+      "UPDATE templates SET preview_url=?,sample_image_url=?,header_image_url=?,updated_at=? WHERE id=?",
+    ).run(preview, sample, header, now(), row.id);
+    if (pending) {
+      const draft = parseJson(pending.changes_json, {});
+      if (req.body.preview !== undefined) draft.preview_url = preview;
+      if (req.body.sampleImage !== undefined) draft.sample_image_url = sample;
+      if (req.body.headerImage !== undefined) draft.header_image_url = header;
+      db.prepare(
+        "UPDATE template_drafts SET changes_json=?,updated_at=? WHERE template_id=?",
+      ).run(JSON.stringify(draft), now(), row.id);
+    }
+    return res.json(
+      mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
+    );
+  }
   saveTemplateRevision(row, req.user.id, "Before save");
+  // Thumbnail (preview_url) dan Gambar sample terpisah (TC-106): menyimpan
+  // salah satunya tidak lagi menimpa yang lain.
+  const nextPreview =
+    req.body.preview !== undefined
+      ? req.body.preview
+      : (draftBase.preview_url ?? row.preview_url);
   const nextSample =
     req.body.sampleImage !== undefined
       ? req.body.sampleImage
-      : (next.preview ?? row.sample_image_url ?? row.preview_url);
+      : (draftBase.sample_image_url ?? row.sample_image_url ?? row.preview_url);
   const nextHeader =
     req.body.headerImage !== undefined
       ? req.body.headerImage
-      : (row.header_image_url ?? nextSample);
+      : (draftBase.header_image_url ?? row.header_image_url ?? nextSample);
   if (!canAll && ["Published", "Approved"].includes(row.status)) {
     const changes = {
       name: next.name,
@@ -1929,7 +2042,7 @@ app.patch("/api/templates/:id", auth, (req, res) => {
       description: next.description,
       // MoM A7: harga bukan bagian revisi Web Designer (tidak disimpan di
       // draft, sehingga approve revisi tidak bisa mengembalikan harga lama).
-      preview_url: nextSample,
+      preview_url: nextPreview,
       sample_image_url: nextSample,
       header_image_url: nextHeader,
       accent: next.accent,
@@ -1979,7 +2092,7 @@ app.patch("/api/templates/:id", auth, (req, res) => {
     next.description,
     canAll ? Math.max(0, Math.round(Number(next.price) || 0)) : row.price,
     status,
-    nextSample ?? next.preview_url,
+    nextPreview,
     nextSample,
     nextHeader,
     next.accent,
@@ -2053,11 +2166,29 @@ app.delete("/api/templates/:id", auth, permit("templates.edit"), (req, res) => {
   const used = db
     .prepare("SELECT COUNT(*) total FROM orders WHERE template_id=?")
     .get(row.id);
-  if (used.total > 0)
-    return res.status(409).json({
-      error:
-        "Template sudah pernah dipesan customer. Gunakan Takedown agar riwayat order tetap utuh.",
+  if (used.total > 0) {
+    // QA 14 TC-311 — Administrator tetap bisa menghapus template yang sudah
+    // pernah dipesan: template diarsipkan (hilang dari katalog, Templates &
+    // Approval, dan landing) tanpa merusak order, invoice, maupun website
+    // customer yang sudah memakainya.
+    if (!req.user.permissions.includes("*"))
+      return res.status(409).json({
+        error:
+          "Template sudah pernah dipesan customer. Hanya Administrator yang dapat menghapusnya.",
+      });
+    db.prepare(
+      "UPDATE templates SET status='Archived',recommended=0,updated_at=? WHERE id=?",
+    ).run(now(), row.id);
+    db.prepare("DELETE FROM template_drafts WHERE template_id=?").run(row.id);
+    db.prepare(
+      "UPDATE tasks SET status='Cancelled',updated_at=? WHERE template_id=? AND status NOT IN ('Done','Cancelled')",
+    ).run(now(), row.id);
+    auditLog(req.user.id, "template.archive", "template", row.id, {
+      name: row.name,
+      orders: used.total,
     });
+    return res.json({ ok: true, archived: true, orders: used.total });
+  }
   for (const table of [
     "template_drafts",
     "template_autosaves",
@@ -2157,9 +2288,20 @@ app.patch("/api/templates/:id/price", auth, (req, res) => {
       .status(400)
       .json({ error: "Harga harus angka 0 – 100.000.000" });
   const next = Math.round(price);
+  // QA 14 TC-318 — harga coret opsional; harus lebih tinggi dari harga jual.
+  const rawOriginal = req.body?.originalPrice;
+  let original = row.original_price ?? null;
+  if (rawOriginal !== undefined) {
+    const value = Math.round(Number(rawOriginal) || 0);
+    if (value && value <= next)
+      return res.status(400).json({
+        error: "Harga sebelum diskon harus lebih tinggi dari harga jual",
+      });
+    original = value || null;
+  }
   db.prepare(
-    "UPDATE templates SET price=?,premium=?,updated_at=? WHERE id=?",
-  ).run(next, next > 0 ? 1 : 0, now(), row.id);
+    "UPDATE templates SET price=?,premium=?,original_price=?,updated_at=? WHERE id=?",
+  ).run(next, next > 0 ? 1 : 0, original, now(), row.id);
   // Revisi yang menunggu approval tidak boleh mengembalikan harga lama.
   const pending = db
     .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
@@ -2985,6 +3127,10 @@ app.put("/api/clients/:id/site", auth, permit("users.view"), (req, res) => {
       now(),
     );
   db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.params.id);
+  db.prepare("UPDATE sites SET last_saved_by=? WHERE user_id=?").run(
+    req.user.id,
+    req.params.id,
+  );
   if (req.user.id !== req.params.id) notifyTeamEdit(req.params.id, req.user);
   auditLog(req.user.id, "client-site.save", "site", existing?.id || "", {
     customerUserId: req.params.id,
@@ -3042,9 +3188,9 @@ app.get(
     res.json(
       db
         .prepare(
-          `SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30`,
+          `SELECT * FROM (SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30) UNION SELECT * FROM (SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? AND r.reason='Versi tim sebelum diubah customer' ORDER BY r.created_at DESC LIMIT 5) ORDER BY created_at DESC`,
         )
-        .all(site.id)
+        .all(site.id, site.id)
         .map((r) => ({ ...r, sections: parseJson(r.canvas_json, []) })),
     );
   },
@@ -3139,7 +3285,7 @@ app.post(
     queueEmail(
       target.email,
       "Pesan baru dari ikrarku",
-      `<h2>Pesan baru</h2><p>${escapeHtml(body)}</p><p>Silakan login ke ikrarku atau balas melalui channel support.</p>`,
+      `<h2>Pesan baru</h2><p style="white-space:pre-wrap">${escapeHtml(body).replace(/\n/g, "<br>")}</p><p>Silakan login ke ikrarku atau balas melalui channel support.</p>`,
     );
     res.status(201).json({ conversationId: conversation.id, messageId });
   },
@@ -3305,7 +3451,18 @@ app.put("/api/site", auth, permit("canvas.manage.own"), (req, res) => {
     .prepare("SELECT id FROM sites WHERE slug=? AND user_id<>?")
     .get(payload.slug, req.user.id);
   if (conflict) return res.status(409).json({ error: "URL sudah digunakan" });
-  if (existing) saveSiteRevision(existing, req.user.id, "Before publish/save");
+  if (existing) {
+    // QA 14 TC-319 — versi terakhir buatan tim (CS / Web Designer) disimpan
+    // sebagai titik pulih khusus begitu customer mulai mengubahnya, sehingga
+    // Web Designer selalu bisa revert ke tampilan sebelum diubah customer
+    // walau customer sudah menyimpan puluhan kali sesudahnya.
+    const lastSaver = existing.last_saved_by
+      ? db.prepare("SELECT role_id FROM users WHERE id=?").get(existing.last_saved_by)
+      : null;
+    if (lastSaver && lastSaver.role_id !== "role_user")
+      saveSiteRevision(existing, existing.last_saved_by, "Versi tim sebelum diubah customer");
+    else saveSiteRevision(existing, req.user.id, "Before publish/save");
+  }
   if (existing)
     db.prepare(
       "UPDATE sites SET title=?,slug=?,template_id=?,canvas_json=?,status=?,updated_at=? WHERE user_id=?",
@@ -3333,6 +3490,10 @@ app.put("/api/site", auth, permit("canvas.manage.own"), (req, res) => {
       now(),
     );
   db.prepare("DELETE FROM site_autosaves WHERE user_id=?").run(req.user.id);
+  db.prepare("UPDATE sites SET last_saved_by=? WHERE user_id=?").run(
+    req.user.id,
+    req.user.id,
+  );
   auditLog(req.user.id, "site.save", "site", existing?.id || "", {
     slug: payload.slug,
     status: payload.status,
@@ -3372,9 +3533,9 @@ app.get(
     res.json(
       db
         .prepare(
-          `SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30`,
+          `SELECT * FROM (SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? ORDER BY r.created_at DESC LIMIT 30) UNION SELECT * FROM (SELECT r.*,u.first_name||' '||u.last_name actor_name FROM site_revisions r LEFT JOIN users u ON u.id=r.actor_user_id WHERE r.site_id=? AND r.reason='Versi tim sebelum diubah customer' ORDER BY r.created_at DESC LIMIT 5) ORDER BY created_at DESC`,
         )
-        .all(site.id)
+        .all(site.id, site.id)
         .map((r) => ({ ...r, sections: parseJson(r.canvas_json, []) })),
     );
   },
@@ -3625,55 +3786,243 @@ function drainEditorQueue() {
     console.error("[editor-queue] gagal membagi antrean:", error.message);
   }
 }
+// QA 14 — invoice pembayaran mengikuti desain "Invoice — A4 1" (logo,
+// tabel layanan, kotak detail pembayaran + stempel PAID, total, ucapan
+// terima kasih, pita footer). Font Cormorant Garamond & DM Sans (OFL)
+// disertakan di server/assets/fonts agar tampilan sama di semua server.
+const FONT_DIR = path.join(__dirname, "assets", "fonts");
+// Image Docker produksi hanya membawa dist/ (Vite menyalin public/ ke sana).
+const BRAND_LOGO =
+  [
+    path.resolve(__dirname, "..", "dist", "brand", "ikrarku-logo.png"),
+    path.resolve(__dirname, "..", "public", "brand", "ikrarku-logo.png"),
+  ].find((file) => fs.existsSync(file)) || "";
+const RECEIPT_LAYOUT = "v2";
+function receiptDateParts(value) {
+  const date = value ? new Date(value) : new Date();
+  const tz = { timeZone: "Asia/Jakarta" };
+  const day = new Intl.DateTimeFormat("en-GB", { ...tz, day: "numeric" }).format(date);
+  const month = new Intl.DateTimeFormat("en-GB", { ...tz, month: "long" }).format(date);
+  const monthShort = new Intl.DateTimeFormat("en-GB", { ...tz, month: "short" }).format(date);
+  const year = new Intl.DateTimeFormat("en-GB", { ...tz, year: "numeric" }).format(date);
+  const time = new Intl.DateTimeFormat("en-GB", {
+    ...tz,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+  return {
+    long: `${day} ${month} ${year}`,
+    stamp: `${day} ${monthShort} ${year}, ${time} WIB`,
+    seal: `${String(day).padStart(2, "0")} ${monthShort.toUpperCase()} ${year}`,
+  };
+}
+function formatIdr(amount, currency = "IDR") {
+  return `${currency || "IDR"} ${Number(amount || 0).toLocaleString("en-US")}`;
+}
+function paymentMethodLabel(method) {
+  const value = String(method || "").trim();
+  if (!value) return "Online payment";
+  const known = { qris: "QRIS", va: "Virtual Account", ewallet: "E-Wallet", card: "Card", simulation: "Simulation" };
+  return known[value.toLowerCase()] || value.charAt(0).toUpperCase() + value.slice(1);
+}
+function drawSparkle(doc, x, y, r, color) {
+  const k = r * 0.22;
+  doc
+    .save()
+    .moveTo(x, y - r)
+    .quadraticCurveTo(x + k, y - k, x + r, y)
+    .quadraticCurveTo(x + k, y + k, x, y + r)
+    .quadraticCurveTo(x - k, y + k, x - r, y)
+    .quadraticCurveTo(x - k, y - k, x, y - r)
+    .fill(color)
+    .restore();
+}
 async function createReceipt(order, template) {
-  const receiptNo = `RCPT-${new Date().getFullYear()}-${order.order_no.split("-").at(-1)}`;
-  const filename = `${receiptNo}.pdf`;
+  const suffix = order.order_no.split("-").at(-1);
+  const year = new Date(order.paid_at || Date.now()).getFullYear();
+  const receiptNo =
+    order.receipt_no || `RCPT-${new Date().getFullYear()}-${suffix}`;
+  const invoiceNo = `INV-${year}-${suffix}`;
+  const filename = `${receiptNo}-${RECEIPT_LAYOUT}.pdf`;
   const filepath = path.join(RECEIPT_DIR, filename);
+  const paid = receiptDateParts(order.paid_at);
+  const issued = receiptDateParts(order.paid_at || order.created_at);
+  const amount = formatIdr(order.amount, order.currency);
+  const whatsapp = String(process.env.CS_WHATSAPP || "").trim();
+  const C = {
+    green: "#173f33",
+    ink: "#1f3a31",
+    gold: "#a27c3f",
+    goldLine: "#e3d6bd",
+    muted: "#6e7a75",
+    line: "#e6e1d6",
+    paid: "#1f6b55",
+    soft: "#e6f0eb",
+    cream: "#f7f3ec",
+  };
   await new Promise((resolve, reject) => {
     const stream = fs.createWriteStream(filepath);
-    const doc = new PDFDocument({ size: "A4", margin: 52 });
+    const doc = new PDFDocument({ size: "A4", margin: 0, info: { Title: `Invoice ${invoiceNo}`, Author: "ikrarku Sites" } });
     stream.on("finish", resolve);
     stream.on("error", reject);
     doc.on("error", reject);
     doc.pipe(stream);
-    doc.fontSize(22).fillColor("#125946").text("ikrarku Sites");
-    doc.moveDown(0.2);
-    doc
-      .fontSize(10)
-      .fillColor("#777")
-      .text("Wedding websites, beautifully managed.");
-    doc.moveDown(2);
-    doc.fontSize(18).fillColor("#1c342d").text("Payment Receipt");
-    doc.moveDown();
-    const lines = [
-      ["Receipt No.", receiptNo],
+    const font = (file, fallback) => {
+      try {
+        doc.registerFont(file, path.join(FONT_DIR, `${file}.woff`));
+        return file;
+      } catch {
+        return fallback;
+      }
+    };
+    const serif = font("cormorant-garamond-latin-600-normal", "Times-Bold");
+    const serifMid = font("cormorant-garamond-latin-500-normal", "Times-Roman");
+    const serifItalic = font("cormorant-garamond-latin-500-italic", "Times-Italic");
+    const sans = font("dm-sans-latin-400-normal", "Helvetica");
+    const sansMid = font("dm-sans-latin-500-normal", "Helvetica");
+    const sansBold = font("dm-sans-latin-600-normal", "Helvetica-Bold");
+    const W = doc.page.width;
+    const H = doc.page.height;
+    const L = 42;
+    const R = W - 42;
+    // Pita atas
+    doc.rect(0, 0, W, 4).fill(C.green);
+    doc.rect(0, 4, W, 1.2).fill("#c9a96a");
+    // Logo & tagline
+    if (BRAND_LOGO) doc.image(BRAND_LOGO, L, 38, { width: 134 });
+    else doc.font(serif).fontSize(26).fillColor(C.green).text("ikrarku", L, 40);
+    doc.font(serifItalic).fontSize(11.5).fillColor(C.ink).text("Digital invitations. Personal stories.", L + 2, 86);
+    doc.font(sans).fontSize(8.5).fillColor(C.muted).text("ikrarku Sites · ikrarku.id", L + 2, 106);
+    // Judul kanan
+    doc.font(sansBold).fontSize(7.5).fillColor(C.gold).text("PAYMENT INVOICE", L, 44, { width: R - L, align: "right", characterSpacing: 2 });
+    doc.font(serifMid).fontSize(38).fillColor(C.green).text("INVOICE", L, 54, { width: R - L, align: "right", characterSpacing: 3 });
+    doc.font(sansBold).fontSize(9).fillColor(C.ink).text(`No. ${invoiceNo}`, L, 103, { width: R - L, align: "right" });
+    // Pembatas dengan bintang
+    doc.moveTo(L, 144).lineTo(W / 2 - 14, 144).lineWidth(0.6).stroke(C.goldLine);
+    doc.moveTo(W / 2 + 14, 144).lineTo(R, 144).lineWidth(0.6).stroke(C.goldLine);
+    drawSparkle(doc, W / 2, 144, 5, "#c9a96a");
+    // Ditagihkan kepada
+    doc.font(sansBold).fontSize(7.5).fillColor(C.gold).text("BILLED TO", L, 172, { characterSpacing: 1.6 });
+    doc.font(serifMid).fontSize(20).fillColor(C.ink).text(order.customer_name || "-", L, 184, { width: 240 });
+    doc.font(sans).fontSize(9).fillColor(C.ink).text(order.email || "", L, doc.y + 4, { width: 240 });
+    const meta = [
       ["Order No.", order.order_no],
-      ["Customer", order.customer_name],
-      ["Email", order.email],
-      ["Template", template.name],
-      ["Payment Method", order.payment_method],
-      ["Payment Status", "PAID"],
-      ["Amount", `Rp ${Number(order.amount).toLocaleString("id-ID")}`],
-      ["Paid At", new Date(order.paid_at).toLocaleString("id-ID")],
+      ["Receipt No.", receiptNo],
+      ["Invoice Date", issued.long],
+      ["Payment Date", paid.stamp],
     ];
-    for (const [label, value] of lines) {
-      doc
-        .fontSize(10)
-        .fillColor("#777")
-        .text(label, 52, doc.y, { continued: true, width: 160 });
-      doc.fillColor("#222").text(value);
-      doc.moveDown(0.5);
-    }
-    doc.moveDown(2);
-    doc
-      .fontSize(9)
-      .fillColor("#777")
-      .text(
-        "Receipt ini dibuat otomatis oleh ikrarku Sites. Tim Customer Service dan Web Designer akan menghubungi Anda untuk proses onboarding.",
-      );
+    meta.forEach(([label, value], index) => {
+      const y = 173 + index * 19.5;
+      doc.font(sans).fontSize(9).fillColor(C.muted).text(label, 307, y);
+      doc.font(sansMid).fontSize(9).fillColor(C.ink).text(value, 380, y, { width: R - 380, align: "right" });
+    });
+    // Tabel layanan
+    const th = 264;
+    doc.rect(L, th, R - L, 28).fill(C.green);
+    doc.font(sansBold).fontSize(7.5).fillColor("#ffffff");
+    doc.text("SERVICE DESCRIPTION", L + 12, th + 10.5, { characterSpacing: 1.2 });
+    doc.text("QTY", 275, th + 10.5, { width: 40, align: "center", characterSpacing: 1.2 });
+    doc.text("UNIT PRICE", 350, th + 10.5, { width: 100, align: "center", characterSpacing: 1.2 });
+    doc.text("AMOUNT", 440, th + 10.5, { width: R - 12 - 440, align: "right", characterSpacing: 1.2 });
+    const ry = th + 47;
+    doc.font(sansMid).fontSize(10.5).fillColor(C.ink).text("Wedding Website — ikrarku Sites", L + 12, ry, { width: 210 });
+    doc.font(sans).fontSize(8.5).fillColor(C.muted).text("Template: ", L + 12, ry + 17, { continued: true });
+    doc.font(sansMid).fillColor(C.ink).text(template?.name || order.template_name || "-");
+    doc.font(sans).fontSize(8.5).fillColor(C.muted).text(
+      "Includes onboarding with our Customer Service & Web Designer team",
+      L + 12,
+      doc.y + 2,
+      { width: 190, lineGap: 1.5 },
+    );
+    const rowBottom = Math.max(doc.y, ry + 55) + 12;
+    doc.font(sans).fontSize(9.5).fillColor(C.ink).text("1", 275, ry, { width: 40, align: "center" });
+    doc.text(amount, 350, ry, { width: 100, align: "center" });
+    doc.font(sansBold).text(amount, 440, ry, { width: R - 12 - 440, align: "right" });
+    doc.moveTo(L, rowBottom).lineTo(R, rowBottom).lineWidth(0.6).stroke(C.line);
+    // Kotak detail pembayaran
+    const by = rowBottom + 21;
+    doc.roundedRect(L, by, 285, 120, 8).lineWidth(0.7).stroke(C.line);
+    doc.font(sansBold).fontSize(7.5).fillColor(C.gold).text("PAYMENT DETAILS", L + 16, by + 18, { characterSpacing: 1.6 });
+    const detail = (label, y) => doc.font(sans).fontSize(9).fillColor(C.muted).text(label, L + 16, y);
+    detail("Method", by + 40);
+    doc.font(sansMid).fontSize(9).fillColor(C.ink).text(paymentMethodLabel(order.payment_method), L + 88, by + 40);
+    detail("Status", by + 59);
+    doc.circle(L + 93, by + 64, 4.6).lineWidth(0.9).stroke(C.paid);
+    doc.moveTo(L + 90.6, by + 64.2).lineTo(L + 92.5, by + 66).lineTo(L + 95.6, by + 62.3).lineWidth(0.9).stroke(C.paid);
+    doc.font(sansBold).fontSize(9).fillColor(C.paid).text("PAID", L + 102, by + 59);
+    detail("Paid On", by + 78);
+    doc.font(sansMid).fontSize(9).fillColor(C.ink).text(paid.stamp, L + 88, by + 78, { width: 105, lineGap: 2 });
+    // Stempel PAID
+    const sx = L + 240;
+    const sy = by + 61;
+    doc.save().rotate(-12, { origin: [sx, sy] });
+    doc.circle(sx, sy, 33).lineWidth(1.4).stroke(C.paid);
+    doc.circle(sx, sy, 28.5).lineWidth(0.6).stroke(C.paid);
+    doc.font(sansBold).fontSize(5.6).fillColor(C.paid).text("IKRARKU", sx - 30, sy - 21, { width: 60, align: "center", characterSpacing: 1.4 });
+    doc.moveTo(sx - 24, sy - 11).lineTo(sx + 24, sy - 11).lineWidth(0.6).stroke(C.paid);
+    doc.font(serifMid).fontSize(17).fillColor(C.paid).text("PAID", sx - 30, sy - 9, { width: 60, align: "center", characterSpacing: 2 });
+    doc.moveTo(sx - 24, sy + 9).lineTo(sx + 24, sy + 9).lineWidth(0.6).stroke(C.paid);
+    doc.font(sansBold).fontSize(5).fillColor(C.paid).text(paid.seal, sx - 30, sy + 13, { width: 60, align: "center", characterSpacing: 0.8 });
+    doc.restore();
+    // Ringkasan total
+    const tx = 354;
+    const tw = R - tx;
+    const total = (label, value, y) => {
+      doc.font(sans).fontSize(9).fillColor(C.muted).text(label, tx, y);
+      doc.font(sans).fontSize(9).fillColor(C.ink).text(value, tx, y, { width: tw, align: "right" });
+    };
+    total("Subtotal", amount, by + 6);
+    total("Discount", formatIdr(0, order.currency), by + 26);
+    doc.moveTo(tx, by + 43).lineTo(R, by + 43).lineWidth(0.6).stroke(C.line);
+    doc.font(sansBold).fontSize(9.5).fillColor(C.ink).text("Total Paid", tx, by + 72);
+    doc.font(serifMid).fontSize(21).fillColor(C.green).text(amount, tx, by + 62, { width: tw, align: "right", characterSpacing: 0.6 });
+    doc.roundedRect(tx, by + 94, tw, 26, 5).fill(C.soft);
+    doc.font(sansMid).fontSize(9).fillColor(C.paid).text("Balance Due", tx + 10, by + 103);
+    doc.font(sansBold).text(formatIdr(0, order.currency), tx, by + 103, { width: tw - 10, align: "right" });
+    // Ucapan terima kasih
+    const ty = by + 141;
+    doc.roundedRect(L, ty, R - L, 76, 8).fillAndStroke(C.cream, "#ece5d6");
+    drawSparkle(doc, L + 25, ty + 23, 7, "#c9a96a");
+    doc.font(serifMid).fontSize(15).fillColor(C.ink).text("Thank you for entrusting your story to us.", L + 48, ty + 13);
+    doc.font(sans).fontSize(9).fillColor("#4d5a55").text(
+      "Our Customer Service and Web Designer team will contact you shortly to begin onboarding — from gathering the couple's details to tailoring the design of your wedding website.",
+      L + 48,
+      ty + 35,
+      { width: R - L - 70, lineGap: 2 },
+    );
+    // Catatan kaki & pita bawah
+    doc.font(sans).fontSize(7.5).fillColor(C.muted).text(
+      "This invoice was generated automatically by ikrarku Sites and serves as valid proof of payment.",
+      L,
+      H - 82,
+      { width: 380, lineBreak: false },
+    );
+    doc.text("Page 1 of 1", L, H - 82, { width: R - L, align: "right", lineBreak: false });
+    doc.rect(0, H - 59, W, 59).fill(C.green);
+    doc.font(serifItalic).fontSize(12).fillColor("#ffffff").text("Digital invitations. Personal stories.", L, H - 44, { lineBreak: false });
+    doc.font(sans).fontSize(8).fillColor("#c9d6d0").text("Wedding websites, beautifully managed.", L, H - 26, { characterSpacing: 0.6, lineBreak: false });
+    const contact = whatsapp ? `ikrarku.id     WhatsApp CS ${whatsapp}` : "ikrarku.id";
+    doc.font(sansBold).fontSize(9).fillColor("#ffffff").text(contact, L, H - 36, { width: R - L, align: "right", lineBreak: false });
     doc.end();
   });
   return { receiptNo, filepath, publicUrl: `/receipts/${filename}` };
+}
+// Invoice lama (layout sebelum QA 14) dibuat ulang dengan layout baru saat
+// pertama kali diunduh. Nomor receipt & data order tidak berubah.
+async function ensureReceiptLayout(order) {
+  if (!order?.receipt_path || order.payment_status !== "Paid") return order;
+  if (order.receipt_path.endsWith(`-${RECEIPT_LAYOUT}.pdf`) && fs.existsSync(order.receipt_path))
+    return order;
+  const template = db.prepare("SELECT * FROM templates WHERE id=?").get(order.template_id);
+  const receipt = await createReceipt(order, template);
+  db.prepare("UPDATE orders SET receipt_no=?,receipt_path=? WHERE id=?").run(
+    receipt.receiptNo,
+    receipt.filepath,
+    order.id,
+  );
+  return { ...order, receipt_no: receipt.receiptNo, receipt_path: receipt.filepath };
 }
 // TC-073 — konfigurasi SMTP dipusatkan. Port 465 selalu memakai TLS langsung
 // (SMTP_SECURE=false dengan port 465 adalah salah konfigurasi paling umum:
@@ -3732,7 +4081,10 @@ async function deliverEmail(outboxId) {
       attachments: mail.attachment_path
         ? [
             {
-              filename: path.basename(mail.attachment_path),
+              // Nama file invoice tanpa penanda versi layout (-v2).
+              filename: path
+                .basename(mail.attachment_path)
+                .replace(/-v\d+\.pdf$/, ".pdf"),
               path: mail.attachment_path,
             },
           ]
@@ -3749,7 +4101,18 @@ async function deliverEmail(outboxId) {
 }
 app.post("/api/orders", rateLimit("orders", 20, 60_000), (req, res) => {
   const viewer = optionalUser(req);
-  const { customerName, email, phone = "", templateId } = req.body || {};
+  const {
+    customerName,
+    email,
+    phone = "",
+    templateId,
+    weddingDate = "",
+    weddingTime = "",
+  } = req.body || {};
+  if (weddingDate && !/^\d{4}-\d{2}-\d{2}$/.test(String(weddingDate)))
+    return res.status(400).json({ error: "Format tanggal pernikahan tidak valid" });
+  if (weddingTime && !/^\d{2}:\d{2}$/.test(String(weddingTime)))
+    return res.status(400).json({ error: "Format jam pernikahan tidak valid" });
   const template = db
     .prepare(
       "SELECT * FROM templates WHERE id=? AND status IN ('Published','Approved')",
@@ -3788,10 +4151,9 @@ app.post("/api/orders", rateLimit("orders", 20, 60_000), (req, res) => {
     now(),
     viewer?.id || null,
   );
-  db.prepare("UPDATE orders SET guest_token=? WHERE id=?").run(
-    guestToken,
-    orderId,
-  );
+  db.prepare(
+    "UPDATE orders SET guest_token=?,wedding_date=?,wedding_time=? WHERE id=?",
+  ).run(guestToken, weddingDate || null, weddingTime || null, orderId);
   res.status(201).json({
     id: orderId,
     orderNo,
@@ -3837,25 +4199,56 @@ function seedCustomerSiteFromTemplate(userId, order, template) {
   const existing = db
     .prepare("SELECT * FROM sites WHERE user_id=?")
     .get(userId);
-  const hasDesign = (() => {
-    if (!existing) return false;
-    try {
-      const current = JSON.parse(existing.canvas_json || "[]");
-      return Array.isArray(current) && current.length > 0;
-    } catch {
-      return false;
-    }
-  })();
-  if (hasDesign) return;
+  let current = [];
+  try {
+    current = existing ? JSON.parse(existing.canvas_json || "[]") : [];
+  } catch {
+    current = [];
+  }
+  if (!Array.isArray(current)) current = [];
+  // QA 14 TC-303 — website customer yang sudah berisi canvas awal (mis.
+  // "Main Canvas" kosong yang terbuat saat akun/website pertama dibuka)
+  // dulu dianggap "sudah punya design", sehingga template yang dibayar tidak
+  // pernah disalin dan customer melihat canvas kosongan. Canvas awal = tidak
+  // berasal dari template mana pun dan total feature-nya paling banyak satu.
+  const starterOnly =
+    current.length > 0 &&
+    current.every(
+      (section) =>
+        !section?.sourceTemplateId &&
+        !String(section?.templateInstanceId || "").startsWith("order-"),
+    ) &&
+    current.reduce(
+      (total, section) =>
+        total +
+        (section?.columns || []).reduce(
+          (sum, column) => sum + (column?.features || []).length,
+          0,
+        ),
+      0,
+    ) <= 1;
+  if (current.length > 0 && !starterOnly) return;
+  // Daftar undangan yang sudah diisi customer di canvas awal tidak hilang.
+  const keptInvitees = current.flatMap((section) =>
+    Array.isArray(section?.invitees) ? section.invitees : [],
+  );
   // MoM 2 Nov IKR-02/03 — setiap canvas diberi penanda template & order yang
   // dibeli. Tanpa penanda ini dashboard customer menampilkan card "Sedang
   // disiapkan" dan card "Custom Design" terpisah untuk template yang sama.
   const instanceId = `order-${order.id}`;
-  sections = sections.map((section) => ({
+  sections = sections.map((section, index) => ({
     ...section,
     templateInstanceId: instanceId,
     sourceTemplateId: template.id,
     sourceTemplateName: template.name,
+    ...(index === 0 && keptInvitees.length
+      ? {
+          invitees: [
+            ...(Array.isArray(section.invitees) ? section.invitees : []),
+            ...keptInvitees,
+          ],
+        }
+      : {}),
   }));
   const title = order.customer_name || template.name;
   const baseSlug =
@@ -4124,7 +4517,12 @@ app.get("/api/receipts/:id", (req, res) => {
     (!order.guest_token || req.query.token !== order.guest_token)
   )
     return res.status(403).json({ error: "Receipt tidak dapat diakses" });
-  res.sendFile(order.receipt_path);
+  void ensureReceiptLayout(order)
+    .then((fresh) => res.sendFile(fresh.receipt_path))
+    .catch((error) => {
+      console.error("[receipt] gagal membuat ulang invoice:", error.message);
+      res.sendFile(order.receipt_path);
+    });
 });
 app.post(
   "/api/orders/:id/retry-fulfillment",
@@ -4918,8 +5316,35 @@ app.get("/api/me/orders", auth, (req, res) => {
           )
           .get(o.id) || null,
       receiptUrl: receiptUrl(o),
+      // QA 14 TC-325 — kontak WhatsApp CS untuk kartu "Tim Anda".
+      support_whatsapp: String(process.env.CS_WHATSAPP || "").trim() || null,
     })),
   );
+});
+// QA 14 TC-323/324 — customer mengisi / mengubah tanggal & jam pernikahan
+// (order lama dibuat sebelum kolom ini ada).
+app.patch("/api/me/orders/:id/wedding", auth, (req, res) => {
+  const order = db
+    .prepare("SELECT id,user_id,email FROM orders WHERE id=?")
+    .get(req.params.id);
+  if (
+    !order ||
+    (order.user_id !== req.user.id &&
+      String(order.email).toLowerCase() !== String(req.user.email).toLowerCase())
+  )
+    return res.status(404).json({ error: "Order tidak ditemukan" });
+  const date = String(req.body?.weddingDate || "");
+  const time = String(req.body?.weddingTime || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+    return res.status(400).json({ error: "Tanggal pernikahan wajib diisi" });
+  if (time && !/^\d{2}:\d{2}$/.test(time))
+    return res.status(400).json({ error: "Format jam tidak valid" });
+  db.prepare("UPDATE orders SET wedding_date=?,wedding_time=? WHERE id=?").run(
+    date,
+    time || null,
+    order.id,
+  );
+  res.json({ weddingDate: date, weddingTime: time || null });
 });
 app.get("/api/orders/analytics", auth, permit("orders.view"), (_req, res) => {
   const summary = db
@@ -5334,11 +5759,17 @@ app.post("/api/tasks/:id/notes", auth, permit("tasks.view"), (req, res) => {
   const senderName =
     `${req.user.firstName || req.user.first_name || ""} ${req.user.lastName || req.user.last_name || ""}`.trim() ||
     "Tim ikrarku";
+  const mentioned = notifyMentions(
+    body,
+    req.user,
+    `tiket "${task.title || order.order_no}"`,
+    orderSummaryHtml(order, null),
+  );
   for (const [userId, label] of [
     [order.assigned_cs_id, "Customer Service"],
     [order.assigned_editor_id, "Web Designer"],
   ]) {
-    if (!userId || userId === req.user.id) continue;
+    if (!userId || userId === req.user.id || mentioned.includes(userId)) continue;
     notifyStaff(
       userId,
       `Catatan internal baru: ${order.order_no}`,
@@ -5349,6 +5780,18 @@ app.post("/api/tasks/:id/notes", auth, permit("tasks.view"), (req, res) => {
     );
   }
   res.status(201).json({ id: messageId });
+});
+// QA 14 TC-304 — daftar staff untuk saran mention di catatan internal.
+app.get("/api/staff/mentions", auth, (req, res) => {
+  if (req.user.roleId === "role_user")
+    return res.status(403).json({ error: "Permission denied" });
+  res.json(
+    staffDirectory().map((member) => ({
+      id: member.id,
+      name: member.name || member.first_name,
+      role: member.role,
+    })),
+  );
 });
 app.get(
   "/api/conversations",
@@ -5489,11 +5932,17 @@ app.post(
       req.params.id,
       internal ? { visibility: "internal" } : {},
     );
+    if (internal)
+      notifyMentions(
+        req.body.body,
+        req.user,
+        `percakapan dengan ${conversation.customer_name || "customer"}`,
+      );
     if (!internal && conversation.customer_email)
       queueEmail(
         conversation.customer_email,
         "Balasan baru dari ikrarku",
-        `<p>${escapeHtml(req.body.body)}</p>`,
+        `<p>${escapeHtml(req.body.body).replace(/\n/g, "<br>")}</p>`,
       );
     res.status(201).json({ id: messageId, visibility: internal ? "internal" : "public" });
   },

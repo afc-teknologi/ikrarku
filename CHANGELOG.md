@@ -1,3 +1,49 @@
+## 0.18.0 — 10 November 2026 (QA 14: TC-303 s/d TC-329 + revisi WhatsApp)
+
+Sumber: UPDATE_QA_IKRARKU.ID_14 (sheet Master Test Cases, Status Fail, kolom Update Web Dev kosong), Highlight Report QA 8 Nov, revisi WhatsApp SSBug1–5, contoh "Invoice — A4 1".
+
+**Revisi WhatsApp**
+- SSBug1 / TC-327: customer dengan satu pembelian kini melihat **satu card** di Template & Canvas. Canvas tanpa pemilik (canvas awal "Main Canvas", salinan, canvas tambahan tim) digabung ke design order, bukan card "Applied Template · <template lain>". Label card customer: "Template dibeli". Tombol Copy & Delete tidak tersedia untuk customer (menyebabkan design ganda / undangan kosong).
+- SSBug2: kartu "ikrarku Signature" di sidebar customer disembunyikan (`SHOW_SIGNATURE_UPSELL`).
+- SSBug3: List Undangan customer dikelola per **undangan yang dibeli**; dropdown nama canvas internal ("Main Canvas (salinan)", "New Canvas") tidak lagi tampil. Daftar tamu lama tetap terbaca.
+- SSBug4: Wedding Dashboard customer menampilkan pratinjau undangan asli (bukan sketsa dengan teks contoh "Chyntia & Rian"), statistik per undangan, dan info "nama template · URL · jumlah canvas".
+- SSBug5: (1) gambar ornamen tidak lagi `loading="lazy"` — dulu baru dimuat setelah halaman digulir; (2) setelah "Buka Undangan" diklik, canvas cover tidak tampil lagi — tamu langsung masuk ke canvas berikutnya; (3) ornamen bergerak-saat-gulir pada canvas setinggi layar tampil sejak awal.
+- Invoice pembayaran mengikuti desain "Invoice — A4 1" (logo, nomor INV/Order/Receipt, tabel layanan, detail pembayaran + stempel PAID, total, ucapan terima kasih, pita footer). Font Cormorant Garamond & DM Sans (OFL) ada di `server/assets/fonts`. Invoice lama dibuat ulang otomatis saat diunduh (nomor tidak berubah). Nomor WhatsApp CS di footer dari `CS_WHATSAPP`.
+
+**QA 14 — bug**
+- TC-303: template yang dibayar kini disalin ke website customer walau website sudah berisi canvas awal kosong (dulu dilewati → canvas kosongan). Daftar tamu di canvas awal dipindahkan, tidak hilang.
+- TC-305: spasi & baris baru pesan staff ↔ customer tetap terjaga (live chat, inbox, catatan internal, email).
+- TC-308: background HD/Full HD (sampai 25 MB) diterima; di atas 8 MB dikompres otomatis di browser (sisi terpanjang 2560 px).
+- TC-310: font header memuat bobot 700; font script satu bobot ditebalkan sintetis di dalam undangan.
+- TC-313: Gambar sample / Thumbnail dari Web Designer langsung dipakai (dulu masuk draft revisi yang menunggu approval sehingga "tidak tampil"); Thumbnail & Gambar sample tidak saling menimpa; file > 2 MB dikompres otomatis.
+- TC-316: kolom Hex di setiap color picker menyimpan saat klik di luar / Enter; "Warna yang digunakan" (16 warna terakhir) di setiap picker.
+- TC-317: gambar background, layer, dan ornamen di-decode dulu (maks. 2,5 dtk) sebelum animasi berjalan; ornamen tidak lazy-load.
+- TC-327: lihat SSBug1.
+
+**QA 14 — fitur**
+- TC-304: mention `@Nama` di catatan internal (tiket & inbox) dengan saran nama; staff yang disebut menerima email.
+- TC-306: email order baru ke Web Designer sudah ada sejak 0.17.1 (IKR-08); uji kirim menunggu SMTP.
+- TC-307: urutan lapisan ornamen — Paling depan / Maju / Mundur / Paling belakang — tanpa hapus & upload ulang.
+- TC-311: Administrator dapat menghapus template (dengan konfirmasi). Template yang pernah dipesan diarsipkan (`Archived`) sehingga order, invoice, dan website customer tetap utuh.
+- TC-312: katalog 4 kolom di desktop lebar, tetap 2 kolom di ponsel kecil.
+- TC-314: layout Our Gallery "Lingkaran 2 Foto".
+- TC-315: smart snapping — objek posisi bebas menempel di tengah kolom (horizontal & vertikal) dengan garis bantu; tahan Alt untuk menonaktifkan.
+- TC-318: label "New" (template ≤ `NEW_TEMPLATE_DAYS` hari, bawaan 14) dan "Diskon X%" (harga coret diisi Administrator di kartu Templates & Approval).
+- TC-319: saat customer menyimpan perubahan atas versi buatan tim, versi tim disimpan sebagai titik pulih "Versi tim sebelum diubah customer" (selalu tampil di Revisions).
+- TC-320: preview yang dilihat customer diberi watermark DRAFT sampai task Web Designer pada ordernya Done. Undangan publik tidak terpengaruh.
+- TC-321: gradien transparan (memudar ke bawah/atas/kiri/kanan/semua tepi) pada Image & Our Gallery.
+- TC-322: lightbox Our Gallery — klik foto, geser kanan-kiri (tombol, panah keyboard, swipe), efek hover.
+- TC-323/325: beranda customer — sambutan, countdown hari pernikahan, kartu tim (CS & Web Designer, Chat dengan tim, WhatsApp CS).
+- TC-324: form checkout wajib tanggal & jam pernikahan; order lama dapat mengisinya dari dashboard.
+- TC-326: template pesan WhatsApp "Undangan digital" & "Reminder RSVP" di List Undangan (bisa diedit, `{nama}` & `{link}` terisi otomatis); kolom No. WhatsApp saat menambah tamu.
+- TC-329: sisi visual ala Serein — 4 gaya nama CPP & CPW / teks pengantar dan gambar layer 2.
+
+**Butuh konfirmasi QA**: TC-309 (perilaku padding yang diharapkan), TC-328 (lokasi & bukti shadow pemisah).
+
+**Konfigurasi baru (opsional)**: `CS_WHATSAPP`, `NEW_TEMPLATE_DAYS`. Kolom DB baru dibuat otomatis: `orders.wedding_date`, `orders.wedding_time`, `templates.original_price`, `sites.last_saved_by`.
+
+**Uji otomatis**: qa-integration 41/41, qa-layout 139/139, qa-db 38/38.
+
 ## 0.17.1 — 8 November 2026 (MoM 2 Nov + QC tambahan)
 
 Persiapan beta testing ke user asli (W2 November).
