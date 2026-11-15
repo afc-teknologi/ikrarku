@@ -1552,3 +1552,12 @@ test("QA 15 Nov: RSVP Confirmation customer difilter per undangan, bukan per can
   assert.match(appTsx, /<option value="all">Semua undangan<\/option>/);
   assert.match(appTsx, /designs\.length > 1 && \(\n\s*<label>\n\s*Undangan/);
 });
+
+test("QA 15 Nov: panel kanan editor tidak bisa digeser horizontal", () => {
+  assert.match(appCss, /\.inspector-scroll \.two-inputs\{grid-template-columns:repeat\(auto-fit,minmax\(min\(100%,150px\),1fr\)\)\}/);
+  assert.match(appCss, /\.color-input \.color-hex-input\{flex:1 1 0;width:auto!important;min-width:0\}/);
+});
+
+test("QA 15 Nov: ornamen bergambar hanya dipratinjau sekali", () => {
+  assert.match(appTsx, /\{!item\.imageUrl && \(\n\s*<div className="decor-preview" style=\{\{ color: item\.color \}\}>\n\s*<DecorGlyphIcon glyph=\{item\.glyph\} \/>/);
+});

@@ -2721,3 +2721,10 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
 .website-canvas-meta .published-dot{display:inline-block;max-width:100%;line-height:1.35;overflow-wrap:anywhere}
 .website-canvas-meta{flex-wrap:wrap}
 .website-canvas-meta>div:first-child{min-width:0;flex:1 1 170px}
+/* 15 Nov — panel kanan editor (inspector) tidak boleh digeser ke samping.
+   Pasangan kontrol (.two-inputs: Text color + Background, Font heading +
+   Font teks, dst.) turun ke bawah bila tidak muat; isi kolom boleh menyempit. */
+.inspector-scroll .two-inputs{grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}
+.inspector-scroll .two-inputs>*,.inspector-scroll label{min-width:0}
+.inspector-scroll select,.inspector-scroll textarea,.inspector-scroll input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]){max-width:100%;min-width:0}
+.color-input .color-hex-input{flex:1 1 0;width:auto!important;min-width:0}

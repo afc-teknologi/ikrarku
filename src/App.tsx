@@ -17699,13 +17699,14 @@ function SectionDecorationEditor({
               </button>
             </div>
           </div>
-          <div className="decor-preview" style={{ color: item.color }}>
-            {item.imageUrl ? (
-              <img src={assetUrl(item.imageUrl)} alt="" />
-            ) : (
+          {/* 15 Nov — ornamen bergambar dulu dipratinjau dua kali: kotak ini
+              dan thumbnail milik kontrol upload di bawahnya. Kotak ini kini
+              hanya untuk bentuk bawaan (glyph). */}
+          {!item.imageUrl && (
+            <div className="decor-preview" style={{ color: item.color }}>
               <DecorGlyphIcon glyph={item.glyph} />
-            )}
-          </div>
+            </div>
+          )}
           {/* Ornamen bisa memakai gambar sendiri, bukan hanya bentuk bawaan. */}
           <LayerImageUpload
             // url dulu dikosongkan paksa, sehingga thumbnail di kontrol upload

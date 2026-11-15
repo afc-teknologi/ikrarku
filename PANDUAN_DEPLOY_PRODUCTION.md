@@ -350,6 +350,8 @@ build ulang (langkah A–E). Cek setelah deploy:
 6. Login Admin/Web Designer → buka website customer yang sama: jumlah card
    sama dengan customer, preview card menampilkan banner cover.
 7. Login customer → RSVP Confirmation: tidak ada dropdown nama canvas.
+8. Editor → pilih teks → tab Style: panel kanan tidak punya scroll horizontal.
+9. Editor → canvas → Style → Ornamen bergambar: hanya satu pratinjau gambar.
 
 ## F. Rollback
 

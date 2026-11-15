@@ -1446,6 +1446,10 @@ sidebar kiri — tidak ada lagi scroll horizontal atau kontrol terpotong.
 - RSVP Confirmation (customer): filter **Undangan** per design yang dibeli,
   muncul hanya bila customer punya lebih dari satu undangan. Nama canvas
   internal tidak lagi ditampilkan.
+- Panel kanan editor (Content/Style/Advanced) tidak bisa digeser ke
+  samping; pasangan kontrol yang tidak muat tersusun ke bawah.
+- Ornamen bergambar hanya punya satu pratinjau (thumbnail pada Upload
+  gambar layer).
 
 # Keamanan
 
