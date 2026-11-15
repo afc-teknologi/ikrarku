@@ -526,6 +526,10 @@ type FormFieldSpec = {
 };
 
 type Feature = DesignerLayout & {
+  /** QA 14 TC-309 — tinggi kotak dikunci (px) saat ukuran font diubah, agar
+   *  hanya teks yang membesar; background (warna/gambar cover) tidak ikut
+   *  membesar/ter-zoom. Hapus untuk kembali ke tinggi otomatis. */
+  lockedHeight?: number;
   /** QA 14 TC-321 — gradien transparan (fade) pada foto Image & Our Gallery. */
   mediaFade?: "none" | "bottom" | "top" | "left" | "right" | "edges";
   /** Titik mulai memudar, 0–95 (%). */
@@ -10606,9 +10610,17 @@ function useFitZoom(
       // Abaikan perubahan sangat kecil (< 0,5%): scrollbar yang muncul /
       // hilang mengubah lebar beberapa px, dan tanpa ambang ini skala bisa
       // bolak-balik terus ("zoom in-zoom out").
-      setZoom((current) =>
-        Math.abs(current - rounded) < 0.005 ? current : rounded,
-      );
+      // QA 15 Nov — 0,5% ternyata belum cukup: di layar laptop scrollbar
+      // vertikal area kerja (±17 px) muncul/hilang mengikuti tinggi canvas
+      // yang ikut berubah karena zoom, sehingga skala bolak-balik 44% ↔ 46%
+      // dan isi canvas tampak dobel/berkedip saat mengedit. Kenaikan zoom
+      // kecil (< 3%) kini diabaikan; penurunan tetap langsung diterapkan.
+      setZoom((current) => {
+        const diff = rounded - current;
+        if (Math.abs(diff) < 0.005) return current;
+        if (diff > 0 && diff < 0.03) return current;
+        return rounded;
+      });
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -12354,8 +12366,43 @@ function Editor({
     );
   };
 
-  const updateFeature = (featureId: string, patch: Partial<Feature>) => {
+  const updateFeature = (featureId: string, rawPatch: Partial<Feature>) => {
     setDirty(true);
+    let patch = rawPatch;
+    // QA 14 TC-309 — saat ukuran font fitur yang punya background diubah,
+    // tinggi kotaknya dikunci pada tinggi saat ini (sekali) sehingga yang
+    // membesar hanya teks; background tidak ikut membesar / ter-zoom.
+    const fontKeys = Object.keys(rawPatch).filter((key) =>
+      /fontsize$/i.test(key),
+    );
+    if (fontKeys.length && rawPatch.lockedHeight === undefined) {
+      const current = sections
+        .flatMap((section) => section.columns)
+        .flatMap((column) => column.features)
+        .find((item) => item.id === featureId);
+      const resolved = current ? resolveFeature(current, editDevice) : undefined;
+      const hasBackground = Boolean(
+        resolved &&
+          (resolved.backgroundImageUrl ||
+            resolved.backgroundGradientEnabled ||
+            (resolved.backgroundColor &&
+              resolved.backgroundColor !== "transparent" &&
+              isPaintColor(resolved.backgroundColor))),
+      );
+      if (
+        resolved &&
+        hasBackground &&
+        !resolved.lockedHeight &&
+        !(resolved.freePosition && resolved.boxHeight) &&
+        resolved.type !== "invitation-cover"
+      ) {
+        const node = document.querySelector<HTMLElement>(
+          `.canvas-frame [data-feature-id="${featureId}"]`,
+        );
+        const height = node ? parseFloat(getComputedStyle(node).height) : 0;
+        if (height > 0) patch = { ...rawPatch, lockedHeight: Math.round(height) };
+      }
+    }
     commitSections((previous) =>
       previous.map((section) => ({
         ...section,
@@ -15558,6 +15605,20 @@ function FeatureInspector({
                 }
               />
             </label>
+            {feature.lockedHeight ? (
+              <div className="locked-height-note">
+                <span>
+                  Tinggi kotak dikunci {feature.lockedHeight}px — font membesar
+                  tanpa membuat background ikut membesar.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => update({ lockedHeight: undefined })}
+                >
+                  Tinggi otomatis
+                </button>
+              </div>
+            ) : null}
             <label>
               Supporting / body font size{" "}
               <span>{feature.bodyFontSize ?? 11}px</span>
@@ -21697,6 +21758,9 @@ function FeatureBlock({
         : getFeatureObjectStyle(feature);
   const style: React.CSSProperties = {
     ...objectStyle,
+    ...(feature.lockedHeight && feature.type !== "invitation-cover"
+      ? { height: feature.lockedHeight, minHeight: feature.lockedHeight }
+      : {}),
     fontFamily: feature.fontFamily,
     textAlign: feature.align,
     lineHeight: feature.lineHeight,
@@ -21895,7 +21959,8 @@ function FeatureBlock({
       data-fixed-height={
         feature.freePosition && feature.boxHeight ? "true" : undefined
       }
-      className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
+data-feature-id={feature.id}
+            className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
       style={style}
     >
       <FeatureEffect effect={feature.visualEffect || "none"} />

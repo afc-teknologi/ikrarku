@@ -1153,7 +1153,8 @@ test("Revisi 24 Okt: status di kartu My Order setinggi teks", () => {
 
 test("Revisi 24 Okt: skala preview stabil (tidak zoom in-zoom out)", () => {
   assert.match(appTsx, /const rounded = Math\.floor\(next \* 1000\) \/ 1000;/);
-  assert.match(appTsx, /Math\.abs\(current - rounded\) < 0\.005 \? current : rounded/);
+  // QA 15 Nov — ambang diperketat: kenaikan < 3% juga diabaikan.
+  assert.match(appTsx, /if \(Math\.abs\(diff\) < 0\.005\) return current;/);
   assert.match(appCss, /\.template-dialog-actual-preview\.live\{overflow-x:hidden;scrollbar-gutter:stable\}/);
   assert.match(appCss, /\.fit-desktop\{overflow-x:clip\}/);
 });
@@ -1510,4 +1511,12 @@ test("QA 14 (TC-303–329 + SSBug1–5): dashboard customer, invoice, editor & k
   assert.match(appTsx, /function mediaFadeMask\(feature: Feature\)/);
   assert.match(appTsx, /function GalleryLightbox\(/);
   assert.match(appTsx, /desktopSideStyle\?: "standard" \| "stacked" \| "framed" \| "monogram"/);
+});
+
+test("QA 15 Nov: zoom editor stabil & TC-309 tinggi kotak dikunci saat font diubah", () => {
+  assert.match(appTsx, /if \(diff > 0 && diff < 0\.03\) return current;/);
+  assert.match(appCss, /\.canvas-workspace\{scrollbar-gutter:stable\}/);
+  assert.match(appTsx, /lockedHeight\?: number;/);
+  assert.match(appTsx, /data-feature-id=\{feature\.id\}/);
+  assert.match(appTsx, /patch = \{ \.\.\.rawPatch, lockedHeight: Math\.round\(height\) \}/);
 });
