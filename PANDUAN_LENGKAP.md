@@ -1394,10 +1394,35 @@ diubah customer kapan saja dari dashboard.
 - **Invoice** baru (desain A4). Invoice lama dibuat ulang otomatis saat
   diunduh; nomor invoice/receipt tidak berubah.
 
-## W.7 — Butuh konfirmasi QA
+## W.7 — Update 15 November 2026
 
-- TC-309: perilaku padding yang diharapkan saat font diperbesar.
-- TC-328: lokasi dan bukti shadow pemisah slide yang bocor.
+**Zoom editor stabil.** Area kerja editor (Desktop) tidak lagi bolak-balik
+44% ↔ 46% saat mengedit canvas yang panjang — dulu isi canvas tampak dobel
+dan berkedip. Angka "(tampil …%)" di header editor sekarang tetap.
+
+**TC-309 — font membesar tanpa background ikut membesar.**
+
+1. Pilih fitur yang punya background (warna, gradien, atau gambar).
+2. Geser ukuran font (Heading / body / tombol).
+3. Pada perubahan pertama, tinggi kotak dikunci pada tinggi saat itu;
+   yang membesar hanya teks. Panel Style menampilkan
+   "Tinggi kotak dikunci …px".
+4. Klik **Tinggi otomatis** bila kotak harus kembali mengikuti isi
+   (misalnya teks keluar dari kotak setelah font dibesarkan banyak).
+
+Kunci tinggi disimpan per device (Desktop / Mobile) dan tidak berlaku
+untuk fitur tanpa background, cover Buka Undangan, atau fitur posisi bebas
+yang sudah punya tinggi kotak sendiri.
+
+## W.8 — Menunggu data
+
+- TC-328 (bayangan antar canvas saat digulir): menunggu export JSON
+  template **D Adat Jawa 01** dan nama canvas di atas canvas "Wishes".
+  Dugaan sementara: canvas tersebut tidak punya background sendiri atau
+  opacity-nya < 100%, sehingga background tetap di belakang undangan
+  terlihat dan tampak berbeda saat digulir. Pemeriksaan cepat untuk Web
+  Designer: buka canvas itu → Background → pastikan ada gambar/warna
+  dengan opacity 100%.
 
 # Keamanan
 

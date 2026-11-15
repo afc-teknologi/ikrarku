@@ -330,6 +330,17 @@ NEW_TEMPLATE_DAYS=14          # lama label "New" pada katalog
 - Cek cepat setelah deploy: buka satu order Paid di Orders & Revenue →
   unduh invoice → pastikan desain baru tampil.
 
+## K. Update 15 November (0.18.1)
+
+Tidak ada konfigurasi atau kolom database baru — cukup push, pull, dan
+build ulang (langkah A–E). Cek setelah deploy:
+
+1. Login Web Designer → buka template yang panjang di editor (Desktop).
+   Angka "(tampil …%)" di header tidak berubah-ubah dan isi canvas tidak
+   tampak dobel.
+2. Pilih teks ber-background → besarkan font → kotak tidak ikut membesar,
+   muncul keterangan "Tinggi kotak dikunci …px".
+
 ## F. Rollback
 
 ```bash

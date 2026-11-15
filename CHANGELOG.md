@@ -1,3 +1,9 @@
+## 0.18.1 — 15 November 2026 (perbaikan editor & TC-309)
+
+- **Bug edit canvas template** (video 15 Nov): zoom area kerja editor bolak-balik 44% ↔ 46% karena scrollbar area kerja muncul/hilang mengikuti tinggi canvas; isi canvas tampak dobel dan berkedip. Lebar area kerja kini stabil (`scrollbar-gutter: stable`) dan kenaikan zoom < 3% diabaikan.
+- **TC-309**: saat ukuran font fitur yang punya background (warna, gradien, atau gambar) diubah, tinggi kotak dikunci pada tinggi saat itu — hanya teks yang membesar, background tidak ikut membesar/ter-zoom. Panel Style menampilkan keterangan "Tinggi kotak dikunci …px" dengan tombol **Tinggi otomatis** untuk melepasnya.
+- TC-328 masih menunggu data template (D Adat Jawa 01) untuk direproduksi.
+
 ## 0.18.0 — 10 November 2026 (QA 14: TC-303 s/d TC-329 + revisi WhatsApp)
 
 Sumber: UPDATE_QA_IKRARKU.ID_14 (sheet Master Test Cases, Status Fail, kolom Update Web Dev kosong), Highlight Report QA 8 Nov, revisi WhatsApp SSBug1–5, contoh "Invoice — A4 1".

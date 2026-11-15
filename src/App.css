@@ -2678,3 +2678,9 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
 .side-overlay-row button{display:inline-flex;align-items:center;gap:5px;border:1px solid #dfe6e2;background:#fff;border-radius:7px;padding:6px 9px;font-size:10px}
 /* QA 14 TC-317 — animasi ditahan sampai gambar selesai di-decode (maks 2,5 dtk). */
 .wedding-site.is-warming .section-decoration,.wedding-site.is-warming .background-extra-layer,.wedding-site.is-warming [class*="bg-motion-"],.wedding-site.is-warming .canvas-section[class*=" loop-"]{animation-play-state:paused!important}
+/* QA 15 Nov — lebar area kerja editor tidak berubah saat scrollbar muncul/hilang
+   (penyebab zoom canvas bolak-balik 44% ↔ 46%). */
+.canvas-workspace{scrollbar-gutter:stable}
+/* QA 14 TC-309 — tinggi kotak dikunci saat font diubah. */
+.locked-height-note{display:flex;align-items:center;gap:8px;margin:-2px 0 8px;padding:7px 9px;border-radius:8px;background:#f3f7f5;border:1px solid #dbe7e1;font-size:10px;line-height:1.4;color:#4f625b}
+.locked-height-note button{flex:0 0 auto;border:1px solid #cfe0d8;background:#fff;border-radius:6px;padding:4px 8px;font-size:10px;color:#1d5a49;cursor:pointer}
