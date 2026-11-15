@@ -345,6 +345,11 @@ build ulang (langkah A–E). Cek setelah deploy:
    canvas (TC-328).
 4. Editor Desktop → aktifkan Background tetap → panel "Tata letak desktop"
    mode Kolom: tidak ada scroll horizontal di sidebar kiri.
+5. Login customer → Template & Canvas → Edit → Save & Publish → klik ←:
+   kembali ke Template & Canvas dan card tetap ada.
+6. Login Admin/Web Designer → buka website customer yang sama: jumlah card
+   sama dengan customer, preview card menampilkan banner cover.
+7. Login customer → RSVP Confirmation: tidak ada dropdown nama canvas.
 
 ## F. Rollback
 

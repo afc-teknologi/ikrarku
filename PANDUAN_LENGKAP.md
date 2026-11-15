@@ -1433,6 +1433,20 @@ Penyebab di template D Adat Jawa 01 (Background tetap aktif):
 **Sidebar kiri.** Panel "Tata letak desktop" (mode Kolom) kini muat di
 sidebar kiri — tidak ada lagi scroll horizontal atau kontrol terpotong.
 
+## W.9 — Card design di Template & Canvas (update 15 November)
+
+- Customer: setelah **Save & Publish** lalu klik ← di editor, halaman kembali
+  ke **Template & Canvas** dan card design tetap tampil.
+- Admin/Web Designer yang membuka website customer melihat jumlah card yang
+  sama dengan customer (satu card per design yang dibeli). Canvas awal atau
+  canvas tambahan tanpa template ikut di dalam card itu.
+- Preview card ("Canvas 01 · actual saved preview") menampilkan banner/
+  background cover. Template dengan Tata letak desktop **Kolom** atau
+  background khusus Mobile dirender dengan tampilan Mobile.
+- RSVP Confirmation (customer): filter **Undangan** per design yang dibeli,
+  muncul hanya bila customer punya lebih dari satu undangan. Nama canvas
+  internal tidak lagi ditampilkan.
+
 # Keamanan
 
 - Jangan mengirim API key lewat chat grup atau dokumen bersama
