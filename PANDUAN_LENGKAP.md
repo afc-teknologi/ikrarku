@@ -1414,15 +1414,24 @@ Kunci tinggi disimpan per device (Desktop / Mobile) dan tidak berlaku
 untuk fitur tanpa background, cover Buka Undangan, atau fitur posisi bebas
 yang sudah punya tinggi kotak sendiri.
 
-## W.8 — Menunggu data
+## W.8 — TC-328: tidak ada garis/bayangan antar canvas
 
-- TC-328 (bayangan antar canvas saat digulir): menunggu export JSON
-  template **D Adat Jawa 01** dan nama canvas di atas canvas "Wishes".
-  Dugaan sementara: canvas tersebut tidak punya background sendiri atau
-  opacity-nya < 100%, sehingga background tetap di belakang undangan
-  terlihat dan tampak berbeda saat digulir. Pemeriksaan cepat untuk Web
-  Designer: buka canvas itu → Background → pastikan ada gambar/warna
-  dengan opacity 100%.
+Penyebab di template D Adat Jawa 01 (Background tetap aktif):
+
+1. Setiap canvas punya lapisan gradien tipis bawaan (gelap di bawah,
+   terang di atas). Di atas Background tetap, batas tiap canvas tampak
+   sebagai garis gelap–terang. Lapisan ini sudah dihapus — tidak perlu
+   tindakan dari Web Designer.
+2. Ornamen pemandangan/kabut (Gemini_Generated_Image…) digeser ±150–200px
+   keluar batas canvas tanpa opsi **Boleh keluar dari batas canvas**,
+   sehingga terpotong lurus di batas canvas. Kini bagian yang terpotong
+   dipudarkan otomatis, dan panel ornamen menampilkan keterangan
+   "Ornamen ini digeser keluar batas canvas sehingga terpotong".
+   Bila ornamen harus tampil utuh menyeberang ke canvas lain, centang
+   **Boleh keluar dari batas canvas (atas/bawah)**.
+
+**Sidebar kiri.** Panel "Tata letak desktop" (mode Kolom) kini muat di
+sidebar kiri — tidak ada lagi scroll horizontal atau kontrol terpotong.
 
 # Keamanan
 

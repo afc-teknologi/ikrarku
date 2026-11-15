@@ -340,6 +340,11 @@ build ulang (langkah A–E). Cek setelah deploy:
    tampak dobel.
 2. Pilih teks ber-background → besarkan font → kotak tidak ikut membesar,
    muncul keterangan "Tinggi kotak dikunci …px".
+3. Buka preview template **D Adat Jawa 01** (Mobile) → Buka Undangan →
+   gulir ke Wedding Gift dan Wishes: tidak ada garis gelap/terang di batas
+   canvas (TC-328).
+4. Editor Desktop → aktifkan Background tetap → panel "Tata letak desktop"
+   mode Kolom: tidak ada scroll horizontal di sidebar kiri.
 
 ## F. Rollback
 

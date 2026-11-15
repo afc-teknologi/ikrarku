@@ -17865,6 +17865,13 @@ function SectionDecorationEditor({
               }
             />
           </label>
+          {decorationCutSide(item, items.some((other) => other.overflow)) && (
+            <div className="deco-cut-note">
+              Ornamen ini digeser keluar batas canvas sehingga terpotong. Bagian
+              yang terpotong dipudarkan otomatis agar tidak tampak garis antar
+              canvas. Centang opsi di atas bila ornamen harus tampil utuh.
+            </div>
+          )}
         </div>
       ))}
       {!items.length && (
@@ -21638,6 +21645,25 @@ function liveSectionVisible(section: CanvasSection, editable: boolean) {
   return hasVisibleFeatures;
 }
 
+/** TC-328 — ornamen yang digeser keluar batas atas/bawah canvas tanpa opsi
+ *  "Boleh keluar dari batas canvas" terpotong lurus oleh overflow:hidden
+ *  milik canvas. Pada gambar semi-transparan (kabut/pemandangan) potongan
+ *  itu tampil sebagai garis/bayangan di antara dua canvas saat digulir.
+ *  Bagian gambar menjelang garis potong kini dipudarkan, sehingga batas
+ *  canvas tidak lagi terlihat. Ornamen yang tidak terpotong tidak berubah. */
+const DECO_CUT_MIN = 24;
+function decorationCutSide(
+  decoration: SectionDecoration,
+  sectionOverflows: boolean,
+): "top" | "bottom" | null {
+  if (!decoration.imageUrl || decoration.pinned || decoration.overflow) return null;
+  if (sectionOverflows) return null;
+  const dy = decoration.offsetY ?? 0;
+  if (decoration.corner.startsWith("bottom") && dy >= DECO_CUT_MIN) return "bottom";
+  if (decoration.corner.startsWith("top") && dy <= -DECO_CUT_MIN) return "top";
+  return null;
+}
+
 function SectionDecorations({
   decorations,
   pinned = false,
@@ -21647,18 +21673,23 @@ function SectionDecorations({
    *  milik undangan); false: hanya ornamen biasa milik canvas. */
   pinned?: boolean;
 }) {
+  const sectionOverflows = (decorations || []).some((item) => item.overflow);
   return (
     <>
             {(decorations || [])
               .filter((decoration) => Boolean(decoration.pinned) === pinned)
               .map((decoration) => {
+              const cutSide = decorationCutSide(decoration, sectionOverflows);
               const node = (
               <span
                 key={decoration.id}
-                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"} deco-${decoration.layer || "front"}${decoration.scrollMotion && decoration.scrollMotion !== "none" ? ` scroll-${decoration.scrollMotion}` : ""}`}
+                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"} deco-${decoration.layer || "front"}${decoration.scrollMotion && decoration.scrollMotion !== "none" ? ` scroll-${decoration.scrollMotion}` : ""}${cutSide ? ` deco-cut-${cutSide}` : ""}`}
                 style={
                   {
                     width: decoration.size,
+                    ...(cutSide
+                      ? { "--deco-cut": `${Math.abs(decoration.offsetY ?? 0)}px` }
+                      : {}),
                     // TC-205 — kotak gambar dulu selalu persegi, padahal
                     // gambarnya `object-fit: contain`. Gambar yang tidak
                     // persegi diletakkan di TENGAH kotak itu, menyisakan
