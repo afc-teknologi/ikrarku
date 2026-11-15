@@ -4,6 +4,8 @@
 - **Admin/Web Designer: 3 card untuk 1 pesanan.** Canvas tanpa penanda template (starter "Main Canvas", canvas tambahan) tampil sebagai card "Custom Design" sendiri-sendiri, padahal customer hanya melihat satu card. Canvas tersebut kini digabung ke design template sehingga tampilan staff = tampilan customer. Salinan hasil Copy tetap card sendiri.
 - **Banner pada preview card (actual-render-viewport).** Template yang ditata Mobile (Tata letak desktop: Kolom) atau background-nya hanya diisi di versi Mobile tampil sebagai kotak krem kosong. Card kini merender versi Mobile untuk template seperti itu, memilih cover dari canvas template (bukan starter), dan tidak menyisakan pita kosong di atas banner. Label "Applied Template · <nama>" tidak lagi terpecah dua baris.
 - **RSVP Confirmation customer.** Filter "Canvas" menampilkan nama canvas internal (Main Canvas, New Canvas (salinan), …). Customer kini memfilter per undangan yang dibeli (sama dengan List Undangan); bila hanya satu undangan, filter tidak ditampilkan. Kolom CSV menjadi "undangan".
+- **Panel kanan editor bisa digeser horizontal.** Pasangan kontrol (mis. Text color + Background, Heading + Supporting) lebih lebar dari panel. Kini pasangan yang tidak muat turun ke bawah dan kolom Hex menyempit; panel tidak lagi punya scroll horizontal.
+- **Ornamen bergambar dipratinjau dua kali.** Kotak pratinjau ornamen dan thumbnail kontrol "Upload gambar layer" sama-sama menampilkan gambar. Kotak pratinjau kini hanya untuk bentuk bawaan; ornamen bergambar cukup satu thumbnail.
 
 ## 0.18.1 — 15 November 2026 (perbaikan editor, TC-309, TC-328)
 
