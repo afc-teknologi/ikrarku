@@ -5796,7 +5796,9 @@ function App() {
     return (
       <>
         <Editor
-          managingCustomer={Boolean(siteOwnerUserId)}
+          managingCustomer={
+            Boolean(siteOwnerUserId) && siteOwnerUserId !== currentAccountId
+          }
           editorName={currentAccount?.name || displayRole(role)}
           onContactSupport={
             role === "User" ? () => setChatWidgetOpen(true) : undefined
@@ -6008,7 +6010,9 @@ function App() {
             openTemplateCreator={() => setTemplateCreatorOpen(true)}
             canCreate={hasPermission("templates.create")}
             managedTemplates={templateCatalog}
-          managingCustomer={Boolean(siteOwnerUserId)}
+          managingCustomer={
+            Boolean(siteOwnerUserId) && siteOwnerUserId !== currentAccountId
+          }
             currentAccountId={currentAccountId}
             canApprove={hasPermission("templates.approve")}
             onTakedown={takedownTemplate}
@@ -6146,6 +6150,7 @@ function App() {
           <RsvpConfirmationPage
             guests={guests}
             sections={sections}
+            designs={customerDesigns}
             siteTitle={siteTitle}
             flash={flash}
           />
@@ -10441,7 +10446,22 @@ function buildWebsiteDesignGroups(
     if (current) current.sections.push(section);
     else groups.set(key, { id: key, template, name, sections: [section] });
   });
-  return Array.from(groups.values());
+  const result = Array.from(groups.values());
+  // 15 Nov — canvas tanpa penanda template sama sekali (starter "Main
+  // Canvas", canvas yang ditambahkan lewat +) dulu tampil sebagai card
+  // "Custom Design" sendiri-sendiri bagi Admin/Web Designer, padahal customer
+  // melihatnya sebagai bagian dari design yang dibeli (SSBug1). Bila website
+  // punya design template, canvas itu digabung ke design template pertama
+  // supaya tampilan staff = tampilan customer. Salinan (Copy) tetap card
+  // sendiri karena membawa templateInstanceId baru.
+  const host = result.find((group) => group.template);
+  const loose = result.filter(
+    (group) => !group.template && group.id.startsWith("custom-"),
+  );
+  if (!host || !loose.length) return result;
+  host.sections = [...host.sections, ...loose.flatMap((group) => group.sections)]
+    .sort((a, b) => sections.indexOf(a) - sections.indexOf(b));
+  return result.filter((group) => !loose.includes(group));
 }
 
 type WebsiteDesignGroup = {
@@ -10665,12 +10685,47 @@ function pickPreviewSection(
           feature.type !== "invitation-cover" && feature.type !== "sound",
       ),
     );
+  // 15 Nov — canvas awal tanpa penanda template (starter "Main Canvas",
+  // canvas tambahan) yang digabung ke design yang dibeli tidak boleh menjadi
+  // wajah card: cover/isi dicari dulu di canvas milik template.
+  const tagged = sections.filter(
+    (section) => section.templateInstanceId || section.sourceTemplateId,
+  );
+  const pool = tagged.length ? tagged : sections;
   const chosen =
-    sections.find(hasCover) || sections.find(hasVisibleContent) || sections[0];
-  const globalSource = sections[0].backgroundGlobal ? sections[0] : null;
-  return globalSource && chosen.id !== globalSource.id
-    ? applyGlobalBackground(chosen, globalSource)
-    : chosen;
+    pool.find(hasCover) || pool.find(hasVisibleContent) || pool[0];
+  const globalSource = pool[0].backgroundGlobal ? pool[0] : null;
+  if (!globalSource || chosen.id === globalSource.id) return chosen;
+  const merged = applyGlobalBackground(chosen, globalSource);
+  // Background global versi Mobile ikut dibawa (card bisa dirender Mobile).
+  const sourceMobile = Object.fromEntries(
+    Object.entries(globalSource.mobile || {}).filter(([key]) =>
+      key.startsWith("background"),
+    ),
+  );
+  return Object.keys(sourceMobile).length
+    ? { ...merged, mobile: { ...(chosen.mobile || {}), ...sourceMobile } }
+    : merged;
+}
+
+/** 15 Nov — "banner" kosong pada card design. Template yang ditata Mobile
+ *  (Tata letak desktop: Kolom) atau yang background-nya hanya diisi di versi
+ *  Mobile tampil sebagai kotak krem polos bila card merender versi Desktop.
+ *  Card seperti itu dirender dengan versi Mobile agar background/banner-nya
+ *  terlihat. */
+function previewPrefersMobile(
+  sections: CanvasSection[],
+  section: CanvasSection | undefined,
+) {
+  if (!section) return false;
+  if (sections.some((item) => item.desktopLayout === "column")) return true;
+  const hasBackground = (value?: Partial<CanvasSection>) =>
+    Boolean(
+      value?.backgroundUrl ||
+        value?.backgroundVideoUrl ||
+        (value?.backgroundLayers || []).some((layer) => layer.url),
+    );
+  return !hasBackground(section) && hasBackground(section.mobile);
 }
 
 /** QC #2 — "preview dari Templates & Approval terasa berat". Canvas penuh
@@ -10821,11 +10876,18 @@ function WebsiteTemplatePreview({
     observer.observe(content.current);
     return () => observer.disconnect();
   }, []);
+  const section = pickPreviewSection(sections);
+  const mobileCard = previewPrefersMobile(sections, section);
+  // Lebar desain yang dirender lalu diskalakan ke lebar card.
+  const designWidth = mobileCard ? MOBILE_PREVIEW_WIDTH : 800;
   const maxViewportHeight = width * 1.25;
   const viewportHeight = contentHeight
     ? Math.max(
         120,
-        Math.min(Math.round((contentHeight * width) / 800), maxViewportHeight),
+        Math.min(
+          Math.round((contentHeight * width) / designWidth),
+          maxViewportHeight,
+        ),
       )
     : maxViewportHeight;
   // QC 15 Okt — "Preview masih blank". Dulu yang dirender selalu sections[0].
@@ -10835,7 +10897,6 @@ function WebsiteTemplatePreview({
   // punya 14 canvas berisi. Sekarang yang dipilih adalah yang memang akan
   // dilihat tamu lebih dulu: cover bila ada, kalau tidak canvas pertama yang
   // punya isi. Hanya satu section yang dirender, jadi biayanya tidak naik.
-  const section = pickPreviewSection(sections);
   const selected: Template = template || {
     id: "preview",
     name: title,
@@ -10867,34 +10928,36 @@ function WebsiteTemplatePreview({
           ref={content}
           inert
           style={{
-            width: 800,
+            width: designWidth,
             // Mode bare: skala "cover" — penuhi lebar dan tinggi kartu,
             // dipusatkan horizontal bila canvas lebih pendek dari kartu.
             ...(bare && contentHeight && holderHeight
               ? (() => {
                   const scale = Math.max(
-                    width / 800,
+                    width / designWidth,
                     holderHeight / contentHeight,
                   );
                   return {
-                    transform: `translateX(${(width - 800 * scale) / 2}px) scale(${scale})`,
+                    transform: `translateX(${(width - designWidth * scale) / 2}px) scale(${scale})`,
                   };
                 })()
-              : { transform: `scale(${width / 800})` }),
+              : { transform: `scale(${width / designWidth})` }),
             transformOrigin: "top left",
           }}
         >
           {section ? (
             <ThumbnailContext value={true}>
-              <WeddingCanvas
-                page="pages"
-                sections={hydrateSections([section])}
-                selectedTemplate={selected}
-                greetings={[]}
-                addGreeting={() => {}}
-                guests={[]}
-                addGuest={() => {}}
-              />
+              <DeviceContext value={mobileCard ? "mobile" : "desktop"}>
+                <WeddingCanvas
+                  page="pages"
+                  sections={hydrateSections([section])}
+                  selectedTemplate={selected}
+                  greetings={[]}
+                  addGreeting={() => {}}
+                  guests={[]}
+                  addGuest={() => {}}
+                />
+              </DeviceContext>
             </ThumbnailContext>
           ) : (
             <div className="actual-preview-empty">Blank design</div>
@@ -16601,21 +16664,44 @@ function BoxStyle({
 function RsvpConfirmationPage({
   guests,
   sections,
+  designs = [],
   siteTitle,
   flash,
 }: {
   guests: Guest[];
   sections: CanvasSection[];
+  /** 15 Nov — customer: filter per undangan yang dibeli, bukan per canvas
+   *  internal ("Main Canvas", "New Canvas (salinan)", …). Sama dengan List
+   *  Undangan (SSBug3). */
+  designs?: WebsiteDesignGroup[];
   siteTitle: string;
   flash: (message: string) => void;
 }) {
   const [canvasFilter, setCanvasFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
-  const canvasName = (canvasId: string) =>
-    sections.find((section) => section.id === canvasId)?.name || "Tanpa Canvas";
+  const byDesign = designs.length > 0;
+  const designLabel = (design: WebsiteDesignGroup) =>
+    `${design.name}${design.orderNo ? ` · ${design.orderNo}` : ""}`;
+  const designOf = (canvasId: string) =>
+    designs.find((design) =>
+      design.sections.some((section) => section.id === canvasId),
+    );
+  const canvasName = (canvasId: string) => {
+    if (byDesign) {
+      const design = designOf(canvasId);
+      return design ? designLabel(design) : "Undangan";
+    }
+    return (
+      sections.find((section) => section.id === canvasId)?.name ||
+      "Tanpa Canvas"
+    );
+  };
   const visible = guests.filter(
     (guest) =>
-      (canvasFilter === "all" || guest.canvasId === canvasFilter) &&
+      (canvasFilter === "all" ||
+        (byDesign
+          ? designOf(guest.canvasId)?.id === canvasFilter
+          : guest.canvasId === canvasFilter)) &&
       (statusFilter === "all" || guest.status === statusFilter),
   );
   const count = (status: Guest["status"]) =>
@@ -16630,7 +16716,7 @@ function RsvpConfirmationPage({
     }
     const escape = (value: string) => `"${String(value).replace(/"/g, '""')}"`;
     const rows = [
-      "name,status,pax,canvas,waktu",
+      `name,status,pax,${byDesign ? "undangan" : "canvas"},waktu`,
       ...visible.map((guest) =>
         [
           escape(guest.name),
@@ -16689,20 +16775,41 @@ function RsvpConfirmationPage({
         </article>
       </section>
       <div className="rsvp-filter-bar">
-        <label>
-          Canvas
-          <select
-            value={canvasFilter}
-            onChange={(event) => setCanvasFilter(event.target.value)}
-          >
-            <option value="all">Semua Canvas</option>
-            {sections.map((section) => (
-              <option key={section.id} value={section.id}>
-                {section.name}
-              </option>
-            ))}
-          </select>
-        </label>
+        {byDesign ? (
+          // Satu undangan saja: tidak perlu pilihan; lebih dari satu: pilih
+          // per undangan yang dibeli.
+          designs.length > 1 && (
+            <label>
+              Undangan
+              <select
+                value={canvasFilter}
+                onChange={(event) => setCanvasFilter(event.target.value)}
+              >
+                <option value="all">Semua undangan</option>
+                {designs.map((design) => (
+                  <option key={design.id} value={design.id}>
+                    {designLabel(design)}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        ) : (
+          <label>
+            Canvas
+            <select
+              value={canvasFilter}
+              onChange={(event) => setCanvasFilter(event.target.value)}
+            >
+              <option value="all">Semua Canvas</option>
+              {sections.map((section) => (
+                <option key={section.id} value={section.id}>
+                  {section.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label>
           Status
           <select

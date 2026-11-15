@@ -490,7 +490,7 @@ test("Retest-2b: tinggi kotak preview mengikuti tinggi canvas, bukan rasio tetap
   assert.match(appTsx, /const \[contentHeight, setContentHeight\] = useState\(0\)/);
   assert.match(
     appTsx,
-    /Math\.min\(Math\.round\(\(contentHeight \* width\) \/ 800\), maxViewportHeight\)/,
+    /Math\.round\(\(contentHeight \* width\) \/ designWidth\),\n\s*maxViewportHeight,/,
   );
   assert.match(
     appTsx,
@@ -738,8 +738,9 @@ test("QC: pratinjau card memilih section yang benar-benar tampil", () => {
     appTsx.indexOf("function WebsiteTemplatePreview("),
   );
   assert.ok(fn.length > 0);
-  // Cover lebih dulu, lalu section pertama yang berisi.
-  assert.match(fn, /sections\.find\(hasCover\) \|\| sections\.find\(hasVisibleContent\) \|\| sections\[0\]/);
+  // Cover lebih dulu, lalu section pertama yang berisi — dicari di canvas
+  // milik template lebih dulu (15 Nov).
+  assert.match(fn, /pool\.find\(hasCover\) \|\| pool\.find\(hasVisibleContent\) \|\| pool\[0\]/);
   // Background global ikut terbawa saat section dirender sendirian.
   assert.match(fn, /applyGlobalBackground\(chosen, globalSource\)/);
   // .sr-only dipakai tetapi dulu tidak pernah didefinisikan.
@@ -1532,4 +1533,22 @@ test("QA 15 Nov: TC-328 tanpa garis antar canvas & panel Tata letak desktop muat
   // Panel desktop tidak melebar melewati sidebar kiri.
   assert.match(appCss, /\.desktop-layout-panel,\.desktop-layout-options,\.desktop-side-editor\{grid-template-columns:minmax\(0,1fr\)\}/);
   assert.match(appCss, /\.editor-left\{overflow-x:hidden\}/);
+});
+
+test("QA 15 Nov: card design — kembali dari editor, 1 card untuk staff, banner preview", () => {
+  // Customer yang menyimpan lalu kembali tidak lagi dilempar ke Tasks & Tickets.
+  assert.equal((appTsx.match(/managingCustomer=\{\n\s*Boolean\(siteOwnerUserId\) && siteOwnerUserId !== currentAccountId\n\s*\}/g) || []).length, 2);
+  // Canvas tanpa penanda template digabung ke design template (tampilan staff = customer).
+  assert.match(appTsx, /group\.id\.startsWith\("custom-"\)/);
+  // Preview card memakai canvas template dan versi Mobile untuk desain Kolom/Mobile.
+  assert.match(appTsx, /function previewPrefersMobile\(/);
+  assert.match(appTsx, /<DeviceContext value=\{mobileCard \? "mobile" : "desktop"\}>/);
+  assert.match(appCss, /\.wedding-site\.is-thumbnail\.cover-as-canvas>\.canvas-section\{margin-block:0\}/);
+  assert.match(appCss, /\.website-canvas-meta \.published-dot\{display:inline-block;/);
+});
+
+test("QA 15 Nov: RSVP Confirmation customer difilter per undangan, bukan per canvas", () => {
+  assert.match(appTsx, /<RsvpConfirmationPage\n\s*guests=\{guests\}\n\s*sections=\{sections\}\n\s*designs=\{customerDesigns\}/);
+  assert.match(appTsx, /<option value="all">Semua undangan<\/option>/);
+  assert.match(appTsx, /designs\.length > 1 && \(\n\s*<label>\n\s*Undangan/);
 });
