@@ -1,8 +1,10 @@
-## 0.18.1 — 15 November 2026 (perbaikan editor & TC-309)
+## 0.18.1 — 15 November 2026 (perbaikan editor, TC-309, TC-328)
 
 - **Bug edit canvas template** (video 15 Nov): zoom area kerja editor bolak-balik 44% ↔ 46% karena scrollbar area kerja muncul/hilang mengikuti tinggi canvas; isi canvas tampak dobel dan berkedip. Lebar area kerja kini stabil (`scrollbar-gutter: stable`) dan kenaikan zoom < 3% diabaikan.
 - **TC-309**: saat ukuran font fitur yang punya background (warna, gradien, atau gambar) diubah, tinggi kotak dikunci pada tinggi saat itu — hanya teks yang membesar, background tidak ikut membesar/ter-zoom. Panel Style menampilkan keterangan "Tinggi kotak dikunci …px" dengan tombol **Tinggi otomatis** untuk melepasnya.
-- TC-328 masih menunggu data template (D Adat Jawa 01) untuk direproduksi.
+- **TC-328** (shadow antar canvas, template D Adat Jawa 01): setiap canvas punya lapisan gradien tipis (`.canvas-section:after`, putih 3% → hitam 2%). Di atas Background tetap, bawah canvas jadi sedikit lebih gelap dan atas canvas berikutnya lebih terang — tampak sebagai garis/bayangan di tiap batas canvas saat digulir. Lapisan itu dihapus; warna antar canvas kini rata.
+- **TC-328 (ornamen terpotong)**: ornamen gambar yang digeser keluar batas atas/bawah canvas tanpa opsi "Boleh keluar dari batas canvas" kini dipudarkan di garis potongnya (tidak lagi terpotong lurus). Editor menampilkan keterangan pada ornamen yang terpotong.
+- **Sidebar kiri editor**: panel "Tata letak desktop" (mode Kolom) melebar melewati sidebar sehingga muncul scroll horizontal dan kontrol terpotong. Panel kini mengikuti lebar sidebar; select dan tombol upload ikut menyesuaikan.
 
 ## 0.18.0 — 10 November 2026 (QA 14: TC-303 s/d TC-329 + revisi WhatsApp)
 

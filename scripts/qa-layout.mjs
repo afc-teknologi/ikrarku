@@ -1520,3 +1520,16 @@ test("QA 15 Nov: zoom editor stabil & TC-309 tinggi kotak dikunci saat font diub
   assert.match(appTsx, /data-feature-id=\{feature\.id\}/);
   assert.match(appTsx, /patch = \{ \.\.\.rawPatch, lockedHeight: Math\.round\(height\) \}/);
 });
+
+test("QA 15 Nov: TC-328 tanpa garis antar canvas & panel Tata letak desktop muat di sidebar", () => {
+  // Lapisan gradien per canvas membuat batas canvas tampak gelap/terang.
+  assert.doesNotMatch(appCss, /\.canvas-section:after\{content:''/);
+  // Ornamen yang terpotong batas canvas dipudarkan di garis potong.
+  assert.match(appTsx, /function decorationCutSide\(/);
+  assert.match(appTsx, /deco-cut-\$\{cutSide\}/);
+  assert.match(appCss, /\.section-decoration\.deco-cut-bottom>img\{/);
+  assert.match(appCss, /\.section-decoration\.deco-cut-top>img\{/);
+  // Panel desktop tidak melebar melewati sidebar kiri.
+  assert.match(appCss, /\.desktop-layout-panel,\.desktop-layout-options,\.desktop-side-editor\{grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(appCss, /\.editor-left\{overflow-x:hidden\}/);
+});
