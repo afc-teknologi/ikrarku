@@ -1561,3 +1561,11 @@ test("QA 15 Nov: panel kanan editor tidak bisa digeser horizontal", () => {
 test("QA 15 Nov: ornamen bergambar hanya dipratinjau sekali", () => {
   assert.match(appTsx, /\{!item\.imageUrl && \(\n\s*<div className="decor-preview" style=\{\{ color: item\.color \}\}>\n\s*<DecorGlyphIcon glyph=\{item\.glyph\} \/>/);
 });
+
+test("QA 16 Nov: background yang dihapus di versi Mobile tetap terhapus setelah save", () => {
+  // undefined hilang saat JSON disimpan -> Mobile kembali mewarisi Desktop.
+  assert.match(appTsx, /value === undefined \? null : value/);
+  assert.match(appTsx, /function restoreClearedOverride</);
+  assert.match(appTsx, /const override = restoreClearedOverride\(\{\n\s*\.\.\.section\.mobile,/);
+  assert.match(appTsx, /const override = restoreClearedOverride\(\{ \.\.\.feature\.mobile \}\)/);
+});
