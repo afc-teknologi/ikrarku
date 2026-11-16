@@ -1750,9 +1750,20 @@ const DeviceContext = createContext<DeviceMode>("desktop");
 /** Layar "Buka Undangan" di preview/live dirender memakai canvas yang sama
  *  dengan editor; tombolnya membuka undangan lewat context ini. */
 const CoverOpenContext = createContext<(() => void) | null>(null);
+/** 16 Nov — nilai yang DIHAPUS di versi Mobile (mis. background image)
+ *  disimpan sebagai null, karena `undefined` hilang saat JSON disimpan:
+ *  setelah save + refresh, versi Mobile kembali mewarisi gambar Desktop
+ *  sehingga background yang sudah dihapus muncul lagi di preview. Saat
+ *  dibaca, null dikembalikan menjadi "tidak ada". */
+function restoreClearedOverride<T extends object>(override: T): T {
+  const result = { ...override } as Record<string, unknown>;
+  for (const key of Object.keys(result))
+    if (result[key] === null) result[key] = undefined;
+  return result as T;
+}
 function resolveFeature(feature: Feature, device: DeviceMode): Feature {
   if (device !== "mobile" || !feature.mobile) return feature;
-  const override = { ...feature.mobile } as Partial<Feature>;
+  const override = restoreClearedOverride({ ...feature.mobile }) as Partial<Feature>;
   delete (override as { mobile?: unknown }).mobile;
   return { ...feature, ...override };
 }
@@ -1761,7 +1772,9 @@ function resolveSection(
   device: DeviceMode,
 ): CanvasSection {
   if (device !== "mobile" || !section.mobile) return section;
-  const override = { ...section.mobile } as Partial<CanvasSection>;
+  const override = restoreClearedOverride({
+    ...section.mobile,
+  }) as Partial<CanvasSection>;
   delete (override as { mobile?: unknown }).mobile;
   delete (override as { columns?: unknown }).columns;
   delete (override as { id?: unknown }).id;
@@ -1791,7 +1804,15 @@ function applyDevicePatch<T extends { mobile?: Partial<T> }>(
   device: DeviceMode,
 ): T {
   if (device !== "mobile") return { ...target, ...patch };
-  const nextMobile = { ...(target.mobile || {}), ...patch } as Partial<T>;
+  // Nilai yang dihapus di Mobile ditulis null agar tetap tersimpan sebagai
+  // "dihapus" (lihat restoreClearedOverride).
+  const cleared = Object.fromEntries(
+    Object.entries(patch).map(([key, value]) => [
+      key,
+      value === undefined ? null : value,
+    ]),
+  );
+  const nextMobile = { ...(target.mobile || {}), ...cleared } as Partial<T>;
   delete (nextMobile as { mobile?: unknown }).mobile;
   return { ...target, mobile: nextMobile } as T;
 }

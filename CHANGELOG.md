@@ -1,3 +1,8 @@
+## 0.18.3 — 16 November 2026 (background Mobile terhapus muncul lagi)
+
+- **Background yang dihapus muncul lagi setelah save + refresh.** Pada template dengan Tata letak desktop **Kolom** (mis. Blue Flowers), editor mode Desktop sebenarnya mengedit versi Mobile. Saat "Hapus background image", nilai dikosongkan di versi Mobile sebagai `undefined` — nilai ini hilang ketika disimpan (JSON), sehingga setelah save + refresh versi Mobile kembali mewarisi background Desktop dan gambar lama tampil lagi di Preview. Kini penghapusan di versi Mobile disimpan sebagai `null` ("dihapus") dan dibaca kembali sebagai kosong. Berlaku untuk semua pengaturan canvas/fitur yang dikosongkan di Mobile.
+- Template yang sudah terlanjur disimpan perlu dihapus background-nya sekali lagi lalu disimpan setelah update ini.
+
 ## 0.18.2 — 15 November 2026 (card design Template & Canvas)
 
 - **Customer: card hilang setelah Save.** Tombol kembali (←) di editor customer membuka halaman Tasks & Tickets (tidak ada di menu customer), sehingga card di Template & Canvas tampak hilang sampai customer pindah menu. Editor customer kini kembali ke Template & Canvas; hanya Admin/Web Designer yang mengelola website customer yang kembali ke Tasks.

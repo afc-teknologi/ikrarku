@@ -1451,6 +1451,19 @@ sidebar kiri — tidak ada lagi scroll horizontal atau kontrol terpotong.
 - Ornamen bergambar hanya punya satu pratinjau (thumbnail pada Upload
   gambar layer).
 
+## W.10 — Background terhapus muncul lagi di Preview (16 November)
+
+Template dengan Tata letak desktop **Kolom** menampilkan versi Mobile, juga di
+mode Desktop editor. Background yang dihapus di sana dulu muncul lagi setelah
+save + refresh karena versi Mobile kembali memakai background Desktop.
+
+Setelah update 0.18.3:
+1. Buka template (mis. Blue Flowers) → pilih canvas → Style → **Hapus
+   background image** sekali lagi (penghapusan lama tidak tersimpan).
+2. **Save Template Draft** → refresh → Preview: background tidak muncul lagi.
+3. Bila template juga dipakai dengan Tata letak **Penuh**, hapus juga
+   background di mode Desktop (versi Desktop tersimpan terpisah).
+
 # Keamanan
 
 - Jangan mengirim API key lewat chat grup atau dokumen bersama
