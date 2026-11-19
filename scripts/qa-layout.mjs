@@ -104,6 +104,7 @@ const appTsx = readFileSync(new URL("../src/App.tsx", import.meta.url), "utf8");
 const appCss = readFileSync(new URL("../src/App.css", import.meta.url), "utf8");
 const serverJs = readFileSync(new URL("../server/index.mjs", import.meta.url), "utf8");
 const apiTs = readFileSync(new URL("../src/api.ts", import.meta.url), "utf8");
+const i18nTs = readFileSync(new URL("../src/i18n.ts", import.meta.url), "utf8");
 
 /** Ambil blok deklarasi untuk selector persis (tanpa regex multi-baris rapuh). */
 // Komentar dibuang dulu; kalau tidak, teks komentar ikut terbawa ke dalam
@@ -438,35 +439,20 @@ test("SEO: tanggal artikel tidak lagi ISO mentah", () => {
 // =====================================================================
 
 test("Retest-1: menutup artikel dari landing membersihkan URL artikel", () => {
-  // appPaths hanya memuat ruas pertama, sehingga pathname artikel yang punya
-  // dua ruas tidak pernah dikenali sebagai milik aplikasi dan URL tetap
-  // menunjuk artikel padahal daftar/landing yang tampil. Kedua prefiks
-  // (baru dan lama) harus dikenali.
+  // QA 15 TC-352/359 — routing disatukan: URL dibentuk dari view + slug
+  // artikel, dan pathname artikel (prefiks baru & lama) dikenali kembali.
   assert.match(
     appTsx,
-    /const isArticlePathname = new RegExp\(\n\s*`\^\/\(\$\{ARTICLE_PATH_SEGMENT\}\|jurnal\)\/\[\^\/\]\+\/\?\$`,\n\s*\)\.test\(window\.location\.pathname\)/,
+    /parts\.length === 2 &&\n\s*\(parts\[0\] === ARTICLE_PATH_SEGMENT \|\| parts\[0\] === "jurnal"\)/,
   );
   assert.match(
     appTsx,
-    /\(appPaths\.has\(window\.location\.pathname\) \|\| isArticlePathname\)/,
+    /if \(options\.articleSlug && \(view === "landing" \|\| view === "journal"\)\)\n\s*return articleHref\(options\.articleSlug\);/,
   );
-  // Membuka artikel dari landing harus menambah entri history, supaya Back
-  // browser menutup artikel dan tidak melempar pengguna keluar situs.
-  const landingBranch = appTsx.slice(
-    appTsx.indexOf('if (view === "landing") {'),
-  );
-  const articleUrlBlock = landingBranch.slice(
-    0,
-    landingBranch.indexOf("return;"),
-  );
-  assert.match(articleUrlBlock, /window\.history\.pushState\(/);
-  assert.equal(
-    /window\.history\.replaceState\(window\.history\.state, "", articleUrl\)/.test(
-      articleUrlBlock,
-    ),
-    false,
-    "URL artikel dari landing kembali memakai replaceState; Back akan keluar dari situs",
-  );
+  // Navigasi biasa menambah entri history (Back menutup artikel); hanya
+  // pemuatan awal & popstate yang memakai replaceState.
+  assert.match(appTsx, /const replace = !urlSettledRef\.current \|\| fromPopStateRef\.current;/);
+  assert.match(appTsx, /window\.history\.pushState\(/);
 });
 
 test("Retest-2a: Edit dari card Website Design tidak memaksa mode site", () => {
@@ -936,7 +922,7 @@ test("Serein: tata letak desktop Kolom — isi Mobile di kolom sempit, backdrop 
   const wrap = appTsx.slice(appTsx.indexOf("function WeddingCanvas(props"), appTsx.indexOf("function WeddingCanvasBody("));
   assert.ok(wrap.length > 0);
   assert.match(wrap, /device === "desktop" &&\n\s*!thumbnail &&/);
-  assert.match(wrap, /<DeviceContext value="mobile">\n\s*<WeddingCanvasBody \{\.\.\.props\} \/>/);
+  assert.match(wrap, /<DeviceContext value=\{coverPhase \? "desktop" : "mobile"\}>\n\s*<WeddingCanvasBody/);
   assert.match(wrap, /source=\{desktopColumnBackdrop\(first\)\}/);
   // Di editor, mode Desktop + Kolom menulis ke Mobile (yang tampil).
   assert.match(appTsx, /previewMode === "desktop" && desktopColumn \? "mobile" : previewMode;/);
@@ -1189,9 +1175,9 @@ test("Revisi 24 Okt: layar Buka Undangan memakai versi device aktif (editor = pr
 
 // ---- QA 26 Okt (TC-247..TC-277) ----
 test("TC-247/251/261: kolom 70/30 ditata selebar Mobile lalu diskalakan", () => {
-  assert.match(appTsx, /const columnZoom = useFitZoom\(columnRef, MOBILE_PREVIEW_WIDTH, column\);/);
-  assert.match(appTsx, /className="desktop-column-inner"[\s\S]{0,200}width: MOBILE_PREVIEW_WIDTH,\n\s*zoom: columnZoom,/);
-  assert.match(appTsx, /<PreviewZoomContext value=\{previewZoom \* columnZoom\}>/);
+  assert.match(appTsx, /const columnZoom = useFitZoom\(columnRef, MOBILE_PREVIEW_WIDTH, column && !coverPhase\);/);
+  assert.match(appTsx, /width: MOBILE_PREVIEW_WIDTH,\n\s*zoom: columnZoom,/);
+  assert.match(appTsx, /<PreviewZoomContext value=\{coverPhase \? previewZoom : previewZoom \* columnZoom\}>/);
   assert.match(appCss, /\.desktop-column-inner>\.wedding-site\{width:100%;/);
 });
 test("TC-248: kolom lebar tetap menempel ke pojok", () => {
@@ -1326,7 +1312,8 @@ test("Roleplay 31 Okt: kembali dari Mayar, status project, hitungan selesai", ()
   assert.match(appTsx, /function PaymentReturnPage\(/);
   assert.match(serverMjs, /if \(before\?\.order_id\) syncOrderProgressStatus\(before\.order_id\);/);
   assert.match(serverMjs, /\? "Selesai"\s*: started\s*\? "Sedang dikerjakan"/);
-  assert.match(appTsx, /tasks\.every\(\(task: any\) => \["Done", "Approved"\]\.includes\(task\.status\)\)/);
+  // QA 15 TC-360 — "Selesai" = seluruh tahapan order selesai.
+  assert.match(appTsx, /\.current === -1,/);
   assert.match(serverMjs, /UPDATE sites SET template_id=COALESCE\(template_id,\?\)/);
 });
 test("QA 1 Nov: credit bawah ikut kolom asal, Background tetap tidak terpotong header", () => {
@@ -1429,7 +1416,7 @@ test("MoM 2 Nov IKR-01: halaman workspace tanpa login dialihkan ke login", () =>
 test("MoM 2 Nov IKR-02/03: satu card per template yang dibeli, canvas diberi penanda order", () => {
   assert.match(serverJs, /templateInstanceId: instanceId,\s*sourceTemplateId: template\.id,/);
   assert.match(appTsx, /if \(pendingGroups\.length === 1 && leftovers\.length\)/);
-  assert.match(appTsx, /<h2>Design Anda sedang disiapkan<\/h2>/);
+  assert.match(appTsx, /<h2>\{t\("Design Anda sedang disiapkan", "Your design is being prepared"\)\}<\/h2>/);
   assert.match(appTsx, /function sampleNamesIn\(template: Template\)/);
 });
 test("QC 8 Nov: password dari email bisa dipakai terus", () => {
@@ -1473,7 +1460,7 @@ test("QA 14 (TC-303–329 + SSBug1–5): dashboard customer, invoice, editor & k
   assert.match(appTsx, /const SHOW_SIGNATURE_UPSELL = false/);
   // SSBug1/TC-327 — canvas tanpa pemilik digabung ke design order, Copy/Delete customer disembunyikan.
   assert.match(appTsx, /const host = groups\.find\(\(group\) => !group\.pending\) \|\| groups\[0\]/);
-  assert.match(appTsx, /role === "User"\s+\? "Template dibeli"/);
+  assert.match(appTsx, /\? t\("Template dibeli", "Purchased template"\)/);
   // SSBug3/4 — dashboard & list undangan per design.
   assert.match(appTsx, /function designGuestCanvas\(design: WebsiteDesignGroup\)/);
   assert.match(appTsx, /<WebsiteTemplatePreview\s+template=\{activeDesign\.template\}/);
@@ -1549,8 +1536,8 @@ test("QA 15 Nov: card design — kembali dari editor, 1 card untuk staff, banner
 
 test("QA 15 Nov: RSVP Confirmation customer difilter per undangan, bukan per canvas", () => {
   assert.match(appTsx, /<RsvpConfirmationPage\n\s*guests=\{guests\}\n\s*sections=\{sections\}\n\s*designs=\{customerDesigns\}/);
-  assert.match(appTsx, /<option value="all">Semua undangan<\/option>/);
-  assert.match(appTsx, /designs\.length > 1 && \(\n\s*<label>\n\s*Undangan/);
+  assert.match(appTsx, /<option value="all">\{t\("Semua undangan", "All invitations"\)\}<\/option>/);
+  assert.match(appTsx, /designs\.length > 1 && \(\n\s*<label>\n\s*\{t\("Undangan", "Invitation"\)\}/);
 });
 
 test("QA 15 Nov: panel kanan editor tidak bisa digeser horizontal", () => {
@@ -1568,4 +1555,62 @@ test("QA 16 Nov: background yang dihapus di versi Mobile tetap terhapus setelah 
   assert.match(appTsx, /function restoreClearedOverride</);
   assert.match(appTsx, /const override = restoreClearedOverride\(\{\n\s*\.\.\.section\.mobile,/);
   assert.match(appTsx, /const override = restoreClearedOverride\(\{ \.\.\.feature\.mobile \}\)/);
+});
+
+test("QA 15 (TC-330–345): editor — cover full, tanggal, slideshow, ornamen, kolom, Event", () => {
+  // TC-330 — cover full layout desktop sebelum Buka Undangan, kolom sesudahnya.
+  assert.match(appTsx, /desktopCoverMode\?: "full" \| "column";/);
+  assert.match(appTsx, /onCoverLockChange=\{coverFull \? setCoverLocked : undefined\}/);
+  assert.match(appCss, /\.desktop-column-stage\.cover-phase>\.desktop-column\{width:100%!important/);
+  // TC-331 — format tanggal.
+  assert.match(appTsx, /function formatInviteDate\(/);
+  assert.match(appTsx, /\["day-short", "Sabtu 12 Des"\]/);
+  // TC-332 — slideshow Layer 1.
+  assert.match(appTsx, /function BackgroundSlideshow\(/);
+  assert.match(appTsx, /backgroundSlides\?: \{ url: string; key\?: string \}\[\];/);
+  // TC-333 — font teks icon.
+  assert.match(appTsx, /if \(feature\.iconTextFont\) style\.fontFamily/);
+  // TC-334 — bentuk bingkai.
+  assert.match(appTsx, /\["arch", "Pintu \/ arch"\]/);
+  assert.match(appCss, /\.feature-block\.frame-diamond/);
+  // TC-335 — ukuran nama pemilik rekening.
+  assert.match(appTsx, /feature\.giftAccountNameSize\n\s*\? \{ fontSize: feature\.giftAccountNameSize \}/);
+  // TC-336 — Guest Form heading/teks terpisah.
+  assert.match(appCss, /\.feature-block\.has-title-font \.canvas-form>h3\{font-family:var\(--title-font\)!important\}/);
+  // TC-337/338 — rentang geser & ukuran ornamen diperluas, bisa diketik.
+  assert.match(appTsx, /function NumberRange\(/);
+  assert.match(appTsx, /label="Ukuran"\n\s*unit="px"\n\s*min=\{20\}\n\s*max=\{1600\}/);
+  assert.match(appTsx, /label="Geser Y"\n\s*unit="px"\n\s*min=\{-4000\}/);
+  assert.doesNotMatch(appTsx, /min="-200"\n\s*max="200"\n\s*step="1"\n\s*value=\{item\.offsetY/);
+  // TC-339/340 — posisi vertikal kolom & geser manual.
+  assert.match(appCss, /\.canvas-columns\.cols-v-bottom\{align-items:end\}/);
+  assert.match(appTsx, /!feature\.freePosition && feature\.placementOffsetY/);
+  // TC-341 — ornamen depan di atas isi fitur (kolom z-index 5).
+  assert.match(appCss, /\.section-decoration\.deco-front\{z-index:6\}/);
+  // TC-342 — ikon Event bisa dihapus.
+  assert.match(appTsx, /<option value="none">Tanpa ikon \(hapus\)<\/option>/);
+  assert.match(appTsx, /<EventIcon feature=\{feature\} \/>/);
+  // TC-343 — gaya tombol Simpan Tanggal.
+  assert.match(appTsx, /function calendarButtonStyle\(feature: Feature\)/);
+  // TC-345 — ornamen sisi 70%.
+  assert.match(appTsx, /desktopSideDecorations\?: SectionDecoration\[\];/);
+  assert.match(appTsx, /<SectionDecorations decorations=\{first\.desktopSideDecorations\} \/>/);
+  // Highlight — warna teks button slide (bottom nav).
+  assert.match(appTsx, /"--bn-label": config\.textColor/);
+  assert.match(appCss, /\.bottom-nav \.bottom-nav-label\{color:var\(--bn-label,inherit\)\}/);
+});
+
+test("QA 15 (TC-346–363): bahasa situs, halaman publik, dashboard customer", () => {
+  assert.match(i18nTs, /export function useSiteLang\(\)/);
+  assert.match(appTsx, /function LangSwitch\(/);
+  assert.match(appTsx, /function SiteFooter\(/);
+  assert.match(appTsx, /function PublicInfoPage\(/);
+  assert.match(appTsx, /function resolveArticleLinks\(/);
+  assert.match(appTsx, /function urlForView\(/);
+  assert.match(appTsx, /function timeGreeting\(/);
+  assert.match(appTsx, /function orderMilestones\(/);
+  assert.match(appTsx, /function websiteReadiness\(/);
+  assert.match(serverMjs, /ensureColumn\("articles", "title_en"/);
+  assert.match(serverMjs, /function publicContact\(\)/);
+  assert.match(appCss, /\.stats-grid>\*\{min-width:0\}/);
 });

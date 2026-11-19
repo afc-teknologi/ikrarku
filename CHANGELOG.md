@@ -1,3 +1,39 @@
+## 0.19.0 — 17 November 2026 (QA 15: TC-330 s/d TC-363)
+
+Sumber: UPDATE_QA_IKRARKU.ID_15 (sheet Master Test Cases, Status Fail, kolom Update Web Dev kosong) dan Highlight Report QA 15 Nov 2026.
+
+**Editor (Web Designer)**
+- TC-330: Tata letak desktop **Kolom** — cover (slide pertama) kini tampil full layout Desktop; kolom ala Serein baru muncul setelah **Buka Undangan**. Opsi "Tampilan cover" di panel Tata letak desktop (bawaan: full layout; "Langsung di dalam kolom" = cara lama). Musik tidak terputus saat berpindah.
+- TC-331: **Format tanggal** otomatis untuk Save The Date dan Event: "12 Desember 2026", "Sabtu, 12 Desember 2026", "Sabtu 12 Des", "12/12/2026", "12 . 12 . 2026", "12-12-2026", plus ukuran & warna. Diambil dari Tanggal & waktu acara (atau Tanggal & jam tiap acara pada Event).
+- TC-332: **Slideshow Layer 1** — tambah beberapa foto (bisa pilih sekaligus); foto Layer 1 menjadi slide pertama, berganti otomatis (2–20 detik, transisi Fade / Fade + zoom / Geser).
+- TC-333: teks pada fitur Icon punya **font**, warna, dan tebal sendiri.
+- TC-334: **Bentuk bingkai foto** untuk Image & Gallery: kotak, pintu/arch, pintu oval, oval, lingkaran, daun (2 arah), diamond, heksagon, hati, scallop.
+- TC-335: ukuran teks **nama pemilik rekening** dan nomor rekening (Wedding Gift).
+- TC-336: Guest Form — font heading dan font teks (label, isian, tombol) kini terpisah.
+- TC-337 (urgent): geser ornamen dulu hanya ±200 px sehingga di canvas tinggi (banyak fitur) ornamen tidak bisa mencapai tengah/bawah. Kini Geser X ±1200 px dan Geser Y ±4000 px lewat slider, angka bisa diketik langsung, plus tombol panah per 10 px dan **Reset posisi**.
+- TC-338: ukuran ornamen dulu maks 420 px; kini slider sampai 1600 px dan bisa diketik sampai 3000 px.
+- TC-339: **Posisi vertikal kolom** (Atas/Tengah/Bawah) untuk Column layout 2/3/4 — kolom pendek rata terhadap kolom lain dan blok kolom diletakkan di dalam canvas.
+- TC-340: **Geser manual atas-bawah** untuk blok kolom (panel canvas) dan untuk tiap fitur (tab Style). Keterangan baru: Atas/Tengah/Bawah butuh canvas lebih tinggi dari isinya.
+- TC-341: ornamen "Di depan isi" kini benar-benar di atas isi fitur (mis. kartu Event berwarna). Dulu lapisan kolom (z-index 5) menutupi ornamen (z-index 4).
+- TC-342: ikon fitur Event bisa diganti (kalender, hati, cincin, kilau, jam) atau **dihapus**, plus ukuran & warna.
+- TC-343: tombol **Simpan Tanggal** punya pengaturan sendiri: bentuk (rounded/pill/kotak/outline), warna tombol, warna teks, ukuran teks, sudut, ikon kalender on/off. Di editor tombol tetap terlihat walau tanggal belum diisi. Kosong = ikut gaya tombol lokasi (perilaku lama).
+- TC-344: sudah diperbaiki di 0.18.3 (QA menguji sebelum update). Hapus background sekali lagi lalu simpan.
+- TC-345: sisi 70% tata letak 70:30 punya **Ornamen** dengan pengaturan sama seperti canvas.
+- Highlight: **warna teks button slide** (bottom navigation) — warna teks dan warna teks aktif.
+
+**Halaman publik & bahasa (EN)**
+- TC-346–353, TC-362: satu pilihan bahasa ID/EN untuk seluruh situs (`src/i18n.ts`): landing, jurnal, login, daftar, lupa password, katalog, detail template, checkout, dashboard customer. Tombol ID/EN di tiap halaman.
+- Artikel jurnal punya versi EN (judul, ringkasan, isi) di Articles CMS; artikel tanpa versi EN diberi label "ID" dan catatan.
+- Tautan di dalam artikel: "Baca juga: <judul>" mengarah ke artikel yang benar; tautan ke beranda/ikrarku.id menjadi relatif; tautan luar dibuka di tab baru.
+- TC-354: footer landing lengkap — navigasi, FAQ, Kebijakan Privasi, Syarat & Ketentuan, kontak & media sosial (dari `.env`). Halaman baru `/kebijakan-privasi`, `/syarat-ketentuan`, `/faq`.
+- `/login` dan `/signup` bisa dibuka langsung; Back browser dari Lupa Password kembali ke halaman sebelumnya; alamat tidak lagi tertimpa "/" saat halaman artikel dimuat.
+
+**Dashboard customer**
+- TC-352/359: URL per menu (`/workspace/my-orders`, `/workspace/settings`, …) dan judul tab per halaman; Back/Forward berfungsi.
+- TC-355: sidebar menutup/membuka otomatis saat lebar layar melewati 900 px; tidak ada geser horizontal di 390 px.
+- TC-356–361, 363: label menu berbahasa customer, status website Terbit/Draf yang sebenarnya, kesiapan website, tahapan pesanan (4 langkah) di My Order, "Selesai" = semua tahapan selesai, sapaan sesuai jam (pagi/siang/sore/malam), tombol Pratinjau & Salin link di card template.
+- TC-358: gambar versi device yang tampil dimuat lebih dulu saat preview dibuka.
+
 ## 0.18.3 — 16 November 2026 (background Mobile terhapus muncul lagi)
 
 - **Background yang dihapus muncul lagi setelah save + refresh.** Pada template dengan Tata letak desktop **Kolom** (mis. Blue Flowers), editor mode Desktop sebenarnya mengedit versi Mobile. Saat "Hapus background image", nilai dikosongkan di versi Mobile sebagai `undefined` — nilai ini hilang ketika disimpan (JSON), sehingga setelah save + refresh versi Mobile kembali mewarisi background Desktop dan gambar lama tampil lagi di Preview. Kini penghapusan di versi Mobile disimpan sebagai `null` ("dihapus") dan dibaca kembali sebagai kosong. Berlaku untuk semua pengaturan canvas/fitur yang dikosongkan di Mobile.

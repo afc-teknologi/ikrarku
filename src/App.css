@@ -2728,3 +2728,164 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
 .inspector-scroll .two-inputs>*,.inspector-scroll label{min-width:0}
 .inspector-scroll select,.inspector-scroll textarea,.inspector-scroll input:not([type=checkbox]):not([type=radio]):not([type=color]):not([type=range]){max-width:100%;min-width:0}
 .color-input .color-hex-input{flex:1 1 0;width:auto!important;min-width:0}
+/* ===== QA 15 (17 Nov) ===================================================== */
+/* Pilihan bahasa ID/EN (TC-348–353, TC-362). */
+.lang-switch{display:inline-flex;align-items:center;gap:2px;padding:3px;border:1px solid var(--line,#dfe6e2);border-radius:999px;background:#fff;flex:none}
+.lang-switch button{border:0;background:transparent;border-radius:999px;padding:5px 10px;font-size:11px;font-weight:700;letter-spacing:.4px;color:#5f716a;cursor:pointer;line-height:1}
+.lang-switch button.is-active{background:#125946;color:#fff}
+.lang-switch button:focus-visible{outline:2px solid #125946;outline-offset:2px}
+.auth-card-top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.auth-card-top .mobile-brand{margin:0}
+.auth-card-top .lang-switch{margin-left:auto}
+.checkout-header-end,.journey-header-end{display:inline-flex;align-items:center;gap:12px}
+.journal-topbar-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.topbar-lang{margin-right:4px}
+/* Artikel versi English (TC-348). */
+.article-lang-tabs{display:flex;gap:6px;margin-bottom:12px}
+.article-lang-tabs button{border:1px solid var(--line,#dfe6e2);background:#fff;border-radius:999px;padding:7px 14px;font-size:12px;font-weight:700;color:#4c5f58;display:inline-flex;gap:6px;align-items:center}
+.article-lang-tabs button.active{background:#125946;border-color:#125946;color:#fff}
+.article-lang-tabs small{font-weight:600;font-size:10px;opacity:.75}
+.article-lang-note{font-size:12px;color:#6a5631;background:#fbf6ec;border:1px solid #eadcbf;border-radius:10px;padding:8px 12px;margin-bottom:10px}
+.article-rich-editor[data-placeholder]:empty:before{content:attr(data-placeholder);color:#9aa6a1}
+.ikr-lang-badge{margin-left:8px;font-style:normal;font-size:9px;font-weight:800;letter-spacing:.6px;padding:2px 6px;border-radius:999px;background:#eef2ef;color:#5d6f68;vertical-align:middle}
+.article-lang-fallback{font-size:13px;color:#6a5631;background:#fbf6ec;border:1px solid #eadcbf;border-radius:10px;padding:10px 14px;margin:0 0 18px}
+.reader-body-wide aside .primary-btn{margin-top:14px}
+/* Footer halaman publik (TC-354). */
+.site-footer{display:grid;grid-template-columns:minmax(220px,1.4fr) repeat(3,minmax(150px,1fr));gap:28px 36px;padding:56px clamp(20px,6vw,88px) 28px;background:#0f2c23;color:#d8e4de}
+.site-footer img{filter:brightness(0) invert(1);opacity:.92}
+.site-footer p{margin:12px 0 0;font-size:14px;color:#b9cbc3;max-width:280px}
+.site-footer nav{display:flex;flex-direction:column;gap:9px;align-items:flex-start}
+.site-footer nav strong{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:#e9d7b0;margin-bottom:4px}
+.site-footer nav a,.site-footer nav button{border:0;background:none;padding:0;color:#d8e4de;font:inherit;font-size:14px;text-decoration:none;cursor:pointer;text-align:left}
+.site-footer nav a:hover,.site-footer nav button:hover{color:#fff;text-decoration:underline}
+.site-footer-social{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
+.site-footer-social a{color:#fff;font-size:12px;font-weight:700;border:1px solid rgba(255,255,255,.28);border-radius:999px;padding:6px 12px;text-decoration:none}
+.site-footer-copy{grid-column:1/-1;border-top:1px solid rgba(255,255,255,.14);padding-top:18px;font-size:12px;color:#9fb3aa}
+@media(max-width:900px){.site-footer{grid-template-columns:1fr 1fr}.site-footer-brand{grid-column:1/-1}}
+@media(max-width:520px){.site-footer{grid-template-columns:1fr}}
+/* Halaman Kebijakan Privasi / Syarat & Ketentuan / FAQ (TC-354). */
+.public-info-main{max-width:820px;margin:0 auto;padding:48px 22px 64px}
+.public-info-main h1{font-family:'Playfair Display',Georgia,serif;font-size:clamp(34px,5vw,52px);color:#173f33;margin:8px 0 10px}
+.public-info-lead{font-size:17px;color:#55665f;margin:0 0 28px}
+.public-info-main section{margin:0 0 24px}
+.public-info-main h2{font-size:18px;color:#173f33;margin:0 0 8px}
+.public-info-main ul{margin:0;padding-left:20px;color:#3f514a;line-height:1.7}
+.public-info-faq{border:1px solid var(--line,#dfe6e2);border-radius:12px;background:#fff;padding:14px 18px;margin-bottom:10px}
+.public-info-faq summary{font-weight:700;color:#173f33;cursor:pointer}
+.public-info-faq p{margin:10px 0 0;color:#3f514a;line-height:1.7}
+.public-info-contact{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--line,#dfe6e2);padding-top:22px;margin-top:30px}
+.public-info-contact a{display:inline-flex;align-items:center;gap:8px;color:#125946;font-weight:700;text-decoration:none}
+/* Dashboard customer (TC-355, TC-357, TC-360). */
+.stats-grid>*{min-width:0}
+.published-badge.is-draft span{background:#c9a24a}
+.project-progress-note{display:block;margin-top:6px;color:#7b8984;font-size:11px}
+.project-progress-head b{color:#125946}
+.project-timeline .current i{background:#fdf2e0;color:#8a6220;border-color:#e8c766}
+@media(max-width:1280px){
+  .site-status-card.design-mode{grid-template-columns:170px minmax(0,1fr)}
+  .site-status-card.design-mode .site-progress{grid-column:1/-1;border-left:0;border-top:1px solid var(--line);padding:16px 0 0}
+  .site-status-card>*{min-width:0}
+}
+@media(max-width:1100px){.stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){
+  .stats-grid{grid-template-columns:1fr 1fr;gap:10px}
+  .site-status-card.design-mode{grid-template-columns:1fr}
+  .topbar .status-dot{display:none}
+  .topbar-right{gap:8px}
+  .lang-switch button{padding:5px 8px}
+}
+@media(max-width:420px){.stats-grid{grid-template-columns:1fr}}
+/* List Undangan: baris tambah tamu tidak menembus kartu (TC-356). */
+.invitee-create-row{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr))!important}
+.invitee-create-row>*{min-width:0}
+.invitee-create-row button{min-height:42px}
+.invitee-editor-card,.invitee-page{min-width:0;max-width:100%}
+/* Kartu Template & Canvas customer: tombol Preview & Salin link (TC-363). */
+.website-canvas-actions{flex-wrap:wrap}
+/* QA 15 TC-355 — Pusat Bantuan & Pengaturan rapi di layar ponsel. */
+.help-content>*,.settings-layout>*,.faq-results,.settings-card{min-width:0}
+@media(max-width:700px){
+  .help-content{grid-template-columns:1fr!important}
+  .faq-categories{display:flex;flex-wrap:nowrap;overflow-x:auto;gap:6px}
+  .faq-categories button{flex:none}
+  .settings-layout{grid-template-columns:1fr!important}
+  .settings-nav{display:flex;overflow-x:auto;gap:6px}
+  .settings-nav button{flex:none}
+  .setting-row{flex-wrap:wrap;gap:10px}
+  .slug-field.large{flex-wrap:wrap}
+  .slug-field.large span{max-width:100%;overflow:hidden;text-overflow:ellipsis}
+}
+
+/* QA 15 — warna teks button slide */
+.bottom-nav .bottom-nav-label{color:var(--bn-label,inherit)}
+.bottom-nav .bottom-nav-item.is-active .bottom-nav-label{color:var(--bn-active-label,inherit)}
+.inline-check{display:flex!important;flex-direction:row!important;align-items:center;gap:8px;font-size:12px}
+.inline-check input{width:auto!important;height:auto!important}
+/* QA 15 TC-337/338 — slider + angka, tombol geser ornamen */
+.number-range .range-head{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.number-range-box{display:inline-flex;align-items:center;gap:3px}
+.number-range-box input{width:74px!important;height:26px!important;padding:0 6px!important;font-size:12px!important;text-align:right}
+.number-range-box em{font-style:normal;font-size:11px;color:#6b7a74}
+.decor-nudge{display:flex;flex-wrap:wrap;gap:5px;margin:2px 0 6px}
+.decor-nudge button{min-width:32px;height:28px;border:1px solid #d7e0dc;border-radius:7px;background:#fff;color:#1b5e4b;font-size:13px;cursor:pointer}
+.decor-nudge .decor-nudge-reset{font-size:11px;padding:0 10px}
+/* QA 15 TC-341 — "Di depan isi" benar-benar di atas isi fitur (mis. kartu
+   Event berlatar warna). Kolom canvas memakai z-index 5, ornamen depan dulu 4. */
+.canvas-section>.section-decoration.deco-front,.section-decoration.deco-front{z-index:6}
+/* QA 15 TC-339 — posisi vertikal layout kolom 2/3/4 */
+.canvas-columns.cols-v-center{align-items:center}
+.canvas-columns.cols-v-bottom{align-items:end}
+.canvas-section:has(>.canvas-columns:is(.cols-v-center,.cols-v-bottom)){display:flex;flex-direction:column}
+.canvas-section>.canvas-columns.cols-v-center{margin-top:auto!important;margin-bottom:auto!important}
+.canvas-section>.canvas-columns.cols-v-bottom{margin-top:auto!important;margin-bottom:0!important}
+/* QA 15 TC-336 — Guest Form: font heading & teks terpisah */
+.feature-block.has-title-font .canvas-form>h3{font-family:var(--title-font)!important}
+.feature-block.has-body-font .canvas-form>p,.feature-block.has-body-font .canvas-form :is(label,input,textarea,select,button){font-family:var(--body-font)!important}
+/* QA 15 TC-331 — tanggal berformat */
+.invite-date{margin:6px 0 10px;font-size:14px;letter-spacing:.04em;font-weight:600}
+.date-format-editor>strong{font-size:12px}
+/* QA 15 TC-334 — bentuk bingkai foto Image & Gallery */
+.feature-block.has-frame :is(.image-feature,[class*="gallery"]) img{border-radius:0}
+.frame-shape-arch,.feature-block.frame-arch :is(.image-feature,[class*="gallery"]) img{border-radius:50% 50% 0 0 / 34% 34% 0 0!important}
+.frame-shape-arch-full,.feature-block.frame-arch-full :is(.image-feature,[class*="gallery"]) img{border-radius:50% / 34%!important}
+.frame-shape-oval,.feature-block.frame-oval :is(.image-feature,[class*="gallery"]) img{border-radius:50%!important}
+.feature-block.frame-circle :is(.image-feature,[class*="gallery"]) img{border-radius:50%!important;aspect-ratio:1/1;height:auto!important;object-fit:cover}
+.frame-shape-circle{border-radius:50%!important}
+.frame-shape-leaf,.feature-block.frame-leaf :is(.image-feature,[class*="gallery"]) img{border-radius:0 60% 0 60% / 0 45% 0 45%!important}
+.frame-shape-leaf-alt,.feature-block.frame-leaf-alt :is(.image-feature,[class*="gallery"]) img{border-radius:60% 0 60% 0 / 45% 0 45% 0!important}
+.frame-shape-diamond,.feature-block.frame-diamond :is(.image-feature,[class*="gallery"]) img{clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%)}
+.frame-shape-hexagon,.feature-block.frame-hexagon :is(.image-feature,[class*="gallery"]) img{clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%)}
+.frame-shape-heart,.feature-block.frame-heart :is(.image-feature,[class*="gallery"]) img{-webkit-mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 90' preserveAspectRatio='none'%3E%3Cpath d='M50 88C22 66 0 48 0 26 0 11 12 0 27 0c10 0 18 5 23 13C55 5 63 0 73 0c15 0 27 11 27 26 0 22-22 40-50 62z'/%3E%3C/svg%3E") center/100% 100% no-repeat;mask:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 90' preserveAspectRatio='none'%3E%3Cpath d='M50 88C22 66 0 48 0 26 0 11 12 0 27 0c10 0 18 5 23 13C55 5 63 0 73 0c15 0 27 11 27 26 0 22-22 40-50 62z'/%3E%3C/svg%3E") center/100% 100% no-repeat}
+.frame-shape-scallop,.feature-block.frame-scallop :is(.image-feature,[class*="gallery"]) img{-webkit-mask:radial-gradient(circle at 50% 50%,#000 70%,transparent 71%) 0 0/24px 24px round,linear-gradient(#000,#000) 12px 12px/calc(100% - 24px) calc(100% - 24px) no-repeat;mask:radial-gradient(circle at 50% 50%,#000 70%,transparent 71%) 0 0/24px 24px round,linear-gradient(#000,#000) 12px 12px/calc(100% - 24px) calc(100% - 24px) no-repeat}
+.frame-shape-picker{display:grid;grid-template-columns:repeat(auto-fill,minmax(74px,1fr));gap:6px;margin-bottom:10px}
+.frame-shape-picker button{display:flex;flex-direction:column;align-items:center;gap:4px;padding:7px 4px;border:1px solid #dfe6e2;border-radius:8px;background:#fff;cursor:pointer}
+.frame-shape-picker button.active{border-color:#1d6b55;background:#eef6f2}
+.frame-shape-picker small{font-size:9px;line-height:1.15;text-align:center;color:#41574f}
+.frame-swatch{display:block;width:34px;height:42px;background:linear-gradient(135deg,#9cc2b2,#4f8a76)}
+.frame-shape-rect{border-radius:3px}
+/* QA 15 TC-332 — slideshow otomatis Layer 1 */
+.background-slideshow{position:absolute;inset:-5px;z-index:0;pointer-events:none;overflow:hidden}
+.background-slide{position:absolute;inset:0;opacity:0;transition:opacity 1.2s ease,transform 1.2s ease}
+.background-slide.is-active{opacity:1}
+.background-slideshow.effect-zoom .background-slide.is-active{animation:bgSlideZoom var(--bg-slide-seconds,5s) linear both}
+@keyframes bgSlideZoom{from{transform:scale(1)}to{transform:scale(1.08)}}
+.background-slideshow.effect-slide .background-slide{transform:translateX(100%);opacity:1;transition:transform 1s ease}
+.background-slideshow.effect-slide .background-slide.is-active{transform:translateX(0)}
+@media (prefers-reduced-motion:reduce){.background-slide{transition:none}.background-slideshow.effect-zoom .background-slide.is-active{animation:none}}
+.background-slides-editor{display:grid;gap:8px;margin:10px 0;padding:10px;border:1px solid #e3e8e5;border-radius:9px;background:#fafcfb}
+.background-slides-editor .group-heading{display:flex;justify-content:space-between;align-items:center}
+.background-slides-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:6px}
+.background-slide-thumb{position:relative;aspect-ratio:3/4;border-radius:7px;overflow:hidden;border:1px solid #dfe6e2}
+.background-slide-thumb>span{position:absolute;inset:0;background-size:cover;background-position:center}
+.background-slide-thumb small{position:absolute;left:4px;top:4px;background:rgba(0,0,0,.55);color:#fff;font-size:9px;border-radius:4px;padding:1px 5px}
+.background-slide-thumb button{position:absolute;right:3px;top:3px;width:22px;height:22px;border:0;border-radius:6px;background:rgba(255,255,255,.92);color:#b4533f;display:grid;place-items:center;cursor:pointer}
+/* QA 15 TC-345 — ornamen sisi 70% (70:30) di atas media sisi */
+.desktop-side-decorations{position:absolute;inset:0;z-index:3;pointer-events:none}
+.desktop-side-decorations>.section-decoration{z-index:3}
+/* QA 15 TC-330 — cover full layout desktop sebelum Buka Undangan */
+.desktop-column-stage.cover-phase>.desktop-column{width:100%!important;margin-inline:0!important;box-shadow:none}
+/* Panel sempit (Page Structure kiri): kotak angka turun ke baris sendiri. */
+.number-range .range-head{flex-wrap:wrap;min-width:0}
+.number-range-box{margin-left:auto;max-width:100%}
+.number-range-box input{width:64px!important;min-width:0}
+.editor-left .two-inputs:has(.number-range){grid-template-columns:1fr!important}
