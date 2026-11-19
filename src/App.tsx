@@ -52,11 +52,13 @@ import {
   Globe2,
   GripVertical,
   Heart,
+  Gem,
   Image as ImageIcon,
   Italic,
   LayoutDashboard,
   LogOut,
   MessageCircle,
+  Mail,
   Phone,
   MessageSquareText,
   Monitor,
@@ -85,6 +87,7 @@ import {
   Smartphone,
   Sparkles,
   Trash2,
+  ImagePlus,
   Type,
   Underline,
   Upload,
@@ -143,6 +146,13 @@ import {
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 import { createPortal } from "react-dom";
 import "./App.css";
+import {
+  getSiteLang,
+  useSiteLang,
+  useT,
+  setSiteLang,
+  type SiteLang,
+} from "./i18n";
 import LandingPageView, { JournalCard } from "./components/LandingPage";
 import DesignerControls from "./components/DesignerControls";
 import {
@@ -186,7 +196,11 @@ export type View =
   | "journal"
   | "designs"
   | "invitee-management"
-  | "rsvp-confirmation";
+  | "rsvp-confirmation"
+  // QA 15 TC-354 — halaman publik yang ditautkan dari footer.
+  | "privacy"
+  | "terms"
+  | "faq";
 type PageKey = "pages" | "invitees" | "rsvp-page";
 type InspectorTab = "content" | "style" | "advanced";
 type Alignment = "left" | "center" | "right" | "justify";
@@ -309,6 +323,39 @@ type SocialIconName =
   | "star";
 // TC-108 / TC-127: layer background tambahan di atas background utama.
 /** Revisi 29 Okt — satu acara dalam fitur Event (mis. Akad Nikah, Resepsi). */
+type FrameShape =
+  | "rect"
+  | "arch"
+  | "arch-full"
+  | "oval"
+  | "circle"
+  | "leaf"
+  | "leaf-alt"
+  | "diamond"
+  | "hexagon"
+  | "heart"
+  | "scallop";
+const FRAME_SHAPES: [FrameShape, string][] = [
+  ["rect", "Kotak (bawaan)"],
+  ["arch", "Pintu / arch"],
+  ["arch-full", "Pintu oval (atas & bawah)"],
+  ["oval", "Oval"],
+  ["circle", "Lingkaran"],
+  ["leaf", "Daun"],
+  ["leaf-alt", "Daun (cermin)"],
+  ["diamond", "Diamond / belah ketupat"],
+  ["hexagon", "Heksagon"],
+  ["heart", "Hati"],
+  ["scallop", "Bergerigi (scallop)"],
+];
+type InviteDateFormat =
+  | "none"
+  | "long"
+  | "full"
+  | "day-short"
+  | "numeric"
+  | "dots"
+  | "dash";
 type EventItem = {
   id: string;
   name: string;
@@ -576,6 +623,22 @@ type Feature = DesignerLayout & {
   calendarButton?: boolean;
   calendarLabel?: string;
   calendarDurationHours?: number;
+  /** QA 15 TC-331 — format tanggal otomatis (Save The Date & Event). */
+  dateFormat?: InviteDateFormat;
+  dateTextSize?: number;
+  dateTextColor?: string;
+  /** QA 15 TC-343 — gaya tombol Simpan Tanggal sendiri (bila kosong ikut
+   *  gaya tombol lokasi seperti sebelumnya). */
+  calendarShape?: "rounded" | "pill" | "square" | "outline";
+  calendarBackground?: string;
+  calendarTextColor?: string;
+  calendarFontSize?: number;
+  calendarRadius?: number;
+  calendarIconHidden?: boolean;
+  /** QA 15 TC-342 — ikon fitur Event (bisa dihapus). */
+  eventIcon?: "calendar" | "heart" | "rings" | "sparkles" | "clock" | "none";
+  eventIconSize?: number;
+  eventIconColor?: string;
   mapUrl?: string;
   locationName?: string;
   locationAddress?: string;
@@ -670,6 +733,10 @@ type Feature = DesignerLayout & {
   iconStyle?: "plain" | "circle" | "outline"; // TC-095
   iconTextPosition?: "below" | "right" | "none"; // TC-238
   iconTextSize?: number;
+  /** QA 15 TC-333 — font, warna & tebal teks pada Icon. */
+  iconTextFont?: string;
+  iconTextColor?: string;
+  iconTextBold?: boolean;
   animateOnScroll?: boolean; // TC-091
   freePosition?: boolean; // TC-103
   posX?: number; // TC-103 (persen dari lebar column)
@@ -705,6 +772,10 @@ type Feature = DesignerLayout & {
   greetingsBoxBackground?: string;
   /** TC-274 — titik peletakan isi fitur di dalam kotaknya. */
   verticalPlacement?: "top" | "center" | "bottom";
+  /** QA 15 TC-334 — bentuk bingkai foto (Image & Gallery). */
+  frameShape?: FrameShape;
+  /** QA 15 TC-340 — geser manual fitur ke atas (-) / bawah (+), px. */
+  placementOffsetY?: number;
   fieldTextColor?: string;
   fieldBorderColor?: string;
   fieldRadius?: number;
@@ -760,6 +831,9 @@ type Feature = DesignerLayout & {
   giftAddressFont?: string;
   giftAddressColor?: string;
   giftAddressHeadSize?: number;
+  /** QA 15 TC-335 — ukuran teks nomor rekening & nama pemilik rekening. */
+  giftAccountNumberSize?: number;
+  giftAccountNameSize?: number;
   giftAddressNameSize?: number;
   giftAddressTextSize?: number;
   /** QA 13 TC-287 — tombol Tonton Live. */
@@ -906,6 +980,9 @@ type BottomNavConfig = {
   background?: string;
   color?: string;
   activeColor?: string;
+  /** QA 15 — warna teks label menu (normal & aktif). */
+  textColor?: string;
+  activeTextColor?: string;
 };
 
 type CanvasSection = {
@@ -949,11 +1026,21 @@ type CanvasSection = {
   backgroundFixed?: boolean; // TC-107/TC-127 background utama diam saat scroll
   backgroundSize?: "cover" | "contain" | "auto";
   backgroundLayers?: BackgroundLayer[]; // TC-108 layered background
+  /** QA 15 TC-332 — Layer 1 slideshow: beberapa foto bergantian otomatis.
+   *  Foto Layer 1 (backgroundUrl) menjadi slide pertama. */
+  backgroundSlides?: { url: string; key?: string }[];
+  backgroundSlideSeconds?: number;
+  backgroundSlideEffect?: "fade" | "zoom" | "slide";
   columnWidths?: number[]; // TC-114 lebar kolom hasil drag grid line
   showGuides?: boolean; // TC-113 garis guide/margin
   backgroundGlobal?: boolean; // TC-146 satu background untuk semua canvas
   /** TC-262 — fitur dalam canvas ditempel atas-bawah tanpa jarak. */
   stackFeatures?: boolean;
+  /** QA 15 TC-339 — posisi vertikal kolom (layout 2/3/4): tiap kolom rata
+   *  atas/tengah/bawah terhadap kolom lain, dan blok kolom di dalam canvas. */
+  columnsAlign?: "top" | "center" | "bottom";
+  /** QA 15 TC-340 — geser manual blok kolom ke atas (-) / bawah (+), px. */
+  columnsOffsetY?: number;
   backgroundOpacity?: number; // TC-231
   backgroundImageOpacity?: number; // TC-231
   /** Tata letak desktop (disimpan di Canvas 1, berlaku untuk seluruh
@@ -963,6 +1050,9 @@ type CanvasSection = {
   desktopLayout?: "full" | "column";
   desktopColumnWidth?: number; // px, lebar kolom isi
   desktopColumnAlign?: "center" | "left" | "right";
+  /** QA 15 TC-330 — cover (slide pertama) tampil full layout desktop, kolom
+   *  ala serein baru muncul setelah Buka Undangan. "column" = cara lama. */
+  desktopCoverMode?: "full" | "column";
   desktopBackdropUrl?: string; // background luar kolom (opsional)
   desktopBackdropKey?: string;
   desktopBackdropColor?: string;
@@ -992,6 +1082,8 @@ type CanvasSection = {
   desktopSideBodySize?: number;
   desktopSideBodyColor?: string;
   desktopSideSlides?: { url: string; key?: string }[];
+  /** QA 15 TC-345 — ornamen di sisi 70% tata letak 70:30. */
+  desktopSideDecorations?: SectionDecoration[];
   desktopSideSlideSeconds?: number;
   desktopSideVideoUrl?: string;
   desktopSideVideoKey?: string;
@@ -1043,7 +1135,29 @@ export type ArticleItem = {
   author: string;
   tags: string[];
   coverUrl?: string;
+  /** QA 15 TC-348 — versi bahasa Inggris (opsional). */
+  titleEn?: string;
+  excerptEn?: string;
+  contentEn?: string;
+  /** true bila mode EN tetapi artikel belum punya versi Inggris. */
+  langFallback?: boolean;
 };
+/** QA 15 TC-348 — artikel dalam bahasa aktif. Versi Inggris dipakai bila
+ *  diisi di Articles; bila belum, versi Indonesia tampil dengan penanda. */
+export function localizeArticle(
+  article: ArticleItem,
+  lang: SiteLang,
+): ArticleItem {
+  if (lang !== "en") return article;
+  if (!article.titleEn?.trim()) return { ...article, langFallback: true };
+  return {
+    ...article,
+    title: article.titleEn,
+    excerpt: article.excerptEn?.trim() || article.excerpt,
+    content: article.contentEn?.trim() || article.content,
+    langFallback: false,
+  };
+}
 /**
  * SEO — tanggal artikel.
  *
@@ -1053,7 +1167,7 @@ export type ArticleItem = {
 function formatArticleDate(value: string): string {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat(getSiteLang() === "en" ? "en-GB" : "id-ID", {
     day: "numeric",
     month: "long",
     year: "numeric",
@@ -1849,6 +1963,9 @@ const PUBLIC_VIEWS = new Set<View>([
   "journal",
   "designs",
   "rsvp-confirmation",
+  "privacy",
+  "terms",
+  "faq",
 ]);
 
 function makeFeature(
@@ -2530,56 +2647,78 @@ const faqItems = [
     category: "Web Designer",
     q: "Bagaimana menambahkan feature ke column?",
     a: "Buka Site Editor, pilih column pada canvas, lalu klik atau drag feature dari panel kanan ke column tersebut.",
+    qEn: "How do I add a feature to a column?",
+    aEn: "Open the editor, select a column on the canvas, then click or drag a feature from the right panel into that column.",
   },
   {
     category: "Web Designer",
     q: "Bagaimana membuat layout 1 sampai 4 column?",
     a: "Klik Canvas pada Page Structure. Pada panel kanan pilih jumlah column. Feature dari column yang dihapus akan dipindahkan ke column terakhir yang tersisa.",
+    qEn: "How do I create a 1 to 4 column layout?",
+    aEn: "Click the canvas in Page Structure. In the right panel choose the number of columns. Features from removed columns move to the last remaining column.",
   },
   {
     category: "Media",
     q: "Berapa batas ukuran upload image?",
     a: "Feature Image maksimal 1 MB. Background dan setiap gambar Gallery maksimal 2 MB. Video maksimal 5 MB.",
+    qEn: "What is the image upload size limit?",
+    aEn: "Image features up to 1 MB. Backgrounds and each Gallery image up to 2 MB. Videos up to 5 MB.",
   },
   {
     category: "Media",
     q: "Bagaimana membuat gallery carousel?",
     a: "Pilih feature Gallery, buka tab Style, lalu pilih Carousel. Aktifkan autoplay bila diperlukan.",
+    qEn: "How do I create a gallery carousel?",
+    aEn: "Select the Gallery feature, open the Style tab, then choose Carousel. Turn on autoplay if needed.",
   },
   {
     category: "Publishing",
     q: "Bagaimana menyimpan dan mempublikasikan website?",
     a: "Klik Save & Publish pada pojok kanan atas. Status dan struktur Canvas akan tersimpan pada website aktif.",
+    qEn: "How do I save and publish my website?",
+    aEn: "Click Save & Publish in the top right corner. The content and structure are saved to your live website.",
   },
   {
     category: "RSVP",
     q: "Di mana saya melihat konfirmasi tamu?",
-    a: "Buka Dashboard, lalu klik Lihat semua pada kartu RSVP terbaru untuk melihat seluruh respons.",
+    a: "Buka menu Konfirmasi RSVP, atau klik Lihat semua pada kartu RSVP terbaru di dashboard.",
+    qEn: "Where can I see guest confirmations?",
+    aEn: "Open RSVP Confirmation in the menu, or click View all on the Latest RSVPs card in your dashboard.",
   },
   {
     category: "Account",
     q: "Apa perbedaan Customer, Web Designer, dan Administrator?",
     a: "Customer mengelola website. Web Designer membuat template dan membantu desain. Administrator mengelola platform, approval, assignment, dan Customer Service.",
+    qEn: "What is the difference between Customer, Web Designer, and Administrator?",
+    aEn: "Customers manage their website. Web Designers build templates and help with design. Administrators manage the platform, approvals, assignments, and Customer Service.",
   },
   {
     category: "Invitation",
     q: "Bagaimana mengimpor daftar undangan?",
-    a: "Pilih Canvas, buka Content, lalu unggah CSV dengan kolom name,email,phone,city. Daftar undangan disimpan pada Canvas tersebut.",
+    a: "Buka menu List Undangan, klik Impor CSV, lalu unggah file dengan kolom name,email,phone,city.",
+    qEn: "How do I import my guest list?",
+    aEn: "Open Guest List, click Import CSV, and upload a file with the columns name,email,phone,city.",
   },
   {
     category: "Invitation",
     q: "Apa fungsi Buka Undangan?",
     a: "Feature Buka Undangan mengunci scroll viewer. Setelah tombol diklik, cover akan menghilang dan isi website dapat diakses.",
+    qEn: "What does the invitation cover do?",
+    aEn: "The invitation cover is the opening screen guests see. After they tap the button, the cover closes and the rest of the invitation opens.",
   },
   {
     category: "Layout",
     q: "Bagaimana membuat column kiri fixed dan kanan scroll?",
     a: "Pilih Canvas, lalu ubah Layout Mode menjadi Split: fixed left + scroll right. Layout otomatis menggunakan dua column.",
+    qEn: "How do I make a fixed left column with a scrolling right column?",
+    aEn: "Select the canvas, then change Layout Mode to Split: fixed left + scroll right. The layout automatically uses two columns.",
   },
   {
     category: "Support",
     q: "Bagaimana menghubungi Customer Service?",
     a: "Klik tombol Live Chat di pojok kanan bawah. Percakapan akan masuk ke dashboard Customer Service.",
+    qEn: "How do I contact Customer Service?",
+    aEn: "Click the Live Chat button in the bottom right corner. The conversation goes straight to our Customer Service team.",
   },
 ];
 
@@ -3184,6 +3323,244 @@ const ARTICLE_PATH_SEGMENT = "articles";
 const articleHref = (slug: string) =>
   `/${ARTICLE_PATH_SEGMENT}/${encodeURIComponent(slug)}`;
 
+/** QA 15 TC-358 — daftar gambar sebuah design (background, layer,
+ *  ornamen), urut dari canvas pertama, untuk versi device tertentu. */
+export function designImageUrls(
+  sections: CanvasSection[],
+  device: DeviceMode | "both" = "both",
+): string[] {
+  const urls = new Set<string>();
+  const add = (value?: string | null) => value && urls.add(assetUrl(value));
+  sections.forEach((section) => {
+    const variants: Partial<CanvasSection>[] =
+      device === "desktop"
+        ? [section]
+        : device === "mobile"
+          ? [resolveSection(section, "mobile")]
+          : [resolveSection(section, "mobile"), section];
+    variants.forEach((variant) => {
+      add(variant.backgroundUrl);
+      (variant.backgroundLayers || []).forEach((layer) => add(layer.url));
+    });
+  });
+  sections.forEach((section) => {
+    const lists = [section.decorations, section.mobile?.decorations];
+    lists.forEach((list) =>
+      (list || []).forEach((decoration) => add(decoration?.imageUrl)),
+    );
+  });
+  return Array.from(urls);
+}
+/** Mengunduh gambar design di latar (saat browser senggang) agar preview
+ *  langsung menampilkan background begitu dibuka. */
+function usePrefetchImages(urls: string[]) {
+  const key = urls.join("\n");
+  useEffect(() => {
+    if (!key) return;
+    let cancelled = false;
+    const list = key.split("\n");
+    let index = 0;
+    const next = () => {
+      if (cancelled || index >= list.length) return;
+      const image = new Image();
+      image.decoding = "async";
+      const url = list[index++];
+      image.onload = image.onerror = () => schedule();
+      image.src = url;
+    };
+    const schedule = () => {
+      if (cancelled) return;
+      const idle = (window as unknown as {
+        requestIdleCallback?: (cb: () => void) => number;
+      }).requestIdleCallback;
+      if (idle) idle(next);
+      else window.setTimeout(next, 30);
+    };
+    // Tiga unduhan paralel cukup untuk mempercepat tanpa membebani halaman.
+    schedule();
+    schedule();
+    schedule();
+    return () => {
+      cancelled = true;
+    };
+  }, [key]);
+}
+
+/** QA 15 TC-359 — menu workspace dan alamatnya: /workspace/<view>. */
+const WORKSPACE_VIEWS = new Set<View>([
+  "dashboard",
+  "templates",
+  "editor",
+  "articles",
+  "article-editor",
+  "settings",
+  "payment-settings",
+  "orders",
+  "my-orders",
+  "audit-log",
+  "admin",
+  "users",
+  "roles",
+  "tasks",
+  "help",
+  "customer-service",
+  "cs-dashboard",
+  "sound-library",
+  "commissions",
+  "invitee-management",
+  "rsvp-confirmation",
+]);
+const PUBLIC_VIEW_PATHS: Partial<Record<View, string>> = {
+  landing: "/",
+  login: "/login",
+  signup: "/signup",
+  "verify-email": "/verify-email",
+  "forgot-password": "/forgot-password",
+  "reset-password": "/reset-password",
+  "template-detail": "/templates",
+  checkout: "/pesan-sekarang",
+  "payment-success": "/pembayaran-berhasil",
+  journal: "/jurnal",
+  designs: "/desain",
+  privacy: "/kebijakan-privasi",
+  terms: "/syarat-ketentuan",
+  faq: "/faq",
+};
+function urlForView(
+  view: View,
+  options: { articleSlug?: string | null; templateId?: string; search?: string },
+): string | null {
+  const params = new URLSearchParams(options.search || "");
+  params.delete("t");
+  if (options.articleSlug && (view === "landing" || view === "journal"))
+    return articleHref(options.articleSlug);
+  if (view === "template-detail" && options.templateId) {
+    params.set("t", options.templateId);
+    return `/templates?${params.toString()}`;
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  if (WORKSPACE_VIEWS.has(view))
+    return (view === "dashboard" ? "/workspace" : `/workspace/${view}`) + query;
+  const path = PUBLIC_VIEW_PATHS[view];
+  return path ? path + (view === "landing" ? "" : query) : null;
+}
+function viewFromLocation(
+  pathname: string,
+  search: string,
+): { view: View; articleSlug: string | null; templateId?: string } {
+  const parts = pathname.replace(/^\/+|\/+$/g, "").split("/").filter(Boolean);
+  if (parts[0] === "workspace") {
+    const candidate = (parts[1] || "dashboard") as View;
+    return {
+      view: WORKSPACE_VIEWS.has(candidate) ? candidate : "dashboard",
+      articleSlug: null,
+    };
+  }
+  if (
+    parts.length === 2 &&
+    (parts[0] === ARTICLE_PATH_SEGMENT || parts[0] === "jurnal")
+  )
+    return { view: "journal", articleSlug: decodeURIComponent(parts[1]) };
+  const templateId = new URLSearchParams(search).get("t") || undefined;
+  if ((parts[0] === "templates" || parts[0] === "desain") && templateId)
+    return { view: "template-detail", articleSlug: null, templateId };
+  const byPath: Record<string, View> = {
+    "": "landing",
+    login: "login",
+    signup: "signup",
+    "verify-email": "verify-email",
+    "forgot-password": "forgot-password",
+    "reset-password": "reset-password",
+    "pesan-sekarang": "checkout",
+    "pembayaran-berhasil": "payment-success",
+    jurnal: "journal",
+    desain: "designs",
+    templates: "designs",
+    "kebijakan-privasi": "privacy",
+    "syarat-ketentuan": "terms",
+    faq: "faq",
+  };
+  return { view: byPath[parts[0] || ""] || "landing", articleSlug: null };
+}
+/** Judul tab per halaman (TC-359). */
+function viewTitle(view: View, role: Role, lang: SiteLang = "id"): string {
+  const customer = role === "User";
+  const en = lang === "en";
+  if (customer || en) {
+    const localized: Partial<Record<View, [string, string]>> = {
+      dashboard: ["Dashboard Pernikahan", "Wedding Dashboard"],
+      templates: ["Template & Canvas", "Templates & Canvas"],
+      "my-orders": ["Pesanan Saya", "My Orders"],
+      "invitee-management": ["List Undangan", "Guest List"],
+      "rsvp-confirmation": ["Konfirmasi RSVP", "RSVP Confirmation"],
+      help: ["Pusat Bantuan", "Help Center"],
+      settings: ["Pengaturan", "Settings"],
+      editor: ["Editor Undangan", "Invitation Editor"],
+      landing: ["ikrarku - Wedding Website & Undangan Digital", "ikrarku - Wedding Websites & Digital Invitations"],
+      login: ["Masuk", "Sign in"],
+      signup: ["Daftar Akun", "Sign up"],
+      "forgot-password": ["Lupa Password", "Forgot password"],
+      "reset-password": ["Reset Password", "Reset password"],
+      "verify-email": ["Verifikasi Email", "Verify email"],
+      "template-detail": ["Detail Template", "Template detail"],
+      checkout: ["Pesan Sekarang", "Checkout"],
+      "payment-success": ["Pembayaran Berhasil", "Payment successful"],
+      journal: ["Jurnal ikrarku", "ikrarku Journal"],
+      designs: ["Semua Desain Undangan", "All invitation designs"],
+      privacy: ["Kebijakan Privasi", "Privacy Policy"],
+      terms: ["Syarat & Ketentuan", "Terms & Conditions"],
+      faq: ["FAQ", "FAQ"],
+      "not-found": ["Halaman tidak ditemukan", "Page not found"],
+    };
+    const pair = localized[view];
+    if (pair && (customer || !WORKSPACE_VIEWS.has(view))) {
+      const label = pair[en ? 1 : 0];
+      return view === "landing" || view === "journal" ? label : `${label} - ikrarku`;
+    }
+  }
+  const titles: Partial<Record<View, string>> = {
+    landing: "ikrarku - Wedding Website & Undangan Digital",
+    login: "Masuk - ikrarku",
+    signup: "Daftar Akun - ikrarku",
+    "verify-email": "Verifikasi Email - ikrarku",
+    "forgot-password": "Lupa Password - ikrarku",
+    "reset-password": "Reset Password - ikrarku",
+    "not-found": "Halaman tidak ditemukan - ikrarku",
+    "template-detail": "Detail Template - ikrarku",
+    checkout: "Pesan Sekarang - ikrarku",
+    "payment-success": "Pembayaran Berhasil - ikrarku",
+    journal: "Jurnal ikrarku",
+    designs: "Semua Desain Undangan - ikrarku",
+    privacy: "Kebijakan Privasi - ikrarku",
+    terms: "Syarat & Ketentuan - ikrarku",
+    faq: "FAQ - ikrarku",
+    dashboard: customer ? "Wedding Dashboard - ikrarku" : "Dashboard - ikrarku",
+    templates: customer
+      ? "Templates & Canvas - ikrarku"
+      : "Templates & Approval - ikrarku",
+    editor: "Editor Canvas - ikrarku",
+    "my-orders": "My Order - ikrarku",
+    orders: "Orders - ikrarku",
+    "invitee-management": "List Undangan - ikrarku",
+    "rsvp-confirmation": "RSVP Confirmation - ikrarku",
+    help: customer ? "Pusat Bantuan - ikrarku" : "Help - ikrarku",
+    settings: "Settings - ikrarku",
+    "payment-settings": "Payment Settings - ikrarku",
+    articles: "Articles - ikrarku",
+    "article-editor": "Editor Artikel - ikrarku",
+    "audit-log": "Audit Log - ikrarku",
+    admin: "Administrator - ikrarku",
+    users: "Users - ikrarku",
+    roles: "Roles & Permissions - ikrarku",
+    tasks: "Tasks & Tickets - ikrarku",
+    "customer-service": "Support Inbox - ikrarku",
+    "cs-dashboard": "Customer Service - ikrarku",
+    "sound-library": "Sound Library - ikrarku",
+    commissions: "Komisi & Share Fee - ikrarku",
+  };
+  return titles[view] || "ikrarku";
+}
+
 function App() {
   const initialSession = useMemo(
     () =>
@@ -3208,6 +3585,8 @@ function App() {
   const [sections, setSections] = useState<CanvasSection[]>([]);
   const [slug, setSlug] = useState("");
   const [siteTitle, setSiteTitle] = useState("");
+  // QA 15 TC-360 — status website customer (Published/Draft).
+  const [siteStatus, setSiteStatus] = useState("Draft");
   const [saved, setSaved] = useState(false);
   const [accounts, setAccounts] = useState<AuthAccount[]>([]);
   const [currentAccountId, setCurrentAccountId] = useState(
@@ -3224,6 +3603,18 @@ function App() {
   const [articleItems, setArticleItems] = useState<ArticleItem[]>([]);
   const [soundCatalog, setSoundCatalog] = useState<SoundCatalogItem[]>([]);
   const [articleEditorId, setArticleEditorId] = useState<string>("new");
+  // QA 15 — bahasa situs dipakai bersama (landing, jurnal, auth, checkout,
+  // dashboard customer).
+  const [siteLang] = useSiteLang();
+  /** Teks halaman customer di level App (judul halaman, dsb.). */
+  const L = (id: string, en: string) => (siteLang === "en" ? en : id);
+  const publicArticles = useMemo(
+    () =>
+      articleItems
+        .filter((article) => article.status === "Published")
+        .map((article) => localizeArticle(article, siteLang)),
+    [articleItems, siteLang],
+  );
   // SEO — artikel yang sedang dibuka disimpan di level atas supaya punya URL
   // sendiri (/articles/<slug>). Sebelumnya reader hidup di useState lokal
   // JournalPage/LandingPage, jadi membuka artikel tidak mengubah URL sama
@@ -3250,6 +3641,7 @@ function App() {
   const [selectedPublicTemplate, setSelectedPublicTemplate] =
     useState<Template | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
+  const [siteContact, setSiteContact] = useState<SiteContact>({});
   const [checkoutOrder, setCheckoutOrder] = useState<OrderResult | null>(null);
   const [landingScrollTarget, setLandingScrollTarget] = useState<string | null>(
     null,
@@ -3290,6 +3682,14 @@ function App() {
           )
         : [],
     [role, myOrders, sections, templateCatalog],
+  );
+  // QA 15 TC-358 — gambar undangan customer diunduh di latar sejak
+  // dashboard dibuka, supaya preview langsung menampilkan background.
+  usePrefetchImages(
+    useMemo(
+      () => (role === "User" ? designImageUrls(sections).slice(0, 40) : []),
+      [role, sections],
+    ),
   );
   // QA 14 TC-320 — selama pekerjaan Web Designer pada order customer belum
   // selesai (task Web Designer belum Done), setiap preview yang dilihat
@@ -3351,10 +3751,22 @@ function App() {
         (pathParts[0] === ARTICLE_PATH_SEGMENT || pathParts[0] === "jurnal")
           ? decodeURIComponent(pathParts[1])
           : null;
-      const pathSlug = deepArticleSlug ? "jurnal" : rawPath;
+      // QA 15 TC-359 — /workspace/<menu> membuka menu itu langsung.
+      const workspacePathView =
+        pathParts[0] === "workspace"
+          ? viewFromLocation(window.location.pathname, "").view
+          : null;
+      const pathSlug = deepArticleSlug
+        ? "jurnal"
+        : workspacePathView
+          ? "workspace"
+          : rawPath;
       const reserved = new Set([
         "jurnal",
         "desain",
+        "kebijakan-privasi",
+        "syarat-ketentuan",
+        "faq",
         "workspace",
         "",
         "login",
@@ -3410,6 +3822,7 @@ function App() {
           })),
         );
         setPaymentMethods(data.paymentMethods || []);
+        setSiteContact(data.contact || {});
         setDatabaseOnline(true);
         let slugNotFound = false;
         if (pathSlug === "verify-email") setView("verify-email");
@@ -3419,6 +3832,9 @@ function App() {
           if (deepArticleSlug) setArticleSlug(deepArticleSlug);
         }
         if (pathSlug === "desain") setView("designs");
+        if (pathSlug === "kebijakan-privasi") setView("privacy");
+        if (pathSlug === "syarat-ketentuan") setView("terms");
+        if (pathSlug === "faq") setView("faq");
         let returningPayment = false;
         if (pathSlug === "pembayaran-berhasil") {
           try {
@@ -3450,11 +3866,14 @@ function App() {
           setSelectedPublicTemplate(sharedTemplate);
           setView("template-detail");
         }
-        if (pathSlug === "workspace") setView("dashboard");
+        if (pathSlug === "workspace") setView(workspacePathView || "dashboard");
         // Root selalu landing page, walau sesi login masih aktif. Workspace
         // dibuka lewat /workspace atau nama akun pada navigasi.
         if (!pathSlug) setView("landing");
         if (pathSlug === "forgot-password") setView("forgot-password");
+        // QA 15 — tautan langsung /login & /signup dulu jatuh ke landing.
+        if (pathSlug === "login") setView("login");
+        if (pathSlug === "signup") setView("signup");
         if (pathSlug && !reserved.has(pathSlug)) {
           try {
             const publicSite = await api.publicSite(pathSlug);
@@ -3513,7 +3932,9 @@ function App() {
                   ? "cs-dashboard"
                   : "dashboard";
             const protectedView =
-              savedSession?.accountId === user.id &&
+              workspacePathView && workspacePathView !== "dashboard"
+                ? workspacePathView
+                : savedSession?.accountId === user.id &&
               savedSession.view &&
               !["landing", "login", "signup", "verify-email"].includes(
                 savedSession.view,
@@ -3530,7 +3951,11 @@ function App() {
               setView(mappedRole === "User" ? "my-orders" : protectedView);
             else if (pathSlug)
               setView((previous) =>
-                previous === "landing" ? protectedView : previous,
+                previous === "landing" ||
+                previous === "login" ||
+                previous === "signup"
+                  ? protectedView
+                  : previous,
               );
           } catch {
             setApiToken("");
@@ -3573,6 +3998,21 @@ function App() {
     if (isCompactScreen()) setSidebarOpen(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
+  // QA 15 TC-355 — sidebar ikut berubah saat lebar layar melewati 900 px
+  // (rotasi ponsel, jendela diperkecil, mode device DevTools). Dulu status
+  // awal saja yang dihitung, sehingga sidebar 258 px tetap terbuka di 390 px.
+  useEffect(() => {
+    let compact = isCompactScreen();
+    const onResize = () => {
+      const next = isCompactScreen();
+      if (next === compact) return;
+      compact = next;
+      setSidebarOpen(!next);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // MoM 2 Nov IKR-01 — halaman workspace (dashboard, order, editor, admin,
   // dst.) hanya untuk pengguna yang sudah login. Dulu /workspace dari browser
   // tanpa sesi menampilkan kerangka Customer Workspace (tanpa data — semua API
@@ -3755,6 +4195,7 @@ function App() {
           try {
             const site = await api.site();
             setTeamEdit(site?.teamEdit || null);
+            setSiteStatus(site?.status || "Draft");
             if (site) {
               setSiteOwnerUserId(currentAccountId);
               setActiveManagedUserId(currentAccountId);
@@ -4009,84 +4450,66 @@ function App() {
     };
   }, [view, chatWidgetOpen, refreshGuestChat]);
 
-  // Browser back button support for the public order funnel (template-detail / checkout / payment-success)
+  // QA 15 TC-352 & TC-359 — setiap halaman punya alamat sendiri dan riwayat
+  // browser. Dulu hampir semua perpindahan memakai replaceState: tombol Back
+  // tidak kembali (mis. dari Lupa password ke login), seluruh menu workspace
+  // berbagi /workspace dengan judul "ikrarku Sites", dan Templates & Canvas
+  // customer malah memakai /templates milik katalog publik. Kini:
+  //   - workspace: /workspace (dashboard) dan /workspace/<menu>;
+  //   - pindah halaman menambah entri history (pushState);
+  //   - Back/Forward (popstate) membuka halaman sesuai alamat;
+  //   - judul tab mengikuti halaman.
+  const fromPopStateRef = useRef(false);
+  // Penulisan alamat pertama setelah bootstrap = merapikan (replace).
+  const urlSettledRef = useRef(false);
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  const publicTemplatesRef = useRef<Template[]>([]);
+  publicTemplatesRef.current = publicTemplates;
   useEffect(() => {
-    const funnel = new Set<View>([
-      "template-detail",
-      "checkout",
-      "payment-success",
-      "login",
-      "signup",
-    ]);
-    if (funnel.has(view) && !funnel.has(funnelPrevViewRef.current))
-      window.history.pushState({ ikrarkuFunnel: true }, "");
-    funnelPrevViewRef.current = view;
-  }, [view]);
-  useEffect(() => {
-    const funnel = new Set<View>([
-      "template-detail",
-      "checkout",
-      "payment-success",
-      "login",
-      "signup",
-    ]);
     const onPop = () => {
-      if (funnel.has(funnelPrevViewRef.current)) {
-        const cur = funnelPrevViewRef.current;
-        if (
-          cur === "template-detail" ||
-          cur === "checkout" ||
-          cur === "payment-success"
-        )
-          setLandingScrollTarget("templates");
-        setView("landing");
+      const target = viewFromLocation(
+        window.location.pathname,
+        window.location.search,
+      );
+      fromPopStateRef.current = true;
+      setArticleSlug(target.articleSlug);
+      if (target.templateId) {
+        const template = publicTemplatesRef.current.find(
+          (item) => item.id === target.templateId,
+        );
+        if (template) {
+          setSelectedPublicTemplate(template);
+          setView("template-detail");
+          return;
+        }
       }
+      if (target.articleSlug) {
+        // Artikel dibuka dari landing atau jurnal; selain itu dari jurnal.
+        setView((previous) =>
+          previous === "landing" || previous === "journal"
+            ? previous
+            : "journal",
+        );
+        return;
+      }
+      const next = target.view;
+      const previous = viewRef.current;
+      if (
+        next === "landing" &&
+        (previous === "template-detail" ||
+          previous === "checkout" ||
+          previous === "payment-success")
+      )
+        setLandingScrollTarget("templates");
+      setView(next);
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  // SEO — Back/Forward harus membuka & menutup artikel sesuai URL.
+  // Judul tab & alamat per halaman.
   useEffect(() => {
-    const syncArticleFromUrl = () => {
-      const parts = window.location.pathname
-        .replace(/^\/+|\/+$/g, "")
-        .split("/")
-        .filter(Boolean);
-      setArticleSlug(
-        parts.length === 2 &&
-          (parts[0] === ARTICLE_PATH_SEGMENT || parts[0] === "jurnal")
-          ? decodeURIComponent(parts[1])
-          : null,
-      );
-    };
-    window.addEventListener("popstate", syncArticleFromUrl);
-    return () => window.removeEventListener("popstate", syncArticleFromUrl);
-  }, []);
-
-  // Per-view browser tab title and address-bar path (TC-018 SEO / URL relevance)
-  useEffect(() => {
-    const titles: Partial<Record<View, string>> = {
-      commissions: "Komisi & Share Fee - ikrarku Sites",
-      journal: "Jurnal ikrarku - ikrarku Sites",
-      designs: "Semua Desain Undangan - ikrarku Sites",
-      landing: "ikrarku Sites - Wedding Website & Undangan Digital",
-      login: "Masuk - ikrarku Sites",
-      signup: "Daftar Akun - ikrarku Sites",
-      "verify-email": "Verifikasi Email - ikrarku Sites",
-      "forgot-password": "Lupa Password - ikrarku Sites",
-      "reset-password": "Reset Password - ikrarku Sites",
-      "not-found": "Halaman tidak ditemukan - ikrarku Sites",
-      templates: "Templates - ikrarku Sites",
-      "template-detail": "Detail Template - ikrarku Sites",
-      checkout: "Pesan Sekarang - ikrarku Sites",
-      "payment-success": "Pembayaran Berhasil - ikrarku Sites",
-      articles: "ikrarku Journal - ikrarku Sites",
-      dashboard: "Dashboard - ikrarku Sites",
-      admin: "Administrator - ikrarku Sites",
-      "cs-dashboard": "Customer Service - ikrarku Sites",
-      "customer-service": "Support Inbox - ikrarku Sites",
-    };
     // SEO — artikel yang sedang terbuka mengambil alih judul & meta tag.
     const openArticle = articleSlug
       ? articleItems.find((item) => item.slug === articleSlug)
@@ -4095,147 +4518,55 @@ function App() {
       document.title = `${openArticle.title} - Jurnal ikrarku`;
       applyArticleMeta(openArticle);
     } else {
-      document.title = titles[view] || "ikrarku Sites";
+      document.title = viewTitle(view, role, siteLang);
       applyArticleMeta(null);
     }
-    if (notFound || publicSiteData) return;
-    const appPaths = new Set([
-      "/login",
-      "/signup",
-      "/forgot-password",
-      "/reset-password",
-      "/verify-email",
-      "/templates",
-      "/pesan-sekarang",
-      "/pembayaran-berhasil",
-      "/articles",
-      "/jurnal",
-      "/desain",
-      "/workspace",
-    ]);
+    // Selama bootstrap view belum pasti (mis. artikel dari URL belum
+    // dimuat): jangan sentuh alamat, supaya tidak tertimpa "/".
+    if (loading || notFound || publicSiteData) return;
     // Halaman bertoken tidak boleh dibersihkan sebelum komponennya sempat
     // membaca query string.
     const tokenPaths = new Set(["/reset-password", "/verify-email"]);
-    // Pathname artikel punya dua ruas (`/articles/<slug>`), sedangkan appPaths
-    // hanya memuat ruas pertama. Tanpa pengenal ini URL artikel tidak pernah
-    // dianggap "milik aplikasi" dan karena itu tidak pernah dibersihkan.
-    const isArticlePathname = new RegExp(
-      `^/(${ARTICLE_PATH_SEGMENT}|jurnal)/[^/]+/?$`,
-    ).test(window.location.pathname);
-    if (view === "landing") {
-      // Artikel bisa dibuka langsung dari carousel landing. Tanpa cabang ini
-      // URL-nya langsung dibersihkan kembali ke "/".
-      if (articleSlug) {
-        const articleUrl = articleHref(articleSlug);
-        if (window.location.pathname !== articleUrl)
-          try {
-            // pushState, bukan replaceState: tombol Back browser harus
-            // menutup artikel dan kembali ke landing, bukan keluar dari situs.
-            window.history.pushState(window.history.state, "", articleUrl);
-          } catch {
-            /* ignore */
-          }
-        return;
-      }
-      if (
-        (appPaths.has(window.location.pathname) || isArticlePathname) &&
-        !(
-          tokenPaths.has(window.location.pathname) &&
-          initialSearchParams.get("token")
-        )
-      ) {
-        try {
-          window.history.replaceState(window.history.state, "", "/");
-        } catch {
-          /* ignore */
-        }
-      }
+    if (
+      tokenPaths.has(window.location.pathname) &&
+      new URLSearchParams(window.location.search).get("token") &&
+      (view === "landing" || view === "reset-password" || view === "verify-email")
+    )
       return;
+    const target = urlForView(view, {
+      articleSlug,
+      templateId:
+        view === "template-detail" ? selectedPublicTemplate?.id : undefined,
+      search: window.location.search,
+    });
+    const current = window.location.pathname + window.location.search;
+    // Saat aplikasi baru dimuat atau setelah Back/Forward, alamat hanya
+    // dirapikan (replace). Selain itu pindah halaman = entri history baru.
+    const replace = !urlSettledRef.current || fromPopStateRef.current;
+    urlSettledRef.current = true;
+    fromPopStateRef.current = false;
+    if (!target || current === target) return;
+    try {
+      (replace ? window.history.replaceState : window.history.pushState).call(
+        window.history,
+        window.history.state,
+        "",
+        target,
+      );
+    } catch {
+      /* ignore */
     }
-    const paths: Partial<Record<View, string>> = {
-      login: "/login",
-      signup: "/signup",
-      "verify-email": "/verify-email",
-      "forgot-password": "/forgot-password",
-      "reset-password": "/reset-password",
-      templates: "/templates",
-      "template-detail": "/templates",
-      checkout: "/pesan-sekarang",
-      "payment-success": "/pembayaran-berhasil",
-      articles: "/articles",
-      journal: "/jurnal",
-      designs: "/desain",
-    };
-    const workspaceViews: View[] = [
-      "dashboard",
-      "orders",
-      "my-orders",
-      "users",
-      "roles",
-      "tasks",
-      "audit-log",
-      "help",
-      "cs-dashboard",
-      "customer-service",
-      "sound-library",
-      "commissions",
-      "payment-settings",
-      "settings",
-      "editor",
-    ];
-    // Daftar jurnal tetap di /jurnal; artikel yang terbuka pindah ke
-    // /articles/<slug>, jadi alamatnya berganti ruas pertama, bukan hanya
-    // bertambah slug.
-    const target = workspaceViews.includes(view)
-      ? "/workspace"
-      : articleSlug && view === "journal"
-        ? articleHref(articleSlug)
-        : paths[view];
-    // TC-277 — halaman detail template punya alamat sendiri agar bisa
-    // dibagikan dan dibuka langsung.
-    if (view === "template-detail" && selectedPublicTemplate) {
-      const shareUrl = `/templates?t=${encodeURIComponent(selectedPublicTemplate.id)}`;
-      if (window.location.pathname + window.location.search !== shareUrl)
-        try {
-          window.history.replaceState(window.history.state, "", shareUrl);
-        } catch {
-          /* ignore */
-        }
-      return;
-    }
-    if (view !== "template-detail" && new URLSearchParams(window.location.search).has("t"))
-      try {
-        const params = new URLSearchParams(window.location.search);
-        params.delete("t");
-        const query = params.toString();
-        window.history.replaceState(
-          window.history.state,
-          "",
-          window.location.pathname + (query ? `?${query}` : ""),
-        );
-      } catch {
-        /* ignore */
-      }
-    if (target && window.location.pathname !== target) {
-      try {
-        // Membuka artikel menambah entri history supaya tombol Back menutup
-        // artikel, bukan melempar pengguna keluar dari situs. Perpindahan
-        // antar view lain tetap replaceState seperti sebelumnya.
-        const isArticleTarget = target.startsWith(`/${ARTICLE_PATH_SEGMENT}/`);
-        (isArticleTarget
-          ? window.history.pushState
-          : window.history.replaceState
-        ).call(
-          window.history,
-          window.history.state,
-          "",
-          target + window.location.search,
-        );
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [view, notFound, publicSiteData, articleSlug, articleItems, selectedPublicTemplate]);
+  }, [
+    view,
+    role,
+    siteLang,
+    loading,
+    notFound,
+    publicSiteData,
+    articleSlug,
+    articleItems,
+    selectedPublicTemplate,
+  ]);
 
   const editorSnapshotRef = useRef({
     view,
@@ -5283,6 +5614,8 @@ function App() {
           ? await api.saveClientSite(siteOwnerUserId, payload)
           : await api.saveSite(payload);
       setSaved(true);
+      if (!siteOwnerUserId || siteOwnerUserId === currentAccountId)
+        setSiteStatus("Published");
       flash(
         `Website dipublikasikan: ${result.url || `${window.location.origin}/${slug}`}`,
       );
@@ -5682,9 +6015,8 @@ function App() {
           setView={setView}
           articleSlug={articleSlug}
           onOpenArticle={setArticleSlug}
-          articles={articleItems.filter(
-            (article) => article.status === "Published",
-          )}
+          articles={publicArticles}
+          contact={siteContact}
           templates={publicTemplates}
           onTemplate={openTemplateJourney}
           databaseOnline={databaseOnline}
@@ -5789,15 +6121,15 @@ function App() {
   if (view === "journal")
     return (
       <JournalPage
-        articles={articleItems.filter(
-          (article) => article.status === "Published",
-        )}
+        articles={publicArticles}
         articleSlug={articleSlug}
         onOpenArticle={setArticleSlug}
         setView={setView}
         databaseOnline={databaseOnline}
       />
     );
+  if (view === "privacy" || view === "terms" || view === "faq")
+    return <PublicInfoPage page={view} setView={setView} contact={siteContact} />;
   if (view === "forgot-password")
     return <ForgotPasswordPage setView={setView} />;
   if (view === "reset-password") return <ResetPasswordPage setView={setView} />;
@@ -5977,6 +6309,7 @@ function App() {
               setGuestsOpen={setGuestsOpen}
               setPreviewOpen={setPreviewOpen}
               teamEdit={teamEdit}
+              siteStatus={siteStatus}
               customerName={currentAccount?.name || ""}
               onContactSupport={() => setChatWidgetOpen(true)}
               onOrdersChanged={async () => {
@@ -6062,6 +6395,21 @@ function App() {
               role === "User" ? () => setChatWidgetOpen(true) : undefined
             }
             onOpenTemplate={openTemplateJourney}
+            // QA 15 TC-363 — Preview & Copy link pada kartu customer.
+            onPreviewDesign={
+              role === "User"
+                ? (sectionId) => {
+                    setSelectedDashboardCanvasId(sectionId);
+                    setPreviewOpen(true);
+                  }
+                : undefined
+            }
+            publicUrl={
+              role === "User" && slug
+                ? `${window.location.origin}/${slug}`
+                : undefined
+            }
+            flash={flash}
           />
         )}
         {needsCanvasOrderPick && (
@@ -6129,6 +6477,10 @@ function App() {
           <MyOrdersPage
             orders={myOrders}
             setView={setView}
+            designs={customerDesigns}
+            siteTitle={siteTitle}
+            slug={slug}
+            siteStatus={siteStatus}
             onReload={async () => {
               try {
                 setMyOrders(await api.myOrders());
@@ -6143,15 +6495,19 @@ function App() {
           <div className="page">
             <div className="page-heading">
               <div>
-                <div className="eyebrow">GUEST MANAGEMENT</div>
-                <h1>List Undangan</h1>
+                <div className="eyebrow">{L("DAFTAR TAMU", "GUEST MANAGEMENT")}</div>
+                <h1>{L("List Undangan", "Guest List")}</h1>
                 <p>
-                  Kelola daftar tamu undangan, impor dari CSV, dan ekspor
-                  kembali kapan saja. Perubahan tersimpan otomatis.
+                  {L(
+                    "Kelola daftar tamu undangan, impor dari CSV, dan ekspor kembali kapan saja. Perubahan tersimpan otomatis.",
+                    "Manage your guest list, import it from CSV, and export it any time. Changes are saved automatically.",
+                  )}
                 </p>
               </div>
               {dashboardSavingInvitees && (
-                <span className="autosave-indicator saving">Menyimpan...</span>
+                <span className="autosave-indicator saving">
+                  {L("Menyimpan...", "Saving...")}
+                </span>
               )}
             </div>
             <InviteeManagementPage
@@ -6586,6 +6942,7 @@ function AllDesignsPage({
   onTemplate: (template: Template) => void;
   databaseOnline: boolean;
 }) {
+  const t = useT();
   const [category, setCategory] = useState("Semua");
   const [query, setQuery] = useState("");
   const categories = useMemo(
@@ -6620,35 +6977,41 @@ function AllDesignsPage({
     <div className="journal-page">
       <header className="journal-topbar">
         <button className="secondary-btn" onClick={() => setView("landing")}>
-          <ArrowLeft size={16} /> Kembali ke beranda
+          <ArrowLeft size={16} /> {t("Kembali ke beranda", "Back to home")}
         </button>
         <Brand />
         <div className="journal-topbar-actions">
           {/* QA TC-152 (revisi): tombol Jurnal dihapus dari header halaman
               katalog desain. Menu Jurnal tetap tersedia di navbar landing. */}
+          <LangSwitch />
           <button className="secondary-btn" onClick={() => setView("login")}>
-            Masuk
+            {t("Masuk", "Sign in")}
           </button>
           <button className="primary-btn" onClick={() => setView("designs")}>
-            Temukan desain <ArrowRight size={15} />
+            {t("Temukan desain", "Find a design")} <ArrowRight size={15} />
           </button>
         </div>
       </header>
       <main>
         <section className="journal-hero">
-          <span className="eyebrow">KATALOG DESAIN</span>
+          <span className="eyebrow">{t("KATALOG DESAIN", "DESIGN CATALOG")}</span>
           <h1>
-            Temukan yang terasa
+            {t("Temukan yang terasa", "Find the one that feels")}
             <br />
-            <em>seperti kalian.</em>
+            <em>{t("seperti kalian.", "like you.")}</em>
           </h1>
           <p>
-            Semua desain undangan yang tersedia, lengkap dengan kategori dan
-            harga.
+            {t(
+              "Semua desain undangan yang tersedia, lengkap dengan kategori dan harga.",
+              "Every available invitation design, with categories and prices.",
+            )}
           </p>
           {!databaseOnline && (
             <div className="journal-offline">
-              Koneksi ke server sedang bermasalah. Katalog mungkin belum lengkap.
+              {t(
+                "Koneksi ke server sedang bermasalah. Katalog mungkin belum lengkap.",
+                "We are having trouble reaching the server. The catalog may be incomplete.",
+              )}
             </div>
           )}
         </section>
@@ -6660,7 +7023,7 @@ function AllDesignsPage({
                 className={category === item ? "is-active" : ""}
                 onClick={() => setCategory(item)}
               >
-                {item}
+                {item === "Semua" ? t("Semua", "All") : item}
               </button>
             ))}
           </div>
@@ -6669,7 +7032,7 @@ function AllDesignsPage({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Cari desain..."
+              placeholder={t("Cari desain...", "Search designs...")}
             />
           </label>
         </section>
@@ -6678,7 +7041,7 @@ function AllDesignsPage({
             <article className="ikr-template" key={template.id}>
               <button
                 className="ikr-template-preview"
-                aria-label={`Lihat desain ${template.name}`}
+                aria-label={`${t("Lihat desain", "View design")} ${template.name}`}
                 onClick={() => onTemplate(template)}
               >
                 {template.preview || template.sampleImage ? (
@@ -6711,7 +7074,7 @@ function AllDesignsPage({
                   </div>
                 )}
                 <span className="ikr-preview-action">
-                  Lihat desain <ArrowRight size={16} />
+                  {t("Lihat desain", "View design")} <ArrowRight size={16} />
                 </span>
                 {/* QA 14 TC-318 — label Recommended, New, dan Diskon. */}
                 {(template.recommended ||
@@ -6728,7 +7091,7 @@ function AllDesignsPage({
                     )}
                     {template.originalPrice ? (
                       <span className="ikr-template-badge is-sale">
-                        Diskon{" "}
+                        {t("Diskon", "Sale")}{" "}
                         {Math.round(
                           (1 - (template.price || 0) / template.originalPrice) *
                             100,
@@ -6755,19 +7118,22 @@ function AllDesignsPage({
           ))}
           {!visible.length && (
             <div className="journal-empty">
-              Belum ada desain yang cocok dengan pencarian Anda.
+              {t(
+                "Belum ada desain yang cocok dengan pencarian Anda.",
+                "No designs match your search yet.",
+              )}
             </div>
           )}
         </section>
         {pageCount > 1 && (
           <nav
             className="catalog-pagination"
-            aria-label="Navigasi halaman desain"
+            aria-label={t("Navigasi halaman desain", "Design pages")}
           >
             <button
               className="catalog-page-step"
               disabled={page === 1}
-              aria-label="Halaman sebelumnya"
+              aria-label={t("Halaman sebelumnya", "Previous page")}
               onClick={() => setPage((previous) => Math.max(1, previous - 1))}
             >
               <ChevronLeft size={16} />
@@ -6787,7 +7153,7 @@ function AllDesignsPage({
             <button
               className="catalog-page-step"
               disabled={page === pageCount}
-              aria-label="Halaman berikutnya"
+              aria-label={t("Halaman berikutnya", "Next page")}
               onClick={() =>
                 setPage((previous) => Math.min(pageCount, previous + 1))
               }
@@ -6799,7 +7165,7 @@ function AllDesignsPage({
       </main>
       <footer className="journal-footer">
         <Brand />
-        <span>Undangan digital. Cerita yang personal.</span>
+        <span>{t("Undangan digital. Cerita yang personal.", "Digital invitations. Personal stories.")}</span>
       </footer>
     </div>
   );
@@ -6822,6 +7188,7 @@ function JournalPage({
   articleSlug: string | null;
   onOpenArticle: (slug: string | null) => void;
 }) {
+  const t = useT();
   const article = articleSlug
     ? articles.find((item) => item.slug === articleSlug) || null
     : null;
@@ -6848,40 +7215,48 @@ function JournalPage({
         article={article}
         onBack={() => onOpenArticle(null)}
         publicMode
+        articles={articles}
+        onOpenArticle={onOpenArticle}
+        setView={setView}
       />
     );
   return (
     <div className="journal-page">
       <header className="journal-topbar">
         <button className="secondary-btn" onClick={() => setView("landing")}>
-          <ArrowLeft size={16} /> Kembali ke beranda
+          <ArrowLeft size={16} /> {t("Kembali ke beranda", "Back to home")}
         </button>
         <Brand />
         <div className="journal-topbar-actions">
+          <LangSwitch />
           <button className="secondary-btn" onClick={() => setView("login")}>
-            Masuk
+            {t("Masuk", "Sign in")}
           </button>
           <button className="primary-btn" onClick={() => setView("designs")}>
-            Temukan desain <ArrowRight size={15} />
+            {t("Temukan desain", "Find a design")} <ArrowRight size={15} />
           </button>
         </div>
       </header>
       <main>
         <section className="journal-hero">
-          <span className="eyebrow">JURNAL IKRARKU</span>
+          <span className="eyebrow">{t("JURNAL IKRARKU", "IKRARKU JOURNAL")}</span>
           <h1>
-            Inspirasi untuk
+            {t("Inspirasi untuk", "Inspiration for")}
             <br />
-            <em>hari istimewa kalian.</em>
+            <em>{t("hari istimewa kalian.", "your special day.")}</em>
           </h1>
           <p>
-            Panduan, ide, dan cerita seputar persiapan pernikahan dan undangan
-            digital.
+            {t(
+              "Panduan, ide, dan cerita seputar persiapan pernikahan dan undangan digital.",
+              "Guides, ideas, and stories about wedding preparation and digital invitations.",
+            )}
           </p>
           {!databaseOnline && (
             <div className="journal-offline">
-              Koneksi ke server sedang bermasalah. Daftar artikel mungkin belum
-              lengkap.
+              {t(
+                "Koneksi ke server sedang bermasalah. Daftar artikel mungkin belum lengkap.",
+                "We are having trouble reaching the server. The article list may be incomplete.",
+              )}
             </div>
           )}
         </section>
@@ -6893,7 +7268,7 @@ function JournalPage({
                 className={category === item ? "is-active" : ""}
                 onClick={() => setCategory(item)}
               >
-                {item}
+                {item === "Semua" ? t("Semua", "All") : item}
               </button>
             ))}
           </div>
@@ -6902,7 +7277,7 @@ function JournalPage({
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Cari artikel..."
+              placeholder={t("Cari artikel...", "Search articles...")}
             />
           </label>
         </section>
@@ -6912,18 +7287,22 @@ function JournalPage({
               key={item.id}
               article={item}
               onOpen={(value) => onOpenArticle(value.slug)}
+              readLabel={t("Baca cerita", "Read story")}
             />
           ))}
           {!visible.length && (
             <div className="journal-empty">
-              Belum ada artikel yang cocok dengan pencarian Anda.
+              {t(
+                "Belum ada artikel yang cocok dengan pencarian Anda.",
+                "No articles match your search yet.",
+              )}
             </div>
           )}
         </section>
       </main>
       <footer className="journal-footer">
         <Brand />
-        <span>Undangan digital. Cerita yang personal.</span>
+        <span>{t("Undangan digital. Cerita yang personal.", "Digital invitations. Personal stories.")}</span>
       </footer>
     </div>
   );
@@ -6941,6 +7320,7 @@ function LandingPage(props: {
   onScrolled?: () => void;
   articleSlug?: string | null;
   onOpenArticle?: (slug: string | null) => void;
+  contact?: SiteContact;
 }) {
   const { articleSlug = null, onOpenArticle } = props;
   const article = articleSlug
@@ -6952,11 +7332,30 @@ function LandingPage(props: {
         article={article}
         onBack={() => onOpenArticle?.(null)}
         publicMode
+        articles={props.articles}
+        onOpenArticle={(slug) => onOpenArticle?.(slug)}
+        setView={props.setView}
       />
     );
   return (
     <LandingPageView
       {...props}
+      renderFooter={(scrollTo) => (
+        <SiteFooter
+          setView={props.setView}
+          contact={props.contact || {}}
+          onNavigate={(target) =>
+            scrollTo(
+              target === "how"
+                ? "how-it-works"
+                : target === "journal"
+                  ? "articles"
+                  : target,
+            )
+          }
+          onFaq={() => scrollTo("faq")}
+        />
+      )}
       onArticle={(item) => onOpenArticle?.(item.slug)}
       renderPreview={(template) => (
         <WebsiteTemplatePreview
@@ -6990,6 +7389,7 @@ function Auth({
   ) => Promise<{ ok: boolean; devVerificationUrl?: string; error?: string }>;
 }) {
   const [name, setName] = useState("");
+  const t = useT();
   const [email, setEmail] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -7018,7 +7418,7 @@ function Auth({
       setAuthError(
         error instanceof Error
           ? error.message
-          : "Terjadi gangguan saat memproses. Coba lagi.",
+          : t("Terjadi gangguan saat memproses. Coba lagi.", "Something went wrong. Please try again."),
       );
     } finally {
       setSubmitting(false);
@@ -7028,7 +7428,10 @@ function Auth({
     if (view === "signup") {
       if (signupDisabled) {
         setAuthError(
-          "Lengkapi data dan pastikan password minimal 8 karakter serta cocok.",
+          t(
+            "Lengkapi data dan pastikan password minimal 8 karakter serta cocok.",
+            "Complete the form and make sure the password has at least 8 characters and matches.",
+          ),
         );
         return;
       }
@@ -7040,18 +7443,26 @@ function Auth({
         email,
       );
       if (result.ok) setSignupSubmitted(true);
-      else setAuthError(result.error || "Registrasi gagal. Coba lagi.");
+      else
+        setAuthError(
+          result.error || t("Registrasi gagal. Coba lagi.", "Registration failed. Please try again."),
+        );
       if (result.devVerificationUrl)
         setVerificationUrl(result.devVerificationUrl);
     } else {
       if (!username || !password) {
-        setAuthError("Username dan password wajib diisi.");
+        setAuthError(
+          t("Username dan password wajib diisi.", "Username and password are required."),
+        );
       } else {
         const ok = await login(username, password);
         if (!ok)
           setAuthError(
             lastAuthError ||
-              "Username atau password salah. Periksa kembali lalu coba lagi.",
+              t(
+                "Username atau password salah. Periksa kembali lalu coba lagi.",
+                "Incorrect username or password. Please check and try again.",
+              ),
           );
       }
     }
@@ -7069,37 +7480,57 @@ function Auth({
     <div className="auth-page">
       <section className="auth-visual">
         <button className="auth-back" onClick={() => setView("landing")}>
-          <ArrowLeft size={16} /> Kembali ke website
+          <ArrowLeft size={16} /> {t("Kembali ke website", "Back to website")}
         </button>
         <Brand light />
         <div>
-          <div className="eyebrow light">WEDDING WEBSITE WORKSPACE</div>
+          <div className="eyebrow light">
+            {t("WORKSPACE WEBSITE PERNIKAHAN", "WEDDING WEBSITE WORKSPACE")}
+          </div>
           <h1>
-            Every promise deserves
-            <br />a beautiful beginning.
+            {t("Setiap janji layak", "Every promise deserves")}
+            <br />
+            {t("mendapat awal yang indah.", "a beautiful beginning.")}
           </h1>
           <p>
-            Gunakan akun Anda untuk melanjutkan ke workspace ikrarku dan
-            mengakses fitur sesuai peran Anda.
+            {t(
+              "Gunakan akun Anda untuk melanjutkan ke workspace ikrarku dan mengakses fitur sesuai peran Anda.",
+              "Use your account to continue to the ikrarku workspace and access features for your role.",
+            )}
           </p>
         </div>
-        <div className="auth-quote">“Rencanakan janji, rayakan cerita.”</div>
+        <div className="auth-quote">
+          {t("“Rencanakan janji, rayakan cerita.”", "“Plan the promise, celebrate the story.”")}
+        </div>
       </section>
       <section className="auth-form-wrap">
         <div className="auth-card">
-          <div className="mobile-brand">
-            <Brand />
+          <div className="auth-card-top">
+            <div className="mobile-brand">
+              <Brand />
+            </div>
+            <LangSwitch />
           </div>
           <span className="auth-kicker">
-            {view === "signup" ? "CREATE USER ACCOUNT" : "WELCOME BACK"}
+            {view === "signup"
+              ? t("BUAT AKUN", "CREATE ACCOUNT")
+              : t("SELAMAT DATANG KEMBALI", "WELCOME BACK")}
           </span>
           <h2>
-            {view === "signup" ? "Mulai cerita Anda" : "Masuk ke ikrarku"}
+            {view === "signup"
+              ? t("Mulai cerita Anda", "Start your story")
+              : t("Masuk ke ikrarku", "Sign in to ikrarku")}
           </h2>
           <p>
             {view === "signup"
-              ? "Email wajib diverifikasi sebelum akun dapat digunakan."
-              : "Masukkan username atau email beserta password akun terdaftar."}
+              ? t(
+                  "Email wajib diverifikasi sebelum akun dapat digunakan.",
+                  "Your email must be verified before the account can be used.",
+                )
+              : t(
+                  "Masukkan username atau email beserta password akun terdaftar.",
+                  "Enter your username or email and the password of your account.",
+                )}
           </p>
           <form
             className="auth-fields"
@@ -7111,7 +7542,7 @@ function Auth({
             {view === "signup" && (
               <>
                 <label>
-                  Full name
+                  {t("Nama lengkap", "Full name")}
                   <input
                     value={name}
                     onChange={(event) => setName(event.target.value)}
@@ -7130,7 +7561,11 @@ function Auth({
               </>
             )}
             <label>
-              Username atau email
+              {/* TC-347 — di form daftar, kolom ini tepat di bawah Email, jadi
+                  cukup "Username". "Username atau email" hanya untuk login. */}
+              {view === "signup"
+                ? "Username"
+                : t("Username atau email", "Username or email")}
               <input
                 value={username}
                 onChange={(event) => {
@@ -7154,7 +7589,11 @@ function Auth({
                 />
                 <button
                   type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={
+                    showPassword
+                      ? t("Sembunyikan password", "Hide password")
+                      : t("Tampilkan password", "Show password")
+                  }
                   onClick={() => setShowPassword((value) => !value)}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -7164,14 +7603,16 @@ function Auth({
                 <small
                   className={`field-hint ${password && password.length < 8 ? "field-hint-warn" : ""}`}
                 >
-                  Minimal 8 karakter. Disarankan gabungan huruf besar, angka,
-                  dan simbol.
+                  {t(
+                    "Minimal 8 karakter. Disarankan gabungan huruf besar, angka, dan simbol.",
+                    "At least 8 characters. A mix of uppercase letters, numbers, and symbols is recommended.",
+                  )}
                 </small>
               )}
             </label>
             {view === "signup" && (
               <label>
-                Repeat Password
+                {t("Ulangi password", "Repeat password")}
                 <div className="password-field">
                   <input
                     type={showConfirm ? "text" : "password"}
@@ -7183,8 +7624,8 @@ function Auth({
                     type="button"
                     aria-label={
                       showConfirm
-                        ? "Hide repeated password"
-                        : "Show repeated password"
+                        ? t("Sembunyikan password ulang", "Hide repeated password")
+                        : t("Tampilkan password ulang", "Show repeated password")
                     }
                     onClick={() => setShowConfirm((value) => !value)}
                   >
@@ -7195,7 +7636,9 @@ function Auth({
                   <small
                     className={passwordMatch ? "password-ok" : "password-error"}
                   >
-                    {passwordMatch ? "Password sesuai" : "Password belum sama"}
+                    {passwordMatch
+                      ? t("Password sesuai", "Passwords match")
+                      : t("Password belum sama", "Passwords do not match")}
                   </small>
                 )}
               </label>
@@ -7207,11 +7650,13 @@ function Auth({
                   className="forgot-password-link"
                   onClick={() => setView("forgot-password")}
                 >
-                  <KeyRound size={13} /> Lupa password?
+                  <KeyRound size={13} /> {t("Lupa password?", "Forgot password?")}
                 </button>
                 <span>
-                  Akun tim dikelola oleh Administrator. Butuh bantuan akses?
-                  Hubungi Administrator tim Anda.
+                  {t(
+                    "Akun tim dikelola oleh Administrator. Butuh bantuan akses? Hubungi Administrator tim Anda.",
+                    "Team accounts are managed by the Administrator. Need access? Contact your team Administrator.",
+                  )}
                 </span>
               </div>
             )}
@@ -7219,10 +7664,12 @@ function Auth({
               <div className="verification-dev-link">
                 <CheckCircle2 size={18} />
                 <div>
-                  <strong>Registrasi berhasil.</strong>
+                  <strong>{t("Registrasi berhasil.", "Registration successful.")}</strong>
                   <span>
-                    Kami mengirim tautan verifikasi ke {email}. Buka email dan
-                    klik tautannya untuk mengaktifkan akun sebelum login.
+                    {t(
+                      `Kami mengirim tautan verifikasi ke ${email}. Buka email dan klik tautannya untuk mengaktifkan akun sebelum login.`,
+                      `We sent a verification link to ${email}. Open the email and click the link to activate your account before signing in.`,
+                    )}
                   </span>
                   {verificationUrl && (
                     <button
@@ -7237,7 +7684,7 @@ function Auth({
                         setView("verify-email");
                       }}
                     >
-                      Buka tautan verifikasi
+                      {t("Buka tautan verifikasi", "Open verification link")}
                     </button>
                   )}
                   <button
@@ -7255,15 +7702,15 @@ function Auth({
                         setAuthError(
                           error instanceof Error
                             ? error.message
-                            : "Gagal mengirim ulang email.",
+                            : t("Gagal mengirim ulang email.", "Could not resend the email."),
                         );
                       }
                       setResending(false);
                     }}
                   >
                     {resending
-                      ? "Mengirim ulang..."
-                      : "Kirim ulang email verifikasi"}
+                      ? t("Mengirim ulang...", "Resending...")
+                      : t("Kirim ulang email verifikasi", "Resend verification email")}
                   </button>
                   {checkoutReturn && (
                     <button
@@ -7271,7 +7718,7 @@ function Auth({
                       className="back-to-checkout-btn"
                       onClick={() => setView("checkout")}
                     >
-                      <ArrowLeft size={13} /> Lanjutkan pemesanan
+                      <ArrowLeft size={13} /> {t("Lanjutkan pemesanan", "Continue your order")}
                     </button>
                   )}
                 </div>
@@ -7289,17 +7736,17 @@ function Auth({
               disabled={submitting || signupDisabled}
             >
               {submitting
-                ? "Processing..."
+                ? t("Memproses...", "Processing...")
                 : view === "signup"
-                  ? "Register & Send Verification"
-                  : "Sign in"}{" "}
+                  ? t("Daftar & kirim verifikasi", "Register & send verification")
+                  : t("Masuk", "Sign in")}{" "}
               <ArrowRight size={16} />
             </button>
           </form>
           <div className="auth-switch">
             {view === "signup"
-              ? "Sudah memiliki akun?"
-              : "Belum memiliki akun?"}{" "}
+              ? t("Sudah memiliki akun?", "Already have an account?")
+              : t("Belum memiliki akun?", "Don't have an account?")}{" "}
             <button
               type="button"
               onClick={() => {
@@ -7316,7 +7763,7 @@ function Auth({
                 setView(view === "signup" ? "login" : "signup");
               }}
             >
-              {view === "signup" ? "Sign in" : "Sign up"}
+              {view === "signup" ? t("Masuk", "Sign in") : t("Daftar", "Sign up")}
             </button>
           </div>
         </div>
@@ -7458,6 +7905,7 @@ function TemplateJourneyPage({
   onOrder: () => void;
   flash?: (message: string) => void;
 }) {
+  const t = useT();
   const [previewOpen, setPreviewOpen] = useState(false);
   // TC-277 — bagikan link template. Link membuka langsung halaman ini.
   const shareTemplate = async () => {
@@ -7473,9 +7921,14 @@ function TemplateJourneyPage({
     }
     try {
       await navigator.clipboard.writeText(url);
-      flash?.("Link template disalin. Bagikan ke pasangan atau keluarga.");
+      flash?.(
+        t(
+          "Link template disalin. Bagikan ke pasangan atau keluarga.",
+          "Template link copied. Share it with your partner or family.",
+        ),
+      );
     } catch {
-      window.prompt("Salin link template ini:", url);
+      window.prompt(t("Salin link template ini:", "Copy this template link:"), url);
     }
   };
   // QA TC-136: mode preview (Desktop / Mobile) pada halaman detail template.
@@ -7496,13 +7949,16 @@ function TemplateJourneyPage({
       <header>
         <button onClick={onBack}>
           <ArrowLeft size={17} />
-          Kembali
+          {t("Kembali", "Back")}
         </button>
         <Brand />
-        <button className="journey-order" onClick={onOrder}>
-          <ShoppingCart size={16} />
-          Pesan Sekarang
-        </button>
+        <div className="journey-header-end">
+          <LangSwitch />
+          <button className="journey-order" onClick={onOrder}>
+            <ShoppingCart size={16} />
+            {t("Pesan Sekarang", "Order now")}
+          </button>
+        </div>
       </header>
       <main>
         <section
@@ -7518,33 +7974,54 @@ function TemplateJourneyPage({
           <div>
             <span>{template.category}</span>
             <h1>{template.name}</h1>
-            <p>A wedding website collection by ikrarku Sites.</p>
+            <p>{t("Koleksi wedding website dari ikrarku.", "A wedding website collection by ikrarku.")}</p>
           </div>
         </section>
         <section className="journey-content">
           <div>
-            <span className="eyebrow">TEMPLATE JOURNEY</span>
-            <h2>A story designed to feel unmistakably yours.</h2>
+            <span className="eyebrow">{t("DETAIL TEMPLATE", "TEMPLATE DETAIL")}</span>
+            <h2>
+              {t(
+                "Sebuah cerita yang dirancang terasa milik kalian.",
+                "A story designed to feel unmistakably yours.",
+              )}
+            </h2>
             <p>
               {template.description ||
-                "Template premium dengan storytelling, responsif, dan siap dikustomisasi melalui visual Canvas Editor."}
+                t(
+                  "Template premium dengan storytelling, responsif, dan siap dikustomisasi melalui visual Canvas Editor.",
+                  "A premium storytelling template, responsive and ready to customise in the visual Canvas Editor.",
+                )}
             </p>
             <div className="journey-features">
               <article>
                 <LayoutTemplate size={20} />
-                <strong>Responsive Canvas</strong>
-                <span>Desktop dan mobile experience yang konsisten.</span>
+                <strong>{t("Canvas responsif", "Responsive canvas")}</strong>
+                <span>
+                  {t(
+                    "Tampilan desktop dan mobile yang konsisten.",
+                    "A consistent desktop and mobile experience.",
+                  )}
+                </span>
               </article>
               <article>
                 <WandSparkles size={20} />
-                <strong>No-code customization</strong>
-                <span>Text, image, motion, sound, RSVP, dan gallery.</span>
+                <strong>{t("Kustomisasi tanpa kode", "No-code customisation")}</strong>
+                <span>
+                  {t(
+                    "Teks, gambar, animasi, musik, RSVP, dan galeri.",
+                    "Text, images, motion, sound, RSVP, and gallery.",
+                  )}
+                </span>
               </article>
               <article>
                 <UserCheck size={20} />
-                <strong>Managed onboarding</strong>
+                <strong>{t("Onboarding didampingi", "Managed onboarding")}</strong>
                 <span>
-                  Setelah pembayaran, order di-assign ke CS dan Web Designer.
+                  {t(
+                    "Setelah pembayaran, order ditangani CS dan Web Designer.",
+                    "After payment, your order is assigned to CS and a Web Designer.",
+                  )}
                 </span>
               </article>
             </div>
@@ -7557,57 +8034,63 @@ function TemplateJourneyPage({
                 }}
               >
                 <Eye size={16} />
-                Preview Template
+                {t("Preview Template", "Preview template")}
               </button>
               <button
                 className="secondary-btn journey-share"
                 onClick={() => void shareTemplate()}
               >
                 <Share2 size={16} />
-                Bagikan Template
+                {t("Bagikan Template", "Share template")}
               </button>
             </div>
           </div>
           <aside>
             <small>
-              ONE-TIME PACKAGE · {template.premium ? "PREMIUM" : "STANDARD"}
+              {t("PAKET SEKALI BAYAR", "ONE-TIME PACKAGE")} ·{" "}
+              {template.premium ? "PREMIUM" : "STANDARD"}
             </small>
             <strong>{formatRupiah(template.price || 0)}</strong>
-            <span>Sudah termasuk onboarding dan project assignment.</span>
+            <span>
+              {t(
+                "Sudah termasuk onboarding dan penugasan tim.",
+                "Includes onboarding and team assignment.",
+              )}
+            </span>
             <hr />
             <ul>
               <li>
                 <Check size={14} />
-                Template license
+                {t("Lisensi template", "Template license")}
               </li>
               <li>
                 <Check size={14} />
-                Customer Service onboarding
+                {t("Onboarding Customer Service", "Customer Service onboarding")}
               </li>
               <li>
                 <Check size={14} />
-                Web Designer assignment
+                {t("Pendampingan Web Designer", "Web Designer assignment")}
               </li>
               <li>
                 <Check size={14} />
-                Email & PDF receipt
+                {t("Receipt email & PDF", "Email & PDF receipt")}
               </li>
               {template.premium && (
                 <>
                   <li>
                     <Check size={14} />
-                    Premium motion & sound library
+                    {t("Animasi & musik premium", "Premium motion & sound library")}
                   </li>
                   <li>
                     <Check size={14} />
-                    Priority onboarding
+                    {t("Onboarding prioritas", "Priority onboarding")}
                   </li>
                 </>
               )}
             </ul>
             <button onClick={onOrder}>
               <ShoppingCart size={17} />
-              Pesan Sekarang
+              {t("Pesan Sekarang", "Order now")}
             </button>
           </aside>
         </section>
@@ -7634,7 +8117,7 @@ function TemplateJourneyPage({
             </div>
             <button
               className="journey-preview-close"
-              aria-label="Tutup preview"
+              aria-label={t("Tutup preview", "Close preview")}
               onClick={() => setPreviewOpen(false)}
             >
               <X size={18} />
@@ -7673,7 +8156,7 @@ function TemplateJourneyPage({
                 }
               >
                 <h2>{template.name}</h2>
-                <p>Preview image template.</p>
+                <p>{t("Gambar preview template.", "Template preview image.")}</p>
               </div>
             )}
           </div>
@@ -7710,6 +8193,7 @@ function CheckoutPage({
   onSignIn: () => void;
   account?: AuthAccount;
 }) {
+  const t = useT();
   const draft = useMemo(() => {
     try {
       return JSON.parse(
@@ -7778,52 +8262,70 @@ function CheckoutPage({
       <header>
         <button onClick={onBack}>
           <ArrowLeft size={17} />
-          Template detail
+          {t("Detail template", "Template detail")}
         </button>
         <Brand />
-        <span>Secure checkout</span>
+        <span className="checkout-header-end">
+          <LangSwitch />
+          {t("Pembayaran aman", "Secure checkout")}
+        </span>
       </header>
       <main>
         <section className="checkout-form">
           <span className="eyebrow">
-            {order ? "STEP 2 OF 2" : "STEP 1 OF 2"}
+            {order ? t("LANGKAH 2 DARI 2", "STEP 2 OF 2") : t("LANGKAH 1 DARI 2", "STEP 1 OF 2")}
           </span>
-          <h1>{order ? "Pilih metode pembayaran" : "Data pemesan"}</h1>
+          <h1>
+            {order
+              ? t("Pilih metode pembayaran", "Choose a payment method")
+              : t("Data pemesan", "Your details")}
+          </h1>
           {!order ? (
             <>
               <p>
-                Email digunakan untuk receipt dan nomor telepon digunakan CS
-                untuk proses onboarding.
+                {t(
+                  "Email digunakan untuk receipt dan nomor telepon digunakan CS untuk proses onboarding.",
+                  "Your email is used for the receipt and your phone number is used by our CS team for onboarding.",
+                )}
               </p>
               {account ? (
                 <div className="checkout-account-banner signed-in">
                   <UserCheck size={17} />
                   <div>
-                    <strong>Masuk sebagai {account.name}</strong>
+                    <strong>
+                      {t("Masuk sebagai", "Signed in as")} {account.name}
+                    </strong>
                     <span>
-                      Nama dan email diisi otomatis dari akun ikrarku Anda.
+                      {t(
+                        "Nama dan email diisi otomatis dari akun ikrarku Anda.",
+                        "Your name and email are filled in from your ikrarku account.",
+                      )}
                     </span>
                   </div>
                 </div>
               ) : (
                 <div className="checkout-auth-options">
-                  <button onClick={onSignIn}>Sudah punya akun? Sign In</button>
+                  <button onClick={onSignIn}>
+                    {t("Sudah punya akun? Masuk", "Already have an account? Sign in")}
+                  </button>
                   <span className="checkout-no-account">
-                    Belum punya akun? Tidak perlu daftar — akun dibuat otomatis
-                    setelah pembayaran.
+                    {t(
+                      "Belum punya akun? Tidak perlu daftar — akun dibuat otomatis setelah pembayaran.",
+                      "No account yet? No need to sign up — your account is created automatically after payment.",
+                    )}
                   </span>
                 </div>
               )}
               <label>
-                Nama lengkap
+                {t("Nama lengkap", "Full name")}
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Nama pemesan"
+                  placeholder={t("Nama pemesan", "Your name")}
                 />
               </label>
               <label>
-                Email receipt
+                {t("Email untuk receipt", "Email for receipt")}
                 <input
                   value={email}
                   onChange={(e) => {
@@ -7832,32 +8334,36 @@ function CheckoutPage({
                   }}
                   onBlur={() => void runEmailCheck()}
                   type="email"
-                  placeholder="nama@email.com"
+                  placeholder={t("nama@email.com", "name@email.com")}
                   disabled={Boolean(account)}
                 />
                 {email && !validEmail && (
                   <small className="password-error">
-                    Format email belum valid.
+                    {t("Format email belum valid.", "The email format is not valid.")}
                   </small>
                 )}
               </label>
               {!account && accountStatus === "checking" && (
                 <div className="checkout-account-banner checking">
                   <Repeat2 size={16} />
-                  <span>Mengecek status akun...</span>
+                  <span>{t("Mengecek status akun...", "Checking account status...")}</span>
                 </div>
               )}
               {!account && accountStatus === "registered" && (
                 <div className="checkout-account-banner registered">
                   <UserCheck size={17} />
                   <div>
-                    <strong>Email ini sudah punya akun ikrarku.</strong>
+                    <strong>
+                      {t("Email ini sudah punya akun ikrarku.", "This email already has an ikrarku account.")}
+                    </strong>
                     <span>
-                      Sign in agar Nama dan Nomor WhatsApp terisi otomatis dari
-                      data akun Anda.
+                      {t(
+                        "Masuk agar Nama dan Nomor WhatsApp terisi otomatis dari data akun Anda.",
+                        "Sign in so your name and WhatsApp number are filled in from your account.",
+                      )}
                     </span>
                     <button type="button" onClick={onSignIn}>
-                      Sign In sekarang
+                      {t("Masuk sekarang", "Sign in now")}
                     </button>
                   </div>
                 </div>
@@ -7866,17 +8372,23 @@ function CheckoutPage({
                 <div className="checkout-account-banner new">
                   <UserPlus size={17} />
                   <div>
-                    <strong>Email ini belum terdaftar — tidak perlu daftar.</strong>
+                    <strong>
+                      {t(
+                        "Email ini belum terdaftar — tidak perlu daftar.",
+                        "This email is not registered yet — no need to sign up.",
+                      )}
+                    </strong>
                     <span>
-                      Lanjutkan pembayaran. Setelah lunas, akun ikrarku dibuat
-                      otomatis dan info login dikirim ke email ini. Saat login
-                      pertama Anda akan diminta membuat password baru.
+                      {t(
+                        "Lanjutkan pembayaran. Setelah lunas, akun ikrarku dibuat otomatis dan info login dikirim ke email ini. Saat login pertama Anda akan diminta membuat password baru.",
+                        "Continue to payment. Once paid, your ikrarku account is created automatically and the login details are sent to this email. You will be asked to create a new password on your first sign in.",
+                      )}
                     </span>
                   </div>
                 </div>
               )}
               <label>
-                Nomor WhatsApp
+                {t("Nomor WhatsApp", "WhatsApp number")}
                 <input
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -7884,13 +8396,13 @@ function CheckoutPage({
                 />
                 {phone && !validPhone && (
                   <small className="password-error">
-                    Nomor telepon minimal 9 digit.
+                    {t("Nomor telepon minimal 9 digit.", "The phone number needs at least 9 digits.")}
                   </small>
                 )}
               </label>
               <div className="checkout-wedding-row">
                 <label>
-                  Tanggal pernikahan
+                  {t("Tanggal pernikahan", "Wedding date")}
                   <input
                     type="date"
                     value={weddingDate}
@@ -7900,12 +8412,15 @@ function CheckoutPage({
                   />
                   {weddingDate && !validWeddingDate && (
                     <small className="password-error">
-                      Tanggal pernikahan tidak boleh sebelum hari ini.
+                      {t(
+                        "Tanggal pernikahan tidak boleh sebelum hari ini.",
+                        "The wedding date cannot be before today.",
+                      )}
                     </small>
                   )}
                 </label>
                 <label>
-                  Jam acara
+                  {t("Jam acara", "Event time")}
                   <input
                     type="time"
                     value={weddingTime}
@@ -7915,8 +8430,10 @@ function CheckoutPage({
                 </label>
               </div>
               <small className="checkout-wedding-note">
-                Dipakai untuk hitung mundur di dashboard Anda dan bisa diubah
-                nanti.
+                {t(
+                  "Dipakai untuk hitung mundur di dashboard Anda dan bisa diubah nanti.",
+                  "Used for the countdown on your dashboard and can be changed later.",
+                )}
               </small>
               <button
                 className="primary-btn checkout-next"
@@ -7934,15 +8451,20 @@ function CheckoutPage({
                   setWorking(false);
                 }}
               >
-                {working ? "Menyimpan order..." : "Lanjut ke Pembayaran"}
+                {working
+                  ? t("Menyimpan order...", "Saving order...")
+                  : t("Lanjut ke Pembayaran", "Continue to payment")}
                 <ArrowRight size={16} />
               </button>
             </>
           ) : (
             <>
               <p>
-                Order <strong>{order.orderNo}</strong> sudah dibuat. Pilih kanal
-                pembayaran.
+                {t("Order", "Order")} <strong>{order.orderNo}</strong>{" "}
+                {t(
+                  "sudah dibuat. Pilih kanal pembayaran.",
+                  "has been created. Choose a payment channel.",
+                )}
               </p>
               <div className="payment-method-grid">
                 {paymentMethods.map((item) => (
@@ -7966,10 +8488,12 @@ function CheckoutPage({
               <div className="local-payment-note">
                 <ShieldCheck size={18} />
                 <p>
-                  <strong>Secure payment confirmation</strong>
+                  <strong>{t("Konfirmasi pembayaran aman", "Secure payment confirmation")}</strong>
                   <span>
-                    Pastikan metode pembayaran yang dipilih sudah benar sebelum
-                    melanjutkan.
+                    {t(
+                      "Pastikan metode pembayaran yang dipilih sudah benar sebelum melanjutkan.",
+                      "Make sure the selected payment method is correct before continuing.",
+                    )}
                   </span>
                 </p>
               </div>
@@ -7983,12 +8507,17 @@ function CheckoutPage({
                   if (!ok)
                     setPayError(
                       lastPaymentError ||
-                        "Pembayaran belum bisa diproses. Coba lagi beberapa saat.",
+                        t(
+                          "Pembayaran belum bisa diproses. Coba lagi beberapa saat.",
+                          "The payment could not be processed yet. Please try again shortly.",
+                        ),
                     );
                   setWorking(false);
                 }}
               >
-                {working ? "Memproses pembayaran..." : "Lanjutkan Pembayaran"}
+                {working
+                  ? t("Memproses pembayaran...", "Processing payment...")
+                  : t("Lanjutkan Pembayaran", "Continue payment")}
                 <CheckCircle size={16} />
               </button>
               {/* Revisi 29 Okt — alasan gagal bayar dari gateway tampil tetap,
@@ -8015,18 +8544,18 @@ function CheckoutPage({
             <span>{template.category}</span>
             <strong>{template.name}</strong>
           </div>
-          <h3>Order summary</h3>
+          <h3>{t("Ringkasan order", "Order summary")}</h3>
           <div>
-            <span>Template package</span>
+            <span>{t("Paket template", "Template package")}</span>
             <strong>{formatRupiah(template.price || 0)}</strong>
           </div>
           <div>
-            <span>Onboarding CS</span>
-            <strong>Included</strong>
+            <span>{t("Onboarding CS", "CS onboarding")}</span>
+            <strong>{t("Termasuk", "Included")}</strong>
           </div>
           <div>
             <span>Web Designer</span>
-            <strong>Included</strong>
+            <strong>{t("Termasuk", "Included")}</strong>
           </div>
           <hr />
           <div className="checkout-total">
@@ -8890,6 +9419,307 @@ function RolesPermissionsPage({
   );
 }
 
+/** QA 15 TC-354 — kontak publik dari server (.env). */
+export type SiteContact = {
+  whatsapp?: string | null;
+  email?: string | null;
+  instagram?: string | null;
+  tiktok?: string | null;
+  facebook?: string | null;
+};
+export function waLink(phone: string) {
+  const digits = phone.replace(/\D/g, "").replace(/^0/, "62");
+  return `https://wa.me/${digits}`;
+}
+export function socialLink(kind: "instagram" | "tiktok" | "facebook", value: string) {
+  if (/^https?:\/\//i.test(value)) return value;
+  const handle = value.replace(/^@/, "");
+  return kind === "instagram"
+    ? `https://instagram.com/${handle}`
+    : kind === "tiktok"
+      ? `https://www.tiktok.com/@${handle}`
+      : `https://facebook.com/${handle}`;
+}
+
+type InfoSection = { title: string; body: string[] };
+const PUBLIC_INFO: Record<
+  "privacy" | "terms" | "faq",
+  { id: { title: string; lead: string; sections: InfoSection[] }; en: { title: string; lead: string; sections: InfoSection[] } }
+> = {
+  privacy: {
+    id: {
+      title: "Kebijakan Privasi",
+      lead: "Cara ikrarku mengumpulkan, memakai, dan menjaga data Anda serta data tamu undangan Anda.",
+      sections: [
+        { title: "Data yang kami kumpulkan", body: ["Data akun: nama, email, username, dan nomor WhatsApp.", "Data pesanan: template yang dipesan, tanggal dan jam acara, serta status pembayaran. Pembayaran diproses oleh mitra pembayaran; ikrarku tidak menyimpan data kartu atau rekening Anda.", "Isi undangan: teks, foto, video, musik, dan pengaturan yang Anda unggah atau buat di editor.", "Data tamu: nama, email/nomor WhatsApp (opsional), konfirmasi RSVP, dan ucapan yang dikirim tamu melalui undangan Anda."] },
+        { title: "Cara kami memakai data", body: ["Membuat dan mengelola akun serta pesanan Anda.", "Mengirim receipt, info login, dan notifikasi terkait pesanan.", "Membantu tim Customer Service dan Web Designer mengerjakan undangan Anda.", "Menampilkan undangan kepada tamu yang menerima tautannya."] },
+        { title: "Siapa yang dapat melihat data", body: ["Anda sendiri, serta tim ikrarku yang menangani pesanan Anda (Customer Service dan Web Designer).", "Tamu hanya melihat halaman undangan yang dipublikasikan, tidak melihat daftar tamu atau data RSVP tamu lain."] },
+        { title: "Penyimpanan & keamanan", body: ["Data disimpan di server ikrarku dengan akses terbatas sesuai peran.", "Password disimpan dalam bentuk terenkripsi (hash) dan tidak dapat dilihat siapa pun, termasuk tim ikrarku."] },
+        { title: "Hak Anda", body: ["Anda dapat memperbarui data akun dan isi undangan kapan saja melalui dashboard.", "Untuk meminta salinan atau penghapusan data, hubungi kami melalui kontak di bawah."] },
+      ],
+    },
+    en: {
+      title: "Privacy Policy",
+      lead: "How ikrarku collects, uses, and protects your data and the data of your invitation guests.",
+      sections: [
+        { title: "Data we collect", body: ["Account data: name, email, username, and WhatsApp number.", "Order data: the template ordered, the event date and time, and payment status. Payments are processed by our payment partner; ikrarku does not store your card or bank account details.", "Invitation content: text, photos, videos, music, and settings you upload or create in the editor.", "Guest data: names, optional email/WhatsApp numbers, RSVP confirmations, and wishes sent by guests through your invitation."] },
+        { title: "How we use data", body: ["To create and manage your account and orders.", "To send receipts, login details, and order notifications.", "To help our Customer Service and Web Designer team work on your invitation.", "To show your invitation to guests who receive its link."] },
+        { title: "Who can see your data", body: ["You, and the ikrarku team handling your order (Customer Service and Web Designer).", "Guests only see the published invitation page, not your guest list or other guests' RSVP data."] },
+        { title: "Storage & security", body: ["Data is stored on ikrarku servers with role-based access.", "Passwords are stored hashed and cannot be read by anyone, including the ikrarku team."] },
+        { title: "Your rights", body: ["You can update your account data and invitation content at any time from the dashboard.", "To request a copy or deletion of your data, contact us using the details below."] },
+      ],
+    },
+  },
+  terms: {
+    id: {
+      title: "Syarat & Ketentuan",
+      lead: "Ketentuan penggunaan layanan undangan digital ikrarku.",
+      sections: [
+        { title: "Layanan", body: ["ikrarku menyediakan template undangan digital, editor canvas, daftar tamu, dan RSVP online.", "Setiap pesanan didampingi tim Customer Service dan Web Designer sesuai paket yang dipilih."] },
+        { title: "Pemesanan & pembayaran", body: ["Harga yang berlaku adalah harga yang tampil saat checkout.", "Pesanan yang belum dibayar dalam 1x24 jam otomatis hangus dan dapat dipesan ulang.", "Setelah pembayaran lunas, akun dibuat otomatis (bila belum ada) dan info login dikirim ke email pemesan."] },
+        { title: "Konten undangan", body: ["Anda bertanggung jawab atas teks, foto, video, dan musik yang diunggah, termasuk hak penggunaannya.", "Konten yang melanggar hukum atau hak pihak lain dapat dinonaktifkan."] },
+        { title: "Akun", body: ["Jaga kerahasiaan password Anda. Aktivitas yang dilakukan melalui akun Anda menjadi tanggung jawab Anda.", "Akun tim (Web Designer, Customer Service) dikelola oleh Administrator ikrarku."] },
+        { title: "Perubahan ketentuan", body: ["Ketentuan ini dapat diperbarui. Versi terbaru selalu tersedia di halaman ini."] },
+      ],
+    },
+    en: {
+      title: "Terms & Conditions",
+      lead: "Terms of use for the ikrarku digital invitation service.",
+      sections: [
+        { title: "Service", body: ["ikrarku provides digital invitation templates, a canvas editor, guest lists, and online RSVP.", "Every order is supported by our Customer Service and Web Designer team according to the selected package."] },
+        { title: "Orders & payment", body: ["The applicable price is the price shown at checkout.", "Orders not paid within 24 hours expire automatically and can be placed again.", "Once paid, an account is created automatically (if you don't have one yet) and the login details are sent to the ordering email."] },
+        { title: "Invitation content", body: ["You are responsible for the text, photos, videos, and music you upload, including the right to use them.", "Content that breaks the law or infringes the rights of others may be disabled."] },
+        { title: "Accounts", body: ["Keep your password confidential. Activity carried out through your account is your responsibility.", "Team accounts (Web Designer, Customer Service) are managed by the ikrarku Administrator."] },
+        { title: "Changes to these terms", body: ["These terms may be updated. The latest version is always available on this page."] },
+      ],
+    },
+  },
+  faq: {
+    id: {
+      title: "FAQ",
+      lead: "Pertanyaan yang sering diajukan seputar undangan digital ikrarku.",
+      sections: [
+        { title: "Bagaimana cara memesan undangan?", body: ["Pilih desain di katalog, klik Pesan Sekarang, isi data pemesan, lalu selesaikan pembayaran. Tidak perlu daftar akun lebih dulu."] },
+        { title: "Berapa lama batas pembayaran?", body: ["Pesanan perlu dibayar dalam 1x24 jam. Setelah itu pesanan hangus dan dapat dipesan ulang."] },
+        { title: "Apa yang terjadi setelah pembayaran?", body: ["Akun ikrarku dibuat otomatis dan info login dikirim ke email Anda. Tim Customer Service dan Web Designer kemudian membantu menyiapkan undangan."] },
+        { title: "Bisakah saya mengubah isi undangan sendiri?", body: ["Bisa. Buka Templates & Canvas di dashboard lalu klik Edit untuk mengubah teks, foto, musik, dan tampilan."] },
+        { title: "Bagaimana tamu mengonfirmasi kehadiran?", body: ["Tamu mengisi RSVP langsung di halaman undangan. Hasilnya tampil di menu RSVP Confirmation dan dapat diekspor ke CSV."] },
+        { title: "Bagaimana cara menghubungi tim ikrarku?", body: ["Gunakan Live Chat di dashboard atau kontak di bawah halaman ini."] },
+      ],
+    },
+    en: {
+      title: "FAQ",
+      lead: "Frequently asked questions about ikrarku digital invitations.",
+      sections: [
+        { title: "How do I order an invitation?", body: ["Choose a design in the catalog, click Order now, fill in your details, and complete the payment. You don't need to sign up first."] },
+        { title: "How long do I have to pay?", body: ["Orders must be paid within 24 hours. After that the order expires and can be placed again."] },
+        { title: "What happens after payment?", body: ["Your ikrarku account is created automatically and the login details are sent to your email. Our Customer Service and Web Designer team then help prepare your invitation."] },
+        { title: "Can I edit the invitation myself?", body: ["Yes. Open Templates & Canvas in your dashboard and click Edit to change the text, photos, music, and look."] },
+        { title: "How do guests confirm attendance?", body: ["Guests fill in the RSVP directly on the invitation page. Responses appear in RSVP Confirmation and can be exported to CSV."] },
+        { title: "How do I contact the ikrarku team?", body: ["Use Live Chat in your dashboard or the contact details at the bottom of this page."] },
+      ],
+    },
+  },
+};
+
+function PublicInfoPage({
+  page,
+  setView,
+  contact,
+}: {
+  page: "privacy" | "terms" | "faq";
+  setView: (view: View) => void;
+  contact: SiteContact;
+}) {
+  const [lang] = useSiteLang();
+  const t = useT();
+  const copy = PUBLIC_INFO[page][lang];
+  return (
+    <div className="journal-page public-info-page">
+      <header className="journal-topbar">
+        <button className="secondary-btn" onClick={() => setView("landing")}>
+          <ArrowLeft size={16} /> {t("Kembali ke beranda", "Back to home")}
+        </button>
+        <Brand />
+        <div className="journal-topbar-actions">
+          <LangSwitch />
+          <button className="primary-btn" onClick={() => setView("designs")}>
+            {t("Temukan desain", "Find a design")} <ArrowRight size={15} />
+          </button>
+        </div>
+      </header>
+      <main className="public-info-main">
+        <span className="eyebrow">ikrarku</span>
+        <h1>{copy.title}</h1>
+        <p className="public-info-lead">{copy.lead}</p>
+        {copy.sections.map((section) =>
+          page === "faq" ? (
+            <details key={section.title} className="public-info-faq">
+              <summary>{section.title}</summary>
+              {section.body.map((line) => (
+                <p key={line}>{line}</p>
+              ))}
+            </details>
+          ) : (
+            <section key={section.title}>
+              <h2>{section.title}</h2>
+              <ul>
+                {section.body.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </section>
+          ),
+        )}
+        <SiteContactBlock contact={contact} />
+      </main>
+      <SiteFooter setView={setView} contact={contact} />
+    </div>
+  );
+}
+
+function SiteContactBlock({ contact }: { contact: SiteContact }) {
+  const t = useT();
+  if (!contact.whatsapp && !contact.email) return null;
+  return (
+    <section className="public-info-contact">
+      <h2>{t("Kontak", "Contact")}</h2>
+      {contact.whatsapp && (
+        <a href={waLink(contact.whatsapp)} target="_blank" rel="noopener noreferrer">
+          <MessageCircle size={16} /> WhatsApp {contact.whatsapp}
+        </a>
+      )}
+      {contact.email && (
+        <a href={`mailto:${contact.email}`}>
+          <Mail size={16} /> {contact.email}
+        </a>
+      )}
+    </section>
+  );
+}
+
+/** QA 15 TC-354 — footer halaman publik: navigasi cepat, bantuan, legal,
+ *  kontak, dan media sosial. Dipakai landing (lewat LandingPage) dan halaman
+ *  publik lain. */
+export function SiteFooter({
+  setView,
+  contact,
+  onNavigate,
+  onFaq,
+}: {
+  setView: (view: View) => void;
+  contact: SiteContact;
+  onNavigate?: (target: "templates" | "how" | "features" | "journal") => void;
+  onFaq?: () => void;
+}) {
+  const t = useT();
+  const go = (target: "templates" | "how" | "features" | "journal") =>
+    onNavigate ? onNavigate(target) : setView(target === "journal" ? "journal" : target === "templates" ? "designs" : "landing");
+  const socials = (
+    [
+      ["instagram", contact.instagram, "Instagram"],
+      ["tiktok", contact.tiktok, "TikTok"],
+      ["facebook", contact.facebook, "Facebook"],
+    ] as const
+  ).filter(([, value]) => Boolean(value));
+  return (
+    <footer className="site-footer">
+      <div className="site-footer-brand">
+        <img src="/brand/ikrarku-logo.png" alt="ikrarku" width="130" height="39" />
+        <p>{t("Undangan digital. Cerita yang personal.", "Digital invitations. Personal stories.")}</p>
+        {socials.length > 0 && (
+          <div className="site-footer-social">
+            {socials.map(([kind, value, label]) => (
+              <a
+                key={kind}
+                href={socialLink(kind, value as string)}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={label}
+              >
+                {label}
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+      <nav aria-label={t("Navigasi cepat", "Quick links")}>
+        <strong>{t("Navigasi", "Explore")}</strong>
+        <button type="button" onClick={() => go("templates")}>
+          {t("Desain undangan", "Invitation designs")}
+        </button>
+        <button type="button" onClick={() => go("how")}>
+          {t("Cara memulai", "How it works")}
+        </button>
+        <button type="button" onClick={() => go("features")}>
+          {t("Fitur", "Features")}
+        </button>
+        <button type="button" onClick={() => go("journal")}>
+          {t("Jurnal ikrarku", "ikrarku Journal")}
+        </button>
+      </nav>
+      <nav aria-label={t("Bantuan", "Help")}>
+        <strong>{t("Bantuan", "Help")}</strong>
+        <a
+          href="/faq"
+          onClick={(event) => {
+            event.preventDefault();
+            if (onFaq) onFaq();
+            else setView("faq");
+          }}
+        >
+          FAQ
+        </a>
+        {contact.whatsapp && (
+          <a href={waLink(contact.whatsapp)} target="_blank" rel="noopener noreferrer">
+            WhatsApp {contact.whatsapp}
+          </a>
+        )}
+        {contact.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}
+        <a href="/login" onClick={(event) => { event.preventDefault(); setView("login"); }}>
+          {t("Masuk ke dashboard", "Sign in to dashboard")}
+        </a>
+      </nav>
+      <nav aria-label="Legal">
+        <strong>Legal</strong>
+        <a href="/kebijakan-privasi" onClick={(event) => { event.preventDefault(); setView("privacy"); }}>
+          {t("Kebijakan Privasi", "Privacy Policy")}
+        </a>
+        <a href="/syarat-ketentuan" onClick={(event) => { event.preventDefault(); setView("terms"); }}>
+          {t("Syarat & Ketentuan", "Terms & Conditions")}
+        </a>
+      </nav>
+      <small className="site-footer-copy">© {new Date().getFullYear()} ikrarku</small>
+    </footer>
+  );
+}
+
+/** QA 15 — tombol pilihan bahasa ID/EN yang dipakai di halaman publik dan
+ *  dashboard customer. Pilihan berlaku untuk seluruh situs (src/i18n.ts). */
+function LangSwitch({ className = "" }: { className?: string }) {
+  const [lang, setLang] = useSiteLang();
+  return (
+    <div
+      className={`lang-switch ${className}`}
+      role="group"
+      aria-label={lang === "en" ? "Choose language" : "Pilih bahasa"}
+    >
+      {(["id", "en"] as const).map((code) => (
+        <button
+          key={code}
+          type="button"
+          lang={code}
+          aria-pressed={lang === code}
+          className={lang === code ? "is-active" : ""}
+          onClick={() => setLang(code)}
+        >
+          {code.toUpperCase()}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Brand({ light = false }: { light?: boolean }) {
   return (
     <div className={`brand ${light ? "brand-light" : ""}`}>
@@ -8915,6 +9745,9 @@ function Sidebar({
   currentAccount?: AuthAccount;
   onResetEditor?: () => void;
 }) {
+  const t = useT();
+  // QA 15 TC-362 — menu customer mengikuti bahasa pilihan.
+  const customer = role === "User";
   const permissions = currentAccount?.permissions || [];
   const can = (permission: string) =>
     permissions.includes("*") || permissions.includes(permission);
@@ -8939,14 +9772,18 @@ function Sidebar({
     [
       "dashboard",
       LayoutDashboard,
-      can("dashboard.editor") ? "Web Designer Dashboard" : "Wedding Dashboard",
+      can("dashboard.editor")
+        ? "Web Designer Dashboard"
+        : t("Dashboard Pernikahan", "Wedding Dashboard"),
       can("dashboard.editor") ? "dashboard.editor" : "dashboard.user",
       "design",
     ],
     [
       "templates",
       Palette,
-      can("templates.create") ? "Templates & Approval" : "Templates & Canvas",
+      can("templates.create")
+        ? "Templates & Approval"
+        : t("Template & Canvas", "Templates & Canvas"),
       "templates.view",
       "design",
     ],
@@ -8960,10 +9797,16 @@ function Sidebar({
       : []),
     ["sound-library", Music2, "Sound Library", "sounds.manage", "design"],
     // QA TC-175: dari sudut pandang customer istilahnya "order", bukan "project".
-    ["my-orders", PackageCheck, "My Order", "dashboard.user", "design"],
+    ["my-orders", PackageCheck, t("Pesanan Saya", "My Orders"), "dashboard.user", "design"],
     // Dashboard customer: Add Canvas diganti pengelolaan tamu dan RSVP.
-    ["invitee-management", Users, "List Undangan", "dashboard.user", "design"],
-    ["rsvp-confirmation", CheckCircle, "RSVP Confirmation", "dashboard.user", "design"],
+    ["invitee-management", Users, t("List Undangan", "Guest List"), "dashboard.user", "design"],
+    [
+      "rsvp-confirmation",
+      CheckCircle,
+      t("Konfirmasi RSVP", "RSVP Confirmation"),
+      "dashboard.user",
+      "design",
+    ],
     // Komisi milik Web Designer ada di kelompok kerjanya; versi Administrator
     // (pengaturan share fee) adalah konfigurasi, jadi turun ke bawah.
     [
@@ -9000,8 +9843,8 @@ function Sidebar({
     ["payment-settings", CreditCard, "Payment Methods", "settings.payment", "admin"],
     ["audit-log", ShieldCheck, "Audit Trail", "*", "admin"],
     // --- Akun --------------------------------------------------------------
-    ["help", CircleHelp, "Pusat Bantuan", "", "account"],
-    ["settings", Settings, "Settings", "", "account"],
+    ["help", CircleHelp, customer ? t("Pusat Bantuan", "Help Center") : "Pusat Bantuan", "", "account"],
+    ["settings", Settings, customer ? t("Pengaturan", "Settings") : "Settings", "", "account"],
   ];
   const groupOrder: MenuGroup[] = ["design", "service", "admin", "account"];
   const groupLabel: Record<MenuGroup, string> = {
@@ -9088,7 +9931,7 @@ function Sidebar({
           </div>
         )}
         <button className="support-link danger" onClick={logout}>
-          <LogOut size={16} /> Sign out
+          <LogOut size={16} /> {customer ? t("Keluar", "Sign out") : "Sign out"}
         </button>
       </div>
     </aside>
@@ -9116,13 +9959,26 @@ function Topbar({
   onLogout: () => void;
   canPaymentSettings: boolean;
 }) {
+  const t = useT();
+  const customer = role === "User";
+  // Teks topbar staf tetap seperti sebelumnya; customer mengikuti bahasa.
+  const ct = (id: string, en: string) => (customer ? t(id, en) : en);
   const [profileOpen, setProfileOpen] = useState(false);
   return (
     <header className="topbar">
       <button
         className="icon-btn"
         onClick={toggleSidebar}
-        title={sidebarOpen ? "Collapse sidebar" : "Expand sidebar"}
+        title={
+          sidebarOpen
+            ? ct("Tutup sidebar", "Collapse sidebar")
+            : ct("Buka sidebar", "Expand sidebar")
+        }
+        aria-label={
+          sidebarOpen
+            ? ct("Tutup menu", "Close menu")
+            : ct("Buka menu", "Open menu")
+        }
       >
         {sidebarOpen ? (
           <PanelLeftClose size={18} />
@@ -9131,6 +9987,7 @@ function Topbar({
         )}
       </button>
       <div className="topbar-right">
+        {customer && <LangSwitch className="topbar-lang" />}
         <div className="status-dot" title="Akun yang sedang masuk">
           <span />
           {currentAccount?.email || displayRole(role)}
@@ -9138,7 +9995,7 @@ function Topbar({
         <button
           className="icon-btn topbar-chat"
           onClick={onChat}
-          title="Open chat"
+          title={ct("Buka chat", "Open chat")}
         >
           <MessageCircle size={17} />
         </button>
@@ -9152,7 +10009,7 @@ function Topbar({
             </div>
             <div>
               <strong>{currentAccount?.name || "User"}</strong>
-              <span>{displayRole(role)}</span>
+              <span>{customer ? t("Pelanggan", "Customer") : displayRole(role)}</span>
             </div>
             {profileOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
           </button>
@@ -9166,8 +10023,8 @@ function Topbar({
               >
                 <Settings size={16} />
                 <span>
-                  <strong>Account Settings</strong>
-                  <small>Nama, email, dan password</small>
+                  <strong>{ct("Pengaturan Akun", "Account Settings")}</strong>
+                  <small>{ct("Nama, email, dan password", "Name, email, and password")}</small>
                 </span>
               </button>
               {canPaymentSettings && (
@@ -9193,8 +10050,8 @@ function Topbar({
               >
                 <LogOut size={16} />
                 <span>
-                  <strong>Sign Out</strong>
-                  <small>Keluar dari akun ini</small>
+                  <strong>{ct("Keluar", "Sign Out")}</strong>
+                  <small>{ct("Keluar dari akun ini", "Sign out of this account")}</small>
                 </span>
               </button>
             </div>
@@ -9205,12 +10062,28 @@ function Topbar({
   );
 }
 
-function timeGreeting(date = new Date()) {
+/** QA 15 TC-361 — sapaan menurut jam lokal pengguna. Dulu jam 00:00–10:59
+ *  semuanya "Selamat pagi", termasuk tengah malam. Kini:
+ *  00:00–03:59 malam · 04:00–10:59 pagi · 11:00–14:59 siang ·
+ *  15:00–17:59 sore · 18:00–23:59 malam. */
+export function timeGreeting(date = new Date(), lang: SiteLang = getSiteLang()) {
   const hour = date.getHours();
-  if (hour < 11) return "Selamat pagi";
-  if (hour < 15) return "Selamat siang";
-  if (hour < 18) return "Selamat sore";
-  return "Selamat malam";
+  const id =
+    hour < 4
+      ? "Selamat malam"
+      : hour < 11
+        ? "Selamat pagi"
+        : hour < 15
+          ? "Selamat siang"
+          : hour < 18
+            ? "Selamat sore"
+            : "Selamat malam";
+  if (lang !== "en") return id;
+  return hour >= 4 && hour < 12
+    ? "Good morning"
+    : hour >= 12 && hour < 18
+      ? "Good afternoon"
+      : "Good evening";
 }
 
 /** QA 14 TC-323 — sisa waktu menuju hari pernikahan (per detik). */
@@ -9251,6 +10124,8 @@ function CustomerWelcome({
   onOrdersChanged?: () => void;
   flash?: (message: string) => void;
 }) {
+  const t = useT();
+  const [lang] = useSiteLang();
   const order =
     orders.find(
       (item: any) => item?.payment_status === "Paid" && item?.wedding_date,
@@ -9276,18 +10151,20 @@ function CustomerWelcome({
     (customerName || order.customer_name || "").trim().split(/\s+/)[0] || "";
   const save = async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      flash?.("Isi tanggal pernikahan terlebih dahulu.");
+      flash?.(t("Isi tanggal pernikahan terlebih dahulu.", "Fill in the wedding date first."));
       return;
     }
     setSaving(true);
     try {
       await api.updateWeddingDate(order.id, date, time);
-      flash?.("Tanggal pernikahan tersimpan.");
+      flash?.(t("Tanggal pernikahan tersimpan.", "Wedding date saved."));
       setEditing(false);
       onOrdersChanged?.();
     } catch (error) {
       flash?.(
-        error instanceof Error ? error.message : "Gagal menyimpan tanggal.",
+        error instanceof Error
+          ? error.message
+          : t("Gagal menyimpan tanggal.", "Could not save the date."),
       );
     } finally {
       setSaving(false);
@@ -9300,7 +10177,7 @@ function CustomerWelcome({
     { role: "Web Designer", name: order.editor_name?.trim() },
   ];
   const dateLabel = target
-    ? new Intl.DateTimeFormat("id-ID", {
+    ? new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "id-ID", {
         weekday: "long",
         day: "numeric",
         month: "long",
@@ -9312,26 +10189,34 @@ function CustomerWelcome({
       <section className="welcome-card">
         <div className="welcome-text">
           <span className="welcome-kicker">
-            <Sparkles size={13} /> ikrarku untuk Anda
+            <Sparkles size={13} /> {t("ikrarku untuk Anda", "ikrarku for you")}
           </span>
-          <h2>Hai{firstName ? `, ${firstName}` : ""}!</h2>
+          <h2>
+            {t("Hai", "Hi")}
+            {firstName ? `, ${firstName}` : ""}!
+          </h2>
           <p>
-            Selamat datang di ikrarku. Tim kami sedang menyiapkan undangan
-            digital yang menceritakan kisah Anda — pantau progresnya, kelola
-            daftar tamu, dan hubungi tim kapan saja dari halaman ini.
+            {t(
+              "Selamat datang di ikrarku. Tim kami sedang menyiapkan undangan digital yang menceritakan kisah Anda — pantau progresnya, kelola daftar tamu, dan hubungi tim kapan saja dari halaman ini.",
+              "Welcome to ikrarku. Our team is preparing a digital invitation that tells your story — track its progress, manage your guest list, and reach the team any time from this page.",
+            )}
           </p>
         </div>
         <div className="welcome-countdown">
           {target && !editing ? (
             <>
-              <small>{left?.done ? "Hari bahagia telah tiba" : "Menuju hari pernikahan"}</small>
+              <small>
+                {left?.done
+                  ? t("Hari bahagia telah tiba", "The big day is here")
+                  : t("Menuju hari pernikahan", "Counting down to the wedding")}
+              </small>
               <div className="countdown-grid" aria-live="off">
                 {(
                   [
-                    ["Hari", left?.days ?? 0],
-                    ["Jam", left?.hours ?? 0],
-                    ["Menit", left?.minutes ?? 0],
-                    ["Detik", left?.seconds ?? 0],
+                    [t("Hari", "Days"), left?.days ?? 0],
+                    [t("Jam", "Hours"), left?.hours ?? 0],
+                    [t("Menit", "Minutes"), left?.minutes ?? 0],
+                    [t("Detik", "Seconds"), left?.seconds ?? 0],
                   ] as [string, number][]
                 ).map(([label, value]) => (
                   <span key={label}>
@@ -9343,33 +10228,35 @@ function CustomerWelcome({
               <div className="countdown-foot">
                 <span>{dateLabel}</span>
                 <button type="button" onClick={() => setEditing(true)}>
-                  Ubah
+                  {t("Ubah", "Edit")}
                 </button>
               </div>
             </>
           ) : (
             <div className="countdown-form">
               <small>
-                {target ? "Ubah tanggal pernikahan" : "Kapan hari bahagia Anda?"}
+                {target
+                  ? t("Ubah tanggal pernikahan", "Change the wedding date")
+                  : t("Kapan hari bahagia Anda?", "When is your big day?")}
               </small>
               <div>
                 <input
                   type="date"
                   value={date}
-                  aria-label="Tanggal pernikahan"
+                  aria-label={t("Tanggal pernikahan", "Wedding date")}
                   onChange={(event) => setDate(event.target.value)}
                 />
                 <input
                   type="time"
                   value={time}
-                  aria-label="Jam acara"
+                  aria-label={t("Jam acara", "Event time")}
                   onChange={(event) => setTime(event.target.value)}
                 />
               </div>
               <div className="countdown-actions">
                 {target && (
                   <button type="button" onClick={() => setEditing(false)}>
-                    Batal
+                    {t("Batal", "Cancel")}
                   </button>
                 )}
                 <button
@@ -9378,7 +10265,9 @@ function CustomerWelcome({
                   disabled={saving}
                   onClick={() => void save()}
                 >
-                  {saving ? "Menyimpan..." : "Simpan & mulai hitung mundur"}
+                  {saving
+                    ? t("Menyimpan...", "Saving...")
+                    : t("Simpan & mulai hitung mundur", "Save & start the countdown")}
                 </button>
               </div>
             </div>
@@ -9387,7 +10276,7 @@ function CustomerWelcome({
       </section>
       <section className="team-card">
         <header>
-          <strong>Tim yang menangani undangan Anda</strong>
+          <strong>{t("Tim yang menangani undangan Anda", "Your invitation team")}</strong>
           <span>{order.order_no}</span>
         </header>
         <ul>
@@ -9402,7 +10291,7 @@ function CustomerWelcome({
                   .toUpperCase()}
               </span>
               <div>
-                <strong>{member.name || "Sedang ditentukan"}</strong>
+                <strong>{member.name || t("Sedang ditentukan", "Being assigned")}</strong>
                 <small>{member.role}</small>
               </div>
             </li>
@@ -9411,7 +10300,7 @@ function CustomerWelcome({
         <div className="team-actions">
           {onContactSupport && (
             <button type="button" className="primary" onClick={onContactSupport}>
-              <MessageCircle size={14} /> Chat dengan tim
+              <MessageCircle size={14} /> {t("Chat dengan tim", "Chat with the team")}
             </button>
           )}
           {waNumber && (
@@ -9442,12 +10331,15 @@ function Dashboard({
   setGuestsOpen,
   setPreviewOpen,
   teamEdit = null,
+  siteStatus = "Draft",
   customerName = "",
   onContactSupport,
   onOrdersChanged,
   flash,
 }: {
   customerName?: string;
+  /** Status website nyata (Published/Draft), bukan label tetap. */
+  siteStatus?: string;
   onContactSupport?: () => void;
   onOrdersChanged?: () => void;
   flash?: (message: string) => void;
@@ -9466,6 +10358,8 @@ function Dashboard({
   setGuestsOpen: (value: boolean) => void;
   setPreviewOpen: (value: boolean) => void;
 }) {
+  const t = useT();
+  const [lang] = useSiteLang();
   const activeDesign = designs.length
     ? designs.find((design) =>
         design.sections.some((section) => section.id === selectedCanvasId),
@@ -9503,42 +10397,12 @@ function Dashboard({
       canvasGuests.filter((guest) => guest.status !== "Menunggu").length,
   );
   const responseCount = canvasGuests.length;
-  const readinessChecks = [
-    ["Website title", Boolean(siteTitle.trim())],
-    ["Public URL", Boolean(slug.trim())],
-    ["Canvas", sections.length > 0],
-    [
-      "Buka Undangan",
-      sections.some((section) =>
-        section.columns.some((column) =>
-          column.features.some(
-            (feature) => feature.type === "invitation-cover",
-          ),
-        ),
-      ),
-    ],
-    [
-      "Event detail",
-      sections.some((section) =>
-        section.columns.some((column) =>
-          column.features.some((feature) => feature.type === "event"),
-        ),
-      ),
-    ],
-    [
-      "Location",
-      sections.some((section) =>
-        section.columns.some((column) =>
-          column.features.some((feature) => feature.type === "location"),
-        ),
-      ),
-    ],
-    ["Guest list", sections.some((section) => section.invitees.length > 0)],
-  ] as [string, boolean][];
-  const readinessDone = readinessChecks.filter(([, done]) => done).length;
-  const readinessPercent = Math.round(
-    (readinessDone / readinessChecks.length) * 100,
-  );
+  // QA 15 TC-360 — perhitungan yang sama dengan Pesanan Saya.
+  const readiness = websiteReadiness(sections, siteTitle, slug, lang);
+  const readinessChecks = readiness.checks;
+  const readinessDone = readiness.done;
+  const readinessPercent = readiness.percent;
+  const sitePublished = siteStatus === "Published";
   const activityData = Array.from({ length: 7 }, (_, offset) => {
     const date = new Date();
     date.setHours(0, 0, 0, 0);
@@ -9550,12 +10414,16 @@ function Dashboard({
       return !Number.isNaN(ts.getTime()) && ts >= date && ts < next;
     }).length;
     return {
-      day: new Intl.DateTimeFormat("id-ID", { weekday: "short" }).format(date),
+      day: new Intl.DateTimeFormat(lang === "en" ? "en-GB" : "id-ID", {
+        weekday: "short",
+      }).format(date),
       confirmed,
     };
   });
-  const copyLink = () =>
+  const copyLink = () => {
     void navigator.clipboard?.writeText(`${window.location.origin}/${slug}`);
+    flash?.(t("Link undangan disalin.", "Invitation link copied."));
+  };
   if (!selectedCanvas) {
     // MoM 2 Nov IKR-02 — customer yang sudah membayar tidak lagi disuruh
     // "menambahkan Canvas dari menu Templates": design-nya sedang disiapkan
@@ -9569,22 +10437,33 @@ function Dashboard({
           <Layers3 size={34} />
           {paidOrder ? (
             <>
-              <h2>Design Anda sedang disiapkan</h2>
+              <h2>{t("Design Anda sedang disiapkan", "Your design is being prepared")}</h2>
               <p>
-                Web Designer sedang menyiapkan undangan dari template{" "}
-                <strong>{paidOrder.template_name || "yang Anda pesan"}</strong>{" "}
-                ({paidOrder.order_no}). Anda akan diberi tahu lewat live chat
-                begitu canvas siap diedit.
+                {t(
+                  "Web Designer sedang menyiapkan undangan dari template",
+                  "Our Web Designer is preparing your invitation from the template",
+                )}{" "}
+                <strong>
+                  {paidOrder.template_name || t("yang Anda pesan", "you ordered")}
+                </strong>{" "}
+                ({paidOrder.order_no}).{" "}
+                {t(
+                  "Anda akan diberi tahu lewat live chat begitu canvas siap diedit.",
+                  "We will let you know via live chat as soon as it is ready to edit.",
+                )}
               </p>
               <button className="secondary-btn" onClick={() => setView("my-orders")}>
-                Lihat status order
+                {t("Lihat status order", "View order status")}
               </button>
             </>
           ) : (
             <>
-              <h2>Belum ada Canvas</h2>
+              <h2>{t("Belum ada undangan", "No invitation yet")}</h2>
               <p>
-                Pilih template di katalog untuk mulai membangun website.
+                {t(
+                  "Pilih template di katalog untuk mulai membangun website.",
+                  "Choose a template in the catalog to start building your website.",
+                )}
               </p>
             </>
           )}
@@ -9599,24 +10478,26 @@ function Dashboard({
         <div className="team-edit-banner" role="status">
           <Users size={16} />
           <span>
-            <strong>{teamEdit.name}</strong> sedang membantu mengedit undangan
-            Anda · terakhir{" "}
-            {new Date(teamEdit.at).toLocaleString("id-ID", {
+            <strong>{teamEdit.name}</strong>{" "}
+            {t("sedang membantu mengedit undangan Anda · terakhir", "is helping edit your invitation · last edited")}{" "}
+            {new Date(teamEdit.at).toLocaleString(lang === "en" ? "en-GB" : "id-ID", {
               dateStyle: "medium",
               timeStyle: "short",
             })}
-            . Ada yang ingin diubah? Balas lewat chat.
+            .{" "}
+            {t("Ada yang ingin diubah? Balas lewat chat.", "Want something changed? Reply via chat.")}
           </span>
         </div>
       )}
       <div className="page-heading">
         <div>
           <div className="eyebrow">{timeGreeting().toUpperCase()}</div>
-          <h1>Wedding dashboard</h1>
+          <h1>{t("Dashboard pernikahan", "Wedding dashboard")}</h1>
           <p>
-            {activeDesign
-              ? "Ringkasan undangan, daftar tamu, dan RSVP Anda secara real-time."
-              : "Data di bawah mengikuti Canvas yang dipilih secara real-time."}
+            {t(
+              "Ringkasan undangan, daftar tamu, dan RSVP Anda secara real-time.",
+              "A real-time overview of your invitation, guest list, and RSVPs.",
+            )}
           </p>
         </div>
         <div className="heading-actions">
@@ -9626,7 +10507,7 @@ function Dashboard({
           {activeDesign ? (
             designs.length > 1 && (
               <label className="canvas-dashboard-select">
-                <span>Undangan</span>
+                <span>{t("Undangan", "Invitation")}</span>
                 <select
                   value={selectedCanvas.id}
                   onChange={(event) => setSelectedCanvasId(event.target.value)}
@@ -9668,7 +10549,7 @@ function Dashboard({
               setView("editor");
             }}
           >
-            <WandSparkles size={17} /> Edit Canvas
+            <WandSparkles size={17} /> {t("Edit Undangan", "Edit Invitation")}
           </button>
         </div>
       </div>
@@ -9698,16 +10579,17 @@ function Dashboard({
           <CanvasThumbnail section={selectedCanvas} title={siteTitle} />
         )}
         <div className="site-status-info">
-          <div className="published-badge">
+          <div className={`published-badge${sitePublished ? "" : " is-draft"}`}>
             <span />
-            Published
+            {sitePublished ? t("Terbit", "Published") : t("Draf", "Draft")}
           </div>
           <h3>{siteTitle}</h3>
           <p>
             {activeDesign ? (
               <>
                 {activeDesign.name} · ikrarku.id/{slug} · {sections.length}{" "}
-                canvas · {featureCount} fitur
+                {t("halaman", sections.length === 1 ? "section" : "sections")} ·{" "}
+                {featureCount} {t("fitur", featureCount === 1 ? "feature" : "features")}
               </>
             ) : (
               <>
@@ -9719,21 +10601,22 @@ function Dashboard({
           </p>
           <div className="inline-actions">
             <button onClick={() => setPreviewOpen(true)}>
-              <Eye size={16} /> Preview
+              <Eye size={16} /> {t("Pratinjau", "Preview")}
             </button>
             <button onClick={copyLink}>
-              <Copy size={16} /> Copy link
+              <Copy size={16} /> {t("Salin link", "Copy link")}
             </button>
           </div>
         </div>
         <div className="site-progress">
-          <span>Website readiness</span>
+          <span>{t("Kesiapan website", "Website readiness")}</span>
           <strong>{readinessPercent}%</strong>
           <div className="progress">
             <i style={{ width: `${readinessPercent}%` }} />
           </div>
           <small>
-            {readinessDone}/{readinessChecks.length} setup penting selesai
+            {readinessDone}/{readinessChecks.length}{" "}
+            {t("setup penting selesai", "key setup steps done")}
           </small>
           <div className="readiness-mini-list">
             {readinessChecks.map(([label, done]) => (
@@ -9751,10 +10634,12 @@ function Dashboard({
         >
           <PackageCheck size={20} />
           <div>
-            <strong>Project & order Anda</strong>
+            <strong>{t("Pesanan Anda", "Your order")}</strong>
             <span>
-              {orders[0].order_no} · {orders[0].payment_status} ·{" "}
-              {orders[0].order_status}
+              {/* QA 15 TC-360 — status ditampilkan dengan label yang sama
+                  seperti di Pesanan Saya. */}
+              {orders[0].order_no} · {customerPaymentLabel(orders[0], lang)} ·{" "}
+              {customerProgressLabel(orders[0], lang, sitePublished)}
             </span>
           </div>
           <ArrowRight size={17} />
@@ -9763,27 +10648,27 @@ function Dashboard({
       <div className="stats-grid">
         <Stat
           icon={Users}
-          label="Tamu diundang"
+          label={t("Tamu diundang", "Invited guests")}
           value={String(invited)}
-          note={activeDesign ? "Berdasarkan daftar tamu" : "Berdasarkan list Canvas"}
+          note={t("Berdasarkan daftar tamu", "Based on the guest list")}
         />
         <Stat
           icon={Check}
-          label="Hadir"
+          label={t("Hadir", "Attending")}
           value={String(hadir)}
-          note={`${responseCount ? Math.round((hadir / Math.max(invited, 1)) * 100) : 0}% dari undangan`}
+          note={`${responseCount ? Math.round((hadir / Math.max(invited, 1)) * 100) : 0}% ${t("dari undangan", "of invited")}`}
         />
         <Stat
           icon={Clock3}
-          label="Menunggu"
+          label={t("Menunggu", "Pending")}
           value={String(menunggu)}
-          note="Belum memberikan respons"
+          note={t("Belum memberikan respons", "No response yet")}
         />
         <Stat
           icon={X}
-          label="Tidak hadir"
+          label={t("Tidak hadir", "Not attending")}
           value={String(tidakHadir)}
-          note="Respons declined"
+          note={t("Menolak undangan", "Declined")}
         />
       </div>
       <div className="dashboard-grid">
@@ -9791,21 +10676,21 @@ function Dashboard({
           <div className="panel-head">
             <div>
               <h3>
-                RSVP activity ·{" "}
+                {t("Aktivitas RSVP", "RSVP activity")} ·{" "}
                 {activeDesign ? activeDesign.name : selectedCanvas.name}
               </h3>
               <p>
-                {activeDesign
-                  ? "Aktivitas respons pada undangan Anda"
-                  : "Aktivitas respons pada Canvas terpilih"}
+                {t("Aktivitas respons pada undangan Anda", "Responses to your invitation")}
               </p>
             </div>
             <span className="data-live">
-              <i /> Live data
+              <i /> {t("Data langsung", "Live data")}
             </span>
           </div>
           <div className="chart-wrap">
-            <Suspense fallback={<div role="status">Memuat grafik...</div>}>
+            <Suspense
+              fallback={<div role="status">{t("Memuat grafik...", "Loading chart...")}</div>}
+            >
               <ActivityChart data={activityData} />
             </Suspense>
           </div>
@@ -9813,17 +10698,17 @@ function Dashboard({
         <div className="panel recent-panel">
           <div className="panel-head">
             <div>
-              <h3>RSVP terbaru</h3>
+              <h3>{t("RSVP terbaru", "Latest RSVPs")}</h3>
               <p>
-                {canvasGuests.length} respons pada{" "}
-                {activeDesign ? "undangan ini" : "Canvas ini"}
+                {canvasGuests.length}{" "}
+                {t("respons pada undangan ini", "responses to this invitation")}
               </p>
             </div>
             <button
               className="text-btn interactive-link"
               onClick={() => setGuestsOpen(true)}
             >
-              Lihat semua
+              {t("Lihat semua", "View all")}
             </button>
           </div>
           {canvasGuests.slice(0, 4).map((guest, index) => (
@@ -9836,10 +10721,12 @@ function Dashboard({
           {canvasGuests.length === 0 && (
             <div className="panel-empty">
               <Users size={24} />
-              <strong>Belum ada respons</strong>
+              <strong>{t("Belum ada respons", "No responses yet")}</strong>
               <span>
-                Respons RSVP akan muncul setelah tamu mengisi form pada{" "}
-                {activeDesign ? "undangan" : "Canvas"} ini.
+                {t(
+                  "Respons RSVP akan muncul setelah tamu mengisi form pada undangan ini.",
+                  "RSVP responses will appear once guests fill in the form on this invitation.",
+                )}
               </span>
             </div>
           )}
@@ -10374,18 +11261,28 @@ function Stat({
   );
 }
 
+const RSVP_STATUS_EN: Record<string, string> = {
+  Hadir: "Attending",
+  "Tidak hadir": "Not attending",
+  Menunggu: "Pending",
+};
 function GuestRow({ guest, index }: { guest: Guest; index: number }) {
+  const [lang] = useSiteLang();
+  const status =
+    lang === "en" ? RSVP_STATUS_EN[guest.status] || guest.status : guest.status;
   return (
     <div className="guest-row">
       <div className={`guest-avatar g${index % 4}`}>{guest.initials}</div>
       <div>
         <strong>{guest.name}</strong>
-        <span>{guest.pax ? `${guest.pax} tamu` : guest.status}</span>
+        <span>
+          {guest.pax ? `${guest.pax} ${lang === "en" ? "guests" : "tamu"}` : status}
+        </span>
       </div>
       <div
         className={`guest-status ${guest.status === "Hadir" ? "yes" : guest.status === "Tidak hadir" ? "no" : "wait"}`}
       >
-        {guest.status}
+        {status}
       </div>
       <small>{guest.time}</small>
     </div>
@@ -11207,6 +12104,9 @@ function Templates({
   publicTemplates = [],
   onContactSupport,
   onOpenTemplate,
+  onPreviewDesign,
+  publicUrl,
+  flash,
 }: {
   role: Role;
   siteTitle: string;
@@ -11253,7 +12153,15 @@ function Templates({
   onContactSupport?: () => void;
   /** TC-224 — buka halaman detail template (upselling). */
   onOpenTemplate?: (template: Template) => void;
+  /** QA 15 TC-363 — tombol Preview & Copy link (customer). */
+  onPreviewDesign?: (sectionId: string) => void;
+  publicUrl?: string;
+  flash?: (message: string) => void;
 }) {
+  const tr = useT();
+  // Teks customer mengikuti bahasa pilihan; tampilan staf tetap seperti
+  // sebelumnya.
+  const t = (id: string, en: string) => (role === "User" ? tr(id, en) : id);
   const [filter, setFilter] = useState("All");
   const [query, setQuery] = useState("");
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
@@ -11286,11 +12194,16 @@ function Templates({
     <div className="page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">DESIGN LIBRARY</div>
-          <h1>Template & Canvas</h1>
+          <div className="eyebrow">
+            {role === "User" ? tr("PUSTAKA DESAIN", "DESIGN LIBRARY") : "DESIGN LIBRARY"}
+          </div>
+          <h1>{t("Template & Canvas", "Templates & Canvas")}</h1>
           <p>
             {role === "User"
-              ? "Pilih template dan kelola design website Anda."
+              ? t(
+                  "Kelola undangan Anda dan lihat desain lainnya.",
+                  "Manage your invitation and explore other designs.",
+                )
               : "Kelola template website client tanpa menampilkan struktur internal sebagai kartu terpisah."}
           </p>
         </div>
@@ -11326,12 +12239,17 @@ function Templates({
       <section className="canvas-manager-section">
         <div className="section-heading">
           <div>
-            <span>WEBSITE DESIGN</span>
-            <h2>Template pada website</h2>
+            <span>
+              {role === "User" ? tr("UNDANGAN ANDA", "YOUR INVITATION") : "WEBSITE DESIGN"}
+            </span>
+            <h2>{t("Template pada website", "Templates on your website")}</h2>
             <p>
-              Satu card mewakili satu template/design yang digunakan. Canvas,
-              Column, dan Feature tetap menjadi struktur internal dan hanya
-              terlihat saat Edit.
+              {role === "User"
+                ? t(
+                    "Satu card mewakili satu undangan yang Anda pesan. Klik Edit untuk mengubah isi, Pratinjau untuk melihat hasilnya, atau Salin link untuk dibagikan.",
+                    "Each card is one invitation you ordered. Click Edit to change it, Preview to see the result, or Copy link to share it.",
+                  )
+                : "Satu card mewakili satu template/design yang digunakan. Canvas, Column, dan Feature tetap menjadi struktur internal dan hanya terlihat saat Edit."}
             </p>
           </div>
         </div>
@@ -11378,8 +12296,13 @@ function Templates({
                 >
                   <div className="website-canvas-cover pending">
                     <Clock3 size={26} />
-                    <strong>Sedang disiapkan</strong>
-                    <span>Web Designer sedang mengerjakan design Anda.</span>
+                    <strong>{t("Sedang disiapkan", "Being prepared")}</strong>
+                    <span>
+                      {t(
+                        "Web Designer sedang mengerjakan design Anda.",
+                        "Our Web Designer is working on your design.",
+                      )}
+                    </span>
                     <span className="canvas-index">
                       {String(index + 1).padStart(2, "0")}
                     </span>
@@ -11391,9 +12314,12 @@ function Templates({
                         {design.orderStatus}
                       </span>
                       <h3>{design.name}</h3>
-                      <p>Canvas belum tersedia untuk diedit.</p>
+                      <p>{t("Canvas belum tersedia untuk diedit.", "Not available to edit yet.")}</p>
                       <small>
-                        Anda akan diberi tahu lewat live chat begitu design siap.
+                        {t(
+                          "Anda akan diberi tahu lewat live chat begitu design siap.",
+                          "We will let you know via live chat when it is ready.",
+                        )}
                       </small>
                     </div>
                   </div>
@@ -11421,17 +12347,32 @@ function Templates({
                           "Custom Design" membingungkan bila template yang
                           dibeli sudah tidak tampil di katalog. */}
                       {role === "User"
-                        ? "Template dibeli"
+                        ? t("Template dibeli", "Purchased template")
                         : design.template
                           ? "Applied Template"
                           : "Custom Design"}{" "}
                       · {design.name}
                     </span>
                     <h3>{siteTitle}</h3>
-                    <p>{design.sections.length} Canvas di dalam design</p>
-                    <small>
-                      {totalFeatures} feature · {totalInvitees} undangan
-                    </small>
+                    {role === "User" ? (
+                      <>
+                        <p>
+                          {design.orderNo
+                            ? `${t("Pesanan", "Order")} ${design.orderNo}`
+                            : design.name}
+                        </p>
+                        <small>
+                          {totalInvitees} {t("tamu diundang", "invited guests")}
+                        </small>
+                      </>
+                    ) : (
+                      <>
+                        <p>{design.sections.length} Canvas di dalam design</p>
+                        <small>
+                          {totalFeatures} feature · {totalInvitees} undangan
+                        </small>
+                      </>
+                    )}
                   </div>
                   <div className="website-canvas-actions">
                     {/* QA 14 (SSBug1) — Copy & Delete tidak tersedia untuk
@@ -11448,8 +12389,23 @@ function Templates({
                         editCanvas(design.sections[0].id, design.template)
                       }
                     >
-                      <WandSparkles size={15} /> Edit
+                      <WandSparkles size={15} /> {t("Edit", "Edit")}
                     </button>
+                    {onPreviewDesign && (
+                      <button onClick={() => onPreviewDesign(design.sections[0].id)}>
+                        <Eye size={15} /> {t("Pratinjau", "Preview")}
+                      </button>
+                    )}
+                    {publicUrl && (
+                      <button
+                        onClick={() => {
+                          void navigator.clipboard?.writeText(publicUrl);
+                          flash?.(t("Link undangan disalin.", "Invitation link copied."));
+                        }}
+                      >
+                        <Link2 size={15} /> {t("Salin link", "Copy link")}
+                      </button>
+                    )}
                     {role !== "User" && (
                       <button
                         className="danger"
@@ -11460,7 +12416,7 @@ function Templates({
                     )}
                     {onContactSupport && (
                       <button onClick={onContactSupport}>
-                        <Headphones size={15} /> Hubungi Support
+                        <Headphones size={15} /> {t("Hubungi Support", "Contact support")}
                       </button>
                     )}
                   </div>
@@ -11489,11 +12445,13 @@ function Templates({
           <section className="upsell-catalog">
             <div className="section-heading">
               <div>
-                <span>KATALOG</span>
-                <h2>Lengkapi momen Anda dengan desain lain</h2>
+                <span>{t("KATALOG", "CATALOG")}</span>
+                <h2>{t("Lengkapi momen Anda dengan desain lain", "Complete your moments with other designs")}</h2>
                 <p>
-                  Untuk acara lain — lamaran, resepsi kedua, atau ulang tahun
-                  pernikahan. Lihat detail dan pesan langsung dari sini.
+                  {t(
+                    "Untuk acara lain — lamaran, resepsi kedua, atau ulang tahun pernikahan. Lihat detail dan pesan langsung dari sini.",
+                    "For other occasions — engagement, a second reception, or an anniversary. View details and order right here.",
+                  )}
                 </p>
               </div>
             </div>
@@ -11515,7 +12473,7 @@ function Templates({
                     )}
                     {template.recommended && (
                       <em>
-                        <Star size={11} /> Rekomendasi
+                        <Star size={11} /> {t("Rekomendasi", "Recommended")}
                       </em>
                     )}
                   </div>
@@ -11523,14 +12481,14 @@ function Templates({
                     <strong>{template.name}</strong>
                     <span>
                       {template.category} ·{" "}
-                      {template.price ? formatRupiah(template.price) : "Gratis"}
+                      {template.price ? formatRupiah(template.price) : t("Gratis", "Free")}
                     </span>
                   </div>
                   <button
                     className="secondary-btn"
                     onClick={() => onOpenTemplate(template)}
                   >
-                    Lihat & pesan <ArrowRight size={14} />
+                    {t("Lihat & pesan", "View & order")} <ArrowRight size={14} />
                   </button>
                 </article>
               ))}
@@ -15038,6 +15996,7 @@ function FeatureInspector({
                 </div>
               </>
             )}
+            <DateFormatEditor feature={feature} update={update} />
             <CalendarButtonEditor feature={feature} update={update} />
           </>
         )}
@@ -15348,6 +16307,51 @@ function FeatureInspector({
           </label>
         )}
         {feature.type === "event" && (
+          <div className="bank-logo-style">
+            <strong>Ikon Event</strong>
+            <label>
+              Ikon
+              <select
+                value={feature.eventIcon || "calendar"}
+                onChange={(event) =>
+                  update({ eventIcon: event.target.value as Feature["eventIcon"] })
+                }
+              >
+                <option value="calendar">Kalender</option>
+                <option value="heart">Hati</option>
+                <option value="rings">Cincin / permata</option>
+                <option value="sparkles">Kilau</option>
+                <option value="clock">Jam</option>
+                <option value="none">Tanpa ikon (hapus)</option>
+              </select>
+            </label>
+            {feature.eventIcon !== "none" && (
+              <div className="two-inputs">
+                <label>
+                  Ukuran ikon <span>{feature.eventIconSize || 25}px</span>
+                  <input
+                    type="range"
+                    min={14}
+                    max={72}
+                    value={feature.eventIconSize || 25}
+                    onChange={(event) =>
+                      update({ eventIconSize: Number(event.target.value) })
+                    }
+                  />
+                </label>
+                <label>
+                  Warna ikon
+                  <ColorInput
+                    value={feature.eventIconColor}
+                    fallback="#125946"
+                    onChange={(eventIconColor) => update({ eventIconColor })}
+                  />
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+        {feature.type === "event" && (
           <EventItemsEditor feature={feature} update={update} />
         )}
         {feature.type === "event" && (
@@ -15376,6 +16380,7 @@ function FeatureInspector({
                 </label>
               </>
             )}
+            <DateFormatEditor feature={feature} update={update} />
             <CalendarButtonEditor feature={feature} update={update} />
           </>
         )}
@@ -15676,7 +16681,27 @@ function FeatureInspector({
                   </button>
                 ))}
               </div>
+              <span className="layout-help">
+                Atas/Tengah/Bawah memakai sisa ruang canvas. Bila canvas tidak
+                lebih tinggi dari isinya, ketiganya terlihat sama — naikkan
+                Minimum height atau pakai geser manual di bawah.
+              </span>
             </label>
+            {!feature.freePosition && (
+              <NumberRange
+                label="Geser manual atas-bawah"
+                unit="px"
+                min={-400}
+                max={400}
+                typeMin={-3000}
+                typeMax={3000}
+                value={feature.placementOffsetY ?? 0}
+                onChange={(placementOffsetY) =>
+                  update({ placementOffsetY: placementOffsetY || undefined })
+                }
+                onReset={() => update({ placementOffsetY: undefined })}
+              />
+            )}
             <label>
               Heading font size <span>{feature.fontSize}px</span>
               <input
@@ -16698,6 +17723,7 @@ function RsvpConfirmationPage({
   siteTitle: string;
   flash: (message: string) => void;
 }) {
+  const t = useT();
   const [canvasFilter, setCanvasFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const byDesign = designs.length > 0;
@@ -16732,7 +17758,7 @@ function RsvpConfirmationPage({
     .reduce((total, guest) => total + (guest.pax || 0), 0);
   const exportCsv = () => {
     if (!visible.length) {
-      flash("Belum ada konfirmasi RSVP untuk diekspor.");
+      flash(t("Belum ada konfirmasi RSVP untuk diekspor.", "There are no RSVP confirmations to export yet."));
       return;
     }
     const escape = (value: string) => `"${String(value).replace(/"/g, '""')}"`;
@@ -16756,43 +17782,45 @@ function RsvpConfirmationPage({
     link.download = `rsvp-${(siteTitle || "website").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`;
     link.click();
     URL.revokeObjectURL(link.href);
-    flash(`${visible.length} konfirmasi RSVP diekspor.`);
+    flash(t(`${visible.length} konfirmasi RSVP diekspor.`, `${visible.length} RSVP confirmations exported.`));
   };
   return (
     <div className="page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">RSVP CONFIRMATION</div>
-          <h1>Konfirmasi kehadiran tamu</h1>
+          <div className="eyebrow">{t("KONFIRMASI RSVP", "RSVP CONFIRMATION")}</div>
+          <h1>{t("Konfirmasi kehadiran tamu", "Guest attendance confirmations")}</h1>
           <p>
-            Rekap jawaban RSVP dari undangan Anda, lengkap dengan jumlah pax
-            untuk kebutuhan katering dan seating.
+            {t(
+              "Rekap jawaban RSVP dari undangan Anda, lengkap dengan jumlah pax untuk kebutuhan katering dan seating.",
+              "A summary of RSVP answers from your invitation, including head counts for catering and seating.",
+            )}
           </p>
         </div>
         <button className="secondary-btn" onClick={exportCsv}>
-          <Download size={16} /> Export CSV
+          <Download size={16} /> {t("Ekspor CSV", "Export CSV")}
         </button>
       </div>
       <section className="invitee-summary">
         <article>
           <CheckCircle size={20} />
           <strong>{count("Hadir")}</strong>
-          <span>Hadir</span>
+          <span>{t("Hadir", "Attending")}</span>
         </article>
         <article>
           <X size={20} />
           <strong>{count("Tidak hadir")}</strong>
-          <span>Tidak hadir</span>
+          <span>{t("Tidak hadir", "Not attending")}</span>
         </article>
         <article>
           <Clock3 size={20} />
           <strong>{count("Menunggu")}</strong>
-          <span>Menunggu</span>
+          <span>{t("Menunggu", "Pending")}</span>
         </article>
         <article>
           <Users size={20} />
           <strong>{totalPax}</strong>
-          <span>Total pax hadir</span>
+          <span>{t("Total pax hadir", "Total attending pax")}</span>
         </article>
       </section>
       <div className="rsvp-filter-bar">
@@ -16801,12 +17829,12 @@ function RsvpConfirmationPage({
           // per undangan yang dibeli.
           designs.length > 1 && (
             <label>
-              Undangan
+              {t("Undangan", "Invitation")}
               <select
                 value={canvasFilter}
                 onChange={(event) => setCanvasFilter(event.target.value)}
               >
-                <option value="all">Semua undangan</option>
+                <option value="all">{t("Semua undangan", "All invitations")}</option>
                 {designs.map((design) => (
                   <option key={design.id} value={design.id}>
                     {designLabel(design)}
@@ -16837,13 +17865,15 @@ function RsvpConfirmationPage({
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value)}
           >
-            <option value="all">Semua status</option>
-            <option value="Hadir">Hadir</option>
-            <option value="Tidak hadir">Tidak hadir</option>
-            <option value="Menunggu">Menunggu</option>
+            <option value="all">{t("Semua status", "All statuses")}</option>
+            <option value="Hadir">{t("Hadir", "Attending")}</option>
+            <option value="Tidak hadir">{t("Tidak hadir", "Not attending")}</option>
+            <option value="Menunggu">{t("Menunggu", "Pending")}</option>
           </select>
         </label>
-        <span className="rsvp-filter-count">{visible.length} konfirmasi</span>
+        <span className="rsvp-filter-count">
+          {visible.length} {t("konfirmasi", "confirmations")}
+        </span>
       </div>
       {visible.length ? (
         <div className="rsvp-confirmation-list">
@@ -16854,10 +17884,12 @@ function RsvpConfirmationPage({
       ) : (
         <div className="empty-state">
           <Users size={32} />
-          <h2>Belum ada konfirmasi</h2>
+          <h2>{t("Belum ada konfirmasi", "No confirmations yet")}</h2>
           <p>
-            Konfirmasi dari tamu akan muncul di sini begitu mereka mengisi form
-            RSVP pada undangan Anda.
+            {t(
+              "Konfirmasi dari tamu akan muncul di sini begitu mereka mengisi form RSVP pada undangan Anda.",
+              "Guest confirmations will appear here as soon as they fill in the RSVP form on your invitation.",
+            )}
           </p>
         </div>
       )}
@@ -16909,6 +17941,7 @@ function InviteeManagementPage({
   flash: (message: string) => void;
   slug?: string;
 }) {
+  const t = useT();
   const activeDesign = designs.length
     ? designs.find((design) =>
         design.sections.some((item) => item.id === selectedSectionId),
@@ -16926,8 +17959,13 @@ function InviteeManagementPage({
     return (
       <div className="invitee-page empty-state">
         <Users size={34} />
-        <h2>Belum ada Canvas</h2>
-        <p>Buat Canvas terlebih dahulu untuk menambahkan daftar undangan.</p>
+        <h2>{t("Belum ada undangan", "No invitation yet")}</h2>
+        <p>
+          {t(
+            "Daftar tamu tersedia setelah undangan Anda siap.",
+            "The guest list is available once your invitation is ready.",
+          )}
+        </p>
       </div>
     );
   const add = () => {
@@ -16947,7 +17985,7 @@ function InviteeManagementPage({
     setName("");
     setEmail("");
     setPhone("");
-    flash("Tamu ditambahkan ke daftar undangan.");
+    flash(t("Tamu ditambahkan ke daftar undangan.", "Guest added to the list."));
   };
   const importCsv = async (file?: File) => {
     if (!file) return;
@@ -16956,7 +17994,12 @@ function InviteeManagementPage({
     const headers = rows[0].split(",").map((item) => item.trim().toLowerCase());
     const at = (key: string) => headers.indexOf(key);
     if (at("name") < 0) {
-      flash("CSV wajib memiliki header name,email,phone,city.");
+      flash(
+        t(
+          "CSV wajib memiliki header name,email,phone,city.",
+          "The CSV must have the header name,email,phone,city.",
+        ),
+      );
       return;
     }
     const imported = rows
@@ -16975,7 +18018,7 @@ function InviteeManagementPage({
       })
       .filter((item) => item.name);
     updateSection(section.id, { invitees: [...section.invitees, ...imported] });
-    flash(`${imported.length} undangan berhasil diimpor.`);
+    flash(t(`${imported.length} undangan berhasil diimpor.`, `${imported.length} guests imported.`));
   };
   const saveCsv = (filename: string, content: string) => {
     const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
@@ -16994,7 +18037,7 @@ function InviteeManagementPage({
   // format kosong, jadi daftar yang sudah diisi tidak bisa dibawa keluar.
   const exportCsv = () => {
     if (!section.invitees.length) {
-      flash("Belum ada undangan pada Canvas ini untuk diekspor.");
+      flash(t("Belum ada tamu untuk diekspor.", "There are no guests to export yet."));
       return;
     }
     const escape = (value: string) => `"${String(value || "").replace(/"/g, '""')}"`;
@@ -17010,27 +18053,29 @@ function InviteeManagementPage({
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-");
     saveCsv(`list-undangan-${safeName}.csv`, rows.join("\n"));
-    flash(`${section.invitees.length} undangan diekspor.`);
+    flash(t(`${section.invitees.length} undangan diekspor.`, `${section.invitees.length} guests exported.`));
   };
   return (
     <div className="invitee-page">
       <header>
         <div>
-          <span>LIST UNDANGAN</span>
+          <span>{t("LIST UNDANGAN", "GUEST LIST")}</span>
           <h2>
             {activeDesign
-              ? `Daftar tamu · ${activeDesign.name}`
-              : "Guest management per Canvas"}
+              ? `${t("Daftar tamu", "Guest list")} · ${activeDesign.name}`
+              : t("Daftar tamu", "Guest list")}
           </h2>
           <p>
-            Daftar ini digunakan untuk personalisasi Buka Undangan dan pelacakan
-            RSVP.
+            {t(
+              "Daftar ini digunakan untuk personalisasi Buka Undangan dan pelacakan RSVP.",
+              "This list personalises the invitation cover and tracks RSVPs.",
+            )}
           </p>
         </div>
         {activeDesign ? (
           designs.length > 1 && (
             <label>
-              Undangan
+              {t("Undangan", "Invitation")}
               <select
                 value={section.id}
                 onChange={(event) => {
@@ -17074,14 +18119,14 @@ function InviteeManagementPage({
         <article>
           <Users size={20} />
           <strong>{section.invitees.length}</strong>
-          <span>Total undangan</span>
+          <span>{t("Total undangan", "Total guests")}</span>
         </article>
         <article>
           <MailOpen size={20} />
           <strong>
             {section.invitees.filter((item) => item.email).length}
           </strong>
-          <span>Memiliki email</span>
+          <span>{t("Memiliki email", "With email")}</span>
         </article>
         <article>
           <MapPin size={20} />
@@ -17091,7 +18136,7 @@ function InviteeManagementPage({
                 .size
             }
           </strong>
-          <span>Kota</span>
+          <span>{t("Kota", "Cities")}</span>
         </article>
       </section>
       <section className="invitee-editor-card">
@@ -17099,22 +18144,25 @@ function InviteeManagementPage({
           <input
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Nama undangan"
+            placeholder={t("Nama tamu", "Guest name")}
+            aria-label={t("Nama tamu", "Guest name")}
           />
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}
-            placeholder="Email (opsional)"
+            placeholder={t("Email (opsional)", "Email (optional)")}
+            aria-label={t("Email (opsional)", "Email (optional)")}
           />
           <input
             value={phone}
             onChange={(event) => setPhone(event.target.value)}
-            placeholder="No. WhatsApp (opsional)"
+            placeholder={t("No. WhatsApp (opsional)", "WhatsApp no. (optional)")}
+            aria-label={t("No. WhatsApp (opsional)", "WhatsApp no. (optional)")}
             inputMode="tel"
           />
           <button onClick={add}>
             <UserPlus size={15} />
-            Add
+            {t("Tambah", "Add")}
           </button>
         </div>
         <input
@@ -17128,23 +18176,30 @@ function InviteeManagementPage({
         <div className="csv-actions">
           <button onClick={() => csvRef.current?.click()}>
             <Upload size={14} />
-            Import CSV
+            {t("Impor CSV", "Import CSV")}
           </button>
           <button onClick={exportCsv}>
             <Download size={14} />
-            Export CSV
+            {t("Ekspor CSV", "Export CSV")}
           </button>
           <button onClick={download}>
             <FileText size={14} />
-            Download Format
+            {t("Unduh format", "Download format")}
           </button>
         </div>
         <div className="invitee-link-note">
           <Link2 size={15} />
           <p>
-            <strong>Setiap tamu memiliki link personal.</strong> Link dibentuk
-            dari alamat website ditambah parameter <code>?to=</code> berisi nama
-            tamu, sehingga nama pada Buka Undangan menyesuaikan penerima.
+            <strong>{t("Setiap tamu memiliki link personal.", "Every guest gets a personal link.")}</strong>{" "}
+            {t(
+              "Link dibentuk dari alamat website ditambah parameter",
+              "The link is your website address plus the",
+            )}{" "}
+            <code>?to=</code>{" "}
+            {t(
+              "berisi nama tamu, sehingga nama pada Buka Undangan menyesuaikan penerima.",
+              "parameter with the guest name, so the invitation cover greets each guest by name.",
+            )}
           </p>
         </div>
         {/* QA 14 TC-326 — template pesan WhatsApp untuk undangan digital
@@ -17152,11 +18207,14 @@ function InviteeManagementPage({
         <div className="wa-template-card">
           <div className="wa-template-head">
             <div>
-              <strong>Template pesan WhatsApp</strong>
+              <strong>{t("Template pesan WhatsApp", "WhatsApp message template")}</strong>
               <span>
-                Pilih jenis pesan, sesuaikan teksnya, lalu kirim lewat tombol
-                WhatsApp di tiap tamu. <code>{"{nama}"}</code> dan{" "}
-                <code>{"{link}"}</code> terisi otomatis.
+                {t(
+                  "Pilih jenis pesan, sesuaikan teksnya, lalu kirim lewat tombol WhatsApp di tiap tamu.",
+                  "Pick a message type, adjust the text, then send it with the WhatsApp button next to each guest.",
+                )}{" "}
+                <code>{"{nama}"}</code> {t("dan", "and")} <code>{"{link}"}</code>{" "}
+                {t("terisi otomatis.", "are filled in automatically.")}
               </span>
             </div>
             <div className="filter-tabs" role="tablist">
@@ -17166,7 +18224,7 @@ function InviteeManagementPage({
                 className={waMode === "invite" ? "active" : ""}
                 onClick={() => setWaMode("invite")}
               >
-                Undangan digital
+                {t("Undangan digital", "Digital invitation")}
               </button>
               <button
                 role="tab"
@@ -17174,13 +18232,13 @@ function InviteeManagementPage({
                 className={waMode === "reminder" ? "active" : ""}
                 onClick={() => setWaMode("reminder")}
               >
-                Reminder RSVP
+                {t("Reminder RSVP", "RSVP reminder")}
               </button>
             </div>
           </div>
           <div className="wa-template-body">
             <textarea
-              aria-label="Teks pesan WhatsApp"
+              aria-label={t("Teks pesan WhatsApp", "WhatsApp message text")}
               value={
                 waMode === "invite"
                   ? (section.waInviteMessage ?? DEFAULT_WA_INVITE)
@@ -17196,7 +18254,7 @@ function InviteeManagementPage({
               }
             />
             <div className="wa-template-preview">
-              <small>Pratinjau untuk tamu pertama</small>
+              <small>{t("Pratinjau untuk tamu pertama", "Preview for the first guest")}</small>
               <p className="chat-text">
                 {fillWaMessage(
                   waMode === "invite"
@@ -17217,17 +18275,17 @@ function InviteeManagementPage({
                   )
                 }
               >
-                <RotateCcw size={12} /> Kembalikan teks bawaan
+                <RotateCcw size={12} /> {t("Kembalikan teks bawaan", "Restore default text")}
               </button>
             </div>
           </div>
         </div>
         <div className="invitee-table with-link">
           <div className="invitee-table-head">
-            <span>Name</span>
+            <span>{t("Nama", "Name")}</span>
             <span>Email</span>
-            <span>Phone</span>
-            <span>Link personal</span>
+            <span>{t("Telepon", "Phone")}</span>
+            <span>{t("Link personal", "Personal link")}</span>
             <span />
           </div>
           {section.invitees.map((item) => {
@@ -17244,10 +18302,15 @@ function InviteeManagementPage({
                     onFocus={(event) => event.currentTarget.select()}
                   />
                   <button
-                    title="Salin link"
+                    title={t("Salin link", "Copy link")}
                     onClick={() => {
                       void navigator.clipboard?.writeText(personalLink);
-                      flash(`Link undangan untuk ${item.name} disalin.`);
+                      flash(
+                        t(
+                          `Link undangan untuk ${item.name} disalin.`,
+                          `Invitation link for ${item.name} copied.`,
+                        ),
+                      );
                     }}
                   >
                     <Copy size={13} />
@@ -17255,8 +18318,8 @@ function InviteeManagementPage({
                   <a
                     title={
                       waMode === "invite"
-                        ? "Kirim undangan via WhatsApp"
-                        : "Kirim reminder RSVP via WhatsApp"
+                        ? t("Kirim undangan via WhatsApp", "Send invitation via WhatsApp")
+                        : t("Kirim reminder RSVP via WhatsApp", "Send RSVP reminder via WhatsApp")
                     }
                     href={`https://wa.me/${waPhone(item.phone)}?text=${encodeURIComponent(
                       fillWaMessage(
@@ -17273,7 +18336,7 @@ function InviteeManagementPage({
                     <Send size={13} />
                   </a>
                   <a
-                    title="Buka link"
+                    title={t("Buka link", "Open link")}
                     href={personalLink}
                     target="_blank"
                     rel="noreferrer"
@@ -17297,7 +18360,7 @@ function InviteeManagementPage({
           })}
           {!section.invitees.length && (
             <div className="invitee-empty">
-              Belum ada tamu pada daftar undangan ini.
+              {t("Belum ada tamu pada daftar undangan ini.", "No guests on this list yet.")}
             </div>
           )}
         </div>
@@ -17317,12 +18380,12 @@ function InviteeManagementPage({
               link.download = "link-undangan-personal.csv";
               link.click();
               URL.revokeObjectURL(link.href);
-              flash("Semua link personal diekspor ke CSV.");
+              flash(t("Semua link personal diekspor ke CSV.", "All personal links exported to CSV."));
             }}
             disabled={!section.invitees.length}
           >
             <Download size={14} />
-            Export semua link (CSV)
+            {t("Ekspor semua link (CSV)", "Export all links (CSV)")}
           </button>
           <button
             onClick={() => {
@@ -17334,12 +18397,12 @@ function InviteeManagementPage({
                   )
                   .join("\n"),
               );
-              flash("Semua link personal disalin.");
+              flash(t("Semua link personal disalin.", "All personal links copied."));
             }}
             disabled={!section.invitees.length}
           >
             <Copy size={14} />
-            Salin semua link
+            {t("Salin semua link", "Copy all links")}
           </button>
         </div>
       </section>
@@ -17612,6 +18675,76 @@ function LoopEffectControls({
 }
 
 // Editor ornamen pojok pada section.
+/** QA 15 — slider + kotak angka. Slider untuk kasar, angka untuk presisi
+ *  (dan boleh melewati rentang slider sampai typeMin/typeMax). */
+function NumberRange({
+  label,
+  unit = "",
+  min,
+  max,
+  step = 1,
+  typeMin,
+  typeMax,
+  value,
+  onChange,
+  onReset,
+}: {
+  label: string;
+  unit?: string;
+  min: number;
+  max: number;
+  step?: number;
+  typeMin?: number;
+  typeMax?: number;
+  value: number;
+  onChange: (next: number) => void;
+  onReset?: () => void;
+}) {
+  const lo = typeMin ?? min;
+  const hi = typeMax ?? max;
+  const [draft, setDraft] = useState(String(value));
+  useEffect(() => setDraft(String(value)), [value]);
+  const commitDraft = () => {
+    const parsed = Number(draft);
+    if (!Number.isFinite(parsed)) return setDraft(String(value));
+    const next = Math.max(lo, Math.min(hi, Math.round(parsed)));
+    setDraft(String(next));
+    if (next !== value) onChange(next);
+  };
+  return (
+    <label className="range-field number-range">
+      <span className="range-head">
+        {label}
+        <span className="number-range-box">
+          <input
+            type="number"
+            inputMode="numeric"
+            aria-label={`${label} (${unit || "nilai"})`}
+            min={lo}
+            max={hi}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitDraft();
+            }}
+          />
+          {unit && <em>{unit}</em>}
+        </span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={Math.max(min, Math.min(max, value))}
+        onChange={(event) => onChange(Number(event.target.value))}
+        onDoubleClick={onReset}
+      />
+    </label>
+  );
+}
+
 function SectionDecorationEditor({
   section,
   updateLive,
@@ -17681,7 +18814,9 @@ function SectionDecorationEditor({
       <div className="layout-help">
         Ornamen ditempel di pojok atau di tengah sisi section dan bergerak
         terus-menerus. Posisinya tetap menempel ke titik tambat itu berapa pun
-        ukurannya; gunakan <strong>Geser X/Y</strong> untuk menggesernya sedikit.
+        ukurannya; gunakan <strong>Geser X/Y</strong> (ketik angka atau tombol
+        panah) untuk memindahkannya ke mana saja di canvas, termasuk canvas
+        tinggi berisi banyak fitur.
       </div>
       {items.map((item, index) => (
         <div className="extra-text-row" key={item.id}>
@@ -17798,21 +18933,19 @@ function SectionDecorationEditor({
             </label>
           </div>
           <div className="two-inputs">
-            <label className="range-field">
-              <span className="range-head">
-                Ukuran<b>{item.size}px</b>
-              </span>
-              <input
-                type="range"
-                min="60"
-                max="420"
-                step="10"
-                value={item.size}
-                onChange={(event) =>
-                  patch(item.id, { size: Number(event.target.value) })
-                }
-              />
-            </label>
+            {/* QA 15 TC-338 — batas ukuran dulu 420px; kini sampai 1600px lewat
+                slider dan bisa diketik langsung (hingga 3000px). */}
+            <NumberRange
+              label="Ukuran"
+              unit="px"
+              min={20}
+              max={1600}
+              step={5}
+              typeMin={10}
+              typeMax={3000}
+              value={item.size}
+              onChange={(size) => patch(item.id, { size })}
+            />
             <label className="range-field">
               <span className="range-head">
                 Opacity<b>{item.opacity}%</b>
@@ -17849,40 +18982,41 @@ function SectionDecorationEditor({
               </select>
             </label>
           </div>
-          {/* TC-206 — ornamen tidak lagi terkunci di titik tambatnya. */}
+          {/* TC-206 — ornamen tidak lagi terkunci di titik tambatnya.
+              QA 15 TC-337 — geseran dulu hanya ±200px, sehingga pada canvas
+              berisi banyak fitur (canvas tinggi) ornamen tidak bisa mencapai
+              tengah/bawah. Kini X ±1200px, Y ±4000px, dan nilai bisa diketik;
+              tombol panah memindahkan per 10px. */}
           <div className="two-inputs">
-            <label className="range-field">
-              <span className="range-head">
-                Geser X<b>{item.offsetX ?? 0}px</b>
-              </span>
-              <input
-                type="range"
-                min="-200"
-                max="200"
-                step="1"
-                value={item.offsetX ?? 0}
-                onChange={(event) =>
-                  patch(item.id, { offsetX: Number(event.target.value) })
-                }
-                onDoubleClick={() => patch(item.id, { offsetX: 0 })}
-              />
-            </label>
-            <label className="range-field">
-              <span className="range-head">
-                Geser Y<b>{item.offsetY ?? 0}px</b>
-              </span>
-              <input
-                type="range"
-                min="-200"
-                max="200"
-                step="1"
-                value={item.offsetY ?? 0}
-                onChange={(event) =>
-                  patch(item.id, { offsetY: Number(event.target.value) })
-                }
-                onDoubleClick={() => patch(item.id, { offsetY: 0 })}
-              />
-            </label>
+            <NumberRange
+              label="Geser X"
+              unit="px"
+              min={-1200}
+              max={1200}
+              typeMin={-5000}
+              typeMax={5000}
+              value={item.offsetX ?? 0}
+              onChange={(offsetX) => patch(item.id, { offsetX })}
+              onReset={() => patch(item.id, { offsetX: 0 })}
+            />
+            <NumberRange
+              label="Geser Y"
+              unit="px"
+              min={-4000}
+              max={4000}
+              typeMin={-10000}
+              typeMax={10000}
+              value={item.offsetY ?? 0}
+              onChange={(offsetY) => patch(item.id, { offsetY })}
+              onReset={() => patch(item.id, { offsetY: 0 })}
+            />
+          </div>
+          <div className="decor-nudge" role="group" aria-label="Geser ornamen per 10px">
+            <button type="button" title="Geser ke atas 10px" onClick={() => patch(item.id, { offsetY: (item.offsetY ?? 0) - 10 })}>↑</button>
+            <button type="button" title="Geser ke bawah 10px" onClick={() => patch(item.id, { offsetY: (item.offsetY ?? 0) + 10 })}>↓</button>
+            <button type="button" title="Geser ke kiri 10px" onClick={() => patch(item.id, { offsetX: (item.offsetX ?? 0) - 10 })}>←</button>
+            <button type="button" title="Geser ke kanan 10px" onClick={() => patch(item.id, { offsetX: (item.offsetX ?? 0) + 10 })}>→</button>
+            <button type="button" className="decor-nudge-reset" onClick={() => patch(item.id, { offsetX: 0, offsetY: 0 })}>Reset posisi</button>
           </div>
           {/* TC-186 — ornamen dekoratif perlu bisa diputar mengikuti sudut
               layout, bukan hanya dicerminkan. */}
@@ -18744,6 +19878,136 @@ function BackgroundLayerEditor({
   );
 }
 
+function BackgroundSlidesEditor({
+  section,
+  update,
+  updateLive,
+  uploadLayerImage,
+}: {
+  section: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+  updateLive: (
+    produce: (current: CanvasSection) => Partial<CanvasSection>,
+  ) => void;
+  uploadLayerImage: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(0);
+  const slides = section.backgroundSlides || [];
+  const total = slides.length + (section.backgroundUrl ? 1 : 0);
+  return (
+    <div className="background-slides-editor">
+      <div className="group-heading">
+        <strong>Slideshow Layer 1</strong>
+        <small>{total} foto</small>
+      </div>
+      <p className="layout-help">
+        Tambahkan beberapa foto; foto Layer 1 di atas menjadi slide pertama dan
+        semuanya bergantian otomatis.
+        {section.backgroundVideoUrl
+          ? " Slideshow tidak tampil selama Layer 1 memakai video."
+          : ""}
+      </p>
+      <input
+        ref={input}
+        hidden
+        type="file"
+        multiple
+        accept="image/*"
+        onChange={async (event) => {
+          const files = Array.from(event.target.files || []);
+          event.target.value = "";
+          if (!files.length) return;
+          setBusy(files.length);
+          for (const file of files) {
+            const saved = await uploadLayerImage(file);
+            setBusy((value) => Math.max(0, value - 1));
+            if (saved)
+              updateLive((current) => ({
+                backgroundSlides: [
+                  ...(current.backgroundSlides || []),
+                  { url: saved.url, key: saved.key },
+                ],
+              }));
+          }
+          setBusy(0);
+        }}
+      />
+      {slides.length > 0 && (
+        <div className="background-slides-list">
+          {slides.map((slide, slideIndex) => (
+            <div className="background-slide-thumb" key={`${slide.url}-${slideIndex}`}>
+              <span style={{ backgroundImage: `url(${assetUrl(slide.url)})` }} />
+              <small>{slideIndex + (section.backgroundUrl ? 2 : 1)}</small>
+              <button
+                type="button"
+                title="Hapus foto slide"
+                aria-label={`Hapus foto slide ${slideIndex + 1}`}
+                onClick={() =>
+                  updateLive((current) => ({
+                    backgroundSlides: (current.backgroundSlides || []).filter(
+                      (_, i) => i !== slideIndex,
+                    ),
+                  }))
+                }
+              >
+                <Trash2 size={12} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button
+        className="upload-control"
+        disabled={busy > 0}
+        onClick={() => input.current?.click()}
+      >
+        <ImagePlus size={16} />
+        <span>
+          <strong>
+            {busy > 0 ? `Mengunggah ${busy} foto…` : "Tambah foto slideshow"}
+          </strong>
+          <small>Bisa pilih beberapa foto sekaligus · maksimal 2 MB per foto</small>
+        </span>
+      </button>
+      {total >= 2 && (
+        <div className="two-inputs">
+          <label>
+            Ganti tiap <span>{section.backgroundSlideSeconds || 5} detik</span>
+            <input
+              type="range"
+              min={2}
+              max={20}
+              value={section.backgroundSlideSeconds || 5}
+              onChange={(event) =>
+                update({ backgroundSlideSeconds: Number(event.target.value) })
+              }
+            />
+          </label>
+          <label>
+            Transisi
+            <select
+              value={section.backgroundSlideEffect || "fade"}
+              onChange={(event) =>
+                update({
+                  backgroundSlideEffect: event.target
+                    .value as CanvasSection["backgroundSlideEffect"],
+                })
+              }
+            >
+              <option value="fade">Fade</option>
+              <option value="zoom">Fade + zoom pelan</option>
+              <option value="slide">Geser</option>
+            </select>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SectionInspector({
   section,
   tab,
@@ -18844,6 +20108,47 @@ function SectionInspector({
             ))}
           </div>
         </label>
+        {/* QA 15 TC-339/340 — posisi vertikal layout kolom + geser manual. */}
+        <label>
+          Posisi vertikal kolom
+          <div className="toolbar-row alignment placement-row">
+            {(
+              [
+                ["top", "Atas"],
+                ["center", "Tengah"],
+                ["bottom", "Bawah"],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                className={(section.columnsAlign || "top") === value ? "active" : ""}
+                onClick={() =>
+                  update({ columnsAlign: value === "top" ? undefined : value })
+                }
+              >
+                <small>{label}</small>
+              </button>
+            ))}
+          </div>
+          <span className="layout-help">
+            Kolom yang lebih pendek ikut rata atas/tengah/bawah terhadap kolom
+            lain, dan seluruh blok kolom diletakkan di atas/tengah/bawah canvas
+            (terlihat bila Minimum height lebih tinggi dari isinya).
+          </span>
+        </label>
+        <NumberRange
+          label="Geser kolom atas-bawah"
+          unit="px"
+          min={-600}
+          max={600}
+          typeMin={-3000}
+          typeMax={3000}
+          value={section.columnsOffsetY ?? 0}
+          onChange={(columnsOffsetY) =>
+            update({ columnsOffsetY: columnsOffsetY || undefined })
+          }
+          onReset={() => update({ columnsOffsetY: undefined })}
+        />
         <div className="info-box">
           <Columns2 size={17} />
           <p>
@@ -18977,6 +20282,13 @@ function SectionInspector({
                 </button>
               </div>
             )}
+            {/* QA 15 TC-332 — beberapa foto Layer 1 bergantian otomatis. */}
+            <BackgroundSlidesEditor
+              section={section}
+              updateLive={updateLive}
+              update={update}
+              uploadLayerImage={uploadLayerImage}
+            />
             {section.backgroundVideoUrl && (
               <div className="background-media-card">
                 <video
@@ -19290,7 +20602,23 @@ function WeddingCanvas(props: WeddingCanvasProps) {
   // piksel bergeser, sehingga hasil preview "melebar" dan ornamen tampak
   // mengecil. Kini editor, preview, dan undangan live identik dengan Mobile.
   const columnRef = useRef<HTMLDivElement | null>(null);
-  const columnZoom = useFitZoom(columnRef, MOBILE_PREVIEW_WIDTH, column);
+  // QA 15 TC-330 — selama cover belum dibuka, cover tampil full layout
+  // Desktop; kolom ala serein baru dipakai setelah Buka Undangan. Struktur
+  // elemen tetap sama (hanya konteks device & kelas yang berganti) supaya
+  // WeddingCanvasBody tidak dipasang ulang dan musik yang mulai saat cover
+  // dibuka tidak terputus.
+  const coverFull =
+    column &&
+    !props.editable &&
+    (props.sections[0]?.desktopCoverMode || "full") === "full" &&
+    props.sections.some((section) =>
+      section.columns.some((col) =>
+        col.features.some((feature) => feature.type === "invitation-cover"),
+      ),
+    );
+  const [coverLocked, setCoverLocked] = useState(true);
+  const coverPhase = Boolean(coverFull && coverLocked);
+  const columnZoom = useFitZoom(columnRef, MOBILE_PREVIEW_WIDTH, column && !coverPhase);
   useEffect(() => {
     if (!column) return;
     const root = stageRef.current;
@@ -19316,7 +20644,7 @@ function WeddingCanvas(props: WeddingCanvasProps) {
   return (
     <div
       ref={stageRef}
-      className={`desktop-column-stage align-${ratio && (first.desktopColumnAlign || "center") === "center" ? "right" : first.desktopColumnAlign || "center"}${ratio ? " ratio-7030" : ""}`}
+      className={`desktop-column-stage align-${ratio && (first.desktopColumnAlign || "center") === "center" ? "right" : first.desktopColumnAlign || "center"}${ratio ? " ratio-7030" : ""}${coverPhase ? " cover-phase" : ""}`}
       style={
         {
           "--desktop-column-w": ratio ? "max(360px, 30%)" : `${width}px`,
@@ -19326,31 +20654,44 @@ function WeddingCanvas(props: WeddingCanvasProps) {
         } as React.CSSProperties
       }
     >
-      <FixedBackdrop
-        source={desktopColumnBackdrop(first)}
-        viewportHeight={viewportHeight}
-        adjust={first.desktopBackdropAdjust}
-      />
-      <DesktopSidePanel first={first} />
+      {!coverPhase && (
+        <FixedBackdrop
+          source={desktopColumnBackdrop(first)}
+          viewportHeight={viewportHeight}
+          adjust={first.desktopBackdropAdjust}
+        />
+      )}
+      {!coverPhase && <DesktopSidePanel first={first} />}
       <div className="desktop-column" ref={columnRef}>
         <div
           className="desktop-column-inner"
           style={
-            {
-              width: MOBILE_PREVIEW_WIDTH,
-              zoom: columnZoom,
-              "--preview-zoom": previewZoom * columnZoom,
-              ...(viewportHeight
-                ? {
-                    "--site-viewport-h": `${Math.round(viewportHeight / columnZoom)}px`,
-                  }
-                : {}),
-            } as React.CSSProperties
+            (coverPhase
+              ? {
+                  width: "100%",
+                  "--preview-zoom": previewZoom,
+                  ...(viewportHeight
+                    ? { "--site-viewport-h": `${viewportHeight}px` }
+                    : {}),
+                }
+              : {
+                  width: MOBILE_PREVIEW_WIDTH,
+                  zoom: columnZoom,
+                  "--preview-zoom": previewZoom * columnZoom,
+                  ...(viewportHeight
+                    ? {
+                        "--site-viewport-h": `${Math.round(viewportHeight / columnZoom)}px`,
+                      }
+                    : {}),
+                }) as unknown as React.CSSProperties
           }
         >
-          <PreviewZoomContext value={previewZoom * columnZoom}>
-            <DeviceContext value="mobile">
-              <WeddingCanvasBody {...props} />
+          <PreviewZoomContext value={coverPhase ? previewZoom : previewZoom * columnZoom}>
+            <DeviceContext value={coverPhase ? "desktop" : "mobile"}>
+              <WeddingCanvasBody
+                {...props}
+                onCoverLockChange={coverFull ? setCoverLocked : undefined}
+              />
             </DeviceContext>
           </PreviewZoomContext>
         </div>
@@ -19481,6 +20822,12 @@ function BottomNavBar({
             ...(isPaintColor(config.color) ? { "--bn-fg": config.color } : {}),
             ...(isPaintColor(config.activeColor)
               ? { "--bn-active": config.activeColor }
+              : {}),
+            ...(isPaintColor(config.textColor)
+              ? { "--bn-label": config.textColor }
+              : {}),
+            ...(isPaintColor(config.activeTextColor)
+              ? { "--bn-active-label": config.activeTextColor }
               : {}),
           } as React.CSSProperties
         }
@@ -19757,6 +21104,25 @@ function BottomNavPanel({
               onChange={(next) => set({ activeColor: next })}
             />
           </label>
+          {/* QA 15 — warna teks button slide (label menu). */}
+          <div className="two-inputs">
+            <label>
+              Warna teks
+              <ColorInput
+                value={config.textColor}
+                fallback={config.color || "#6b7a74"}
+                onChange={(next) => set({ textColor: next })}
+              />
+            </label>
+            <label>
+              Warna teks aktif
+              <ColorInput
+                value={config.activeTextColor}
+                fallback={config.style === "floating-pill" ? "#ffffff" : config.activeColor || "#125946"}
+                onChange={(next) => set({ activeTextColor: next })}
+              />
+            </label>
+          </div>
           <div className="bottom-nav-items">
             <strong>
               Menu per column / feature{" "}
@@ -19857,6 +21223,9 @@ function DesktopSideEditor({
   const slideInput = useRef<HTMLInputElement | null>(null);
   const videoInput = useRef<HTMLInputElement | null>(null);
   const overlayInput = useRef<HTMLInputElement | null>(null);
+  // Ornamen: upload selesai belakangan harus membaca nilai terbaru.
+  const latestFirst = useRef(first);
+  latestFirst.current = first;
   const [busy, setBusy] = useState("");
   const slides = first.desktopSideSlides || [];
   const addSlides = async (files: File[]) => {
@@ -20222,6 +21591,39 @@ function DesktopSideEditor({
           Hapus video
         </button>
       )}
+      {/* QA 15 TC-345 — ornamen sisi 70%: pengaturan sama dengan ornamen
+          canvas (bentuk/gambar, posisi, ukuran, geser, rotasi, gerak). */}
+      <SectionDecorationEditor
+        section={{ ...first, decorations: first.desktopSideDecorations || [] }}
+        updateLive={(produce) =>
+          update({
+            desktopSideDecorations:
+              produce({
+                ...latestFirst.current,
+                decorations: latestFirst.current.desktopSideDecorations || [],
+              }).decorations || [],
+          })
+        }
+        uploadLayerImage={async (file) => {
+          if (!file) return null;
+          if (!file.type.startsWith("image/")) {
+            flash("Ornamen harus berupa gambar.");
+            return null;
+          }
+          const small = await shrinkImageToLimit(file, 2 * 1024 * 1024);
+          if (small.size > 2 * 1024 * 1024) {
+            flash("Gambar ornamen maksimal 2 MB.");
+            return null;
+          }
+          try {
+            const saved = await uploadToServer(small, "background-layer");
+            return { url: saved.url, key: saved.key };
+          } catch (error) {
+            flash(error instanceof Error ? error.message : "Upload gagal.");
+            return null;
+          }
+        }}
+      />
     </div>
   );
 }
@@ -20321,6 +21723,60 @@ function BackdropAdjustEditor({
   );
 }
 
+/** QA 15 TC-332 — slideshow otomatis Layer 1. Dirender di atas background
+ *  utama (gambar Layer 1 menjadi slide pertama), di bawah layer tambahan. */
+function BackgroundSlideshow({ section }: { section: CanvasSection }) {
+  const slides = useMemo(
+    () =>
+      [
+        ...(section.backgroundUrl ? [{ url: section.backgroundUrl }] : []),
+        ...(section.backgroundSlides || []),
+      ].filter((item) => item.url),
+    [section.backgroundUrl, section.backgroundSlides],
+  );
+  const [index, setIndex] = useState(0);
+  const seconds = Math.max(2, section.backgroundSlideSeconds || 5);
+  useEffect(() => {
+    if (slides.length < 2) return;
+    const timer = window.setInterval(
+      () => setIndex((value) => (value + 1) % slides.length),
+      seconds * 1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [slides.length, seconds]);
+  if (slides.length < 2) return null;
+  const effect = section.backgroundSlideEffect || "fade";
+  return (
+    <div
+      className={`background-slideshow effect-${effect}`}
+      aria-hidden
+      style={
+        {
+          "--bg-slide-seconds": `${seconds}s`,
+          opacity:
+            section.backgroundImageOpacity !== undefined
+              ? section.backgroundImageOpacity / 100
+              : undefined,
+          filter: getBackgroundFilter(section.backgroundEffect),
+        } as React.CSSProperties
+      }
+    >
+      {slides.map((slide, slideIndex) => (
+        <div
+          key={`${slide.url}-${slideIndex}`}
+          className={`background-slide ${slideIndex === index % slides.length ? "is-active" : ""}`}
+          style={{
+            backgroundImage: `url(${assetUrl(slide.url)})`,
+            backgroundSize: section.backgroundSize || "cover",
+            backgroundPosition: section.backgroundPosition || "center",
+            backgroundRepeat: section.backgroundRepeat || "no-repeat",
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 /** TC-242 — isi sisi lebar (70%) tata letak kolom desktop. */
 function DesktopSidePanel({ first }: { first: CanvasSection }) {
   const slides = (first.desktopSideSlides || []).filter((item) => item.url);
@@ -20350,12 +21806,19 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
     !slides.length &&
     !first.desktopSideVideoUrl &&
     !hasText &&
-    !first.desktopSideOverlayUrl
+    !first.desktopSideOverlayUrl &&
+    !(first.desktopSideDecorations || []).length
   )
     return null;
   return (
     <div className="desktop-side-panel" aria-hidden={!hasText}>
       <div className="desktop-side-area">
+        {/* QA 15 TC-345 — ornamen sisi 70%. */}
+        {(first.desktopSideDecorations || []).length > 0 && (
+          <div className="desktop-side-decorations">
+            <SectionDecorations decorations={first.desktopSideDecorations} />
+          </div>
+        )}
         {first.desktopSideOverlayUrl && (
           <img
             className={`desktop-side-overlay at-${first.desktopSideOverlayPosition || "center"}`}
@@ -20581,6 +22044,21 @@ function DesktopLayoutPanel({
             </select>
           </label>
           <label>
+            Tampilan cover (slide pertama)
+            <select
+              value={first.desktopCoverMode || "full"}
+              onChange={(event) =>
+                update({
+                  desktopCoverMode: event.target
+                    .value as CanvasSection["desktopCoverMode"],
+                })
+              }
+            >
+              <option value="full">Full layout desktop, lalu kolom setelah Buka Undangan</option>
+              <option value="column">Langsung di dalam kolom</option>
+            </select>
+          </label>
+          <label>
             Warna background desktop
             {/* Kosong = mengikuti background Canvas 1 versi Desktop. */}
             <ColorInput
@@ -20669,6 +22147,7 @@ function WeddingCanvasBody({
   animationNonce = 0,
   guestName,
   updateSectionLayout,
+  onCoverLockChange,
 }: {
   page: PageKey;
   sections: CanvasSection[];
@@ -20708,6 +22187,8 @@ function WeddingCanvasBody({
   onCanvasDrop?: (draggedId: string, targetId: string) => void;
   animationNonce?: number;
   guestName?: string;
+  /** QA 15 TC-330 — dilaporkan ke WeddingCanvas: cover masih terkunci? */
+  onCoverLockChange?: (locked: boolean) => void;
 }) {
   const thumbnail = useContext(ThumbnailContext);
   const previewSurface = useContext(PreviewSurfaceContext);
@@ -20778,21 +22259,14 @@ function WeddingCanvasBody({
   // latar (maks. 2,5 detik) sementara animasi ditahan, lalu animasi berjalan
   // tanpa tersendat.
   const [warming, setWarming] = useState(() => !editable && !thumbnail);
+  // QA 15 TC-358 — yang di-decode lebih dulu adalah gambar versi device yang
+  // sedang tampil (dulu hanya versi Desktop, sehingga di Mobile/Kolom
+  // background baru dimuat setelah preview terbuka) dan dimulai dari canvas
+  // pertama.
   const warmKey = useMemo(() => {
     if (editable || thumbnail) return "";
-    const urls = new Set<string>();
-    sections.forEach((section) => {
-      if (section.backgroundUrl) urls.add(assetUrl(section.backgroundUrl));
-      (section.backgroundLayers || []).forEach(
-        (layer) => layer.url && urls.add(assetUrl(layer.url)),
-      );
-      (section.decorations || []).forEach(
-        (decoration) =>
-          decoration.imageUrl && urls.add(assetUrl(decoration.imageUrl)),
-      );
-    });
-    return Array.from(urls).slice(0, 24).join("\n");
-  }, [sections, editable, thumbnail]);
+    return designImageUrls(sections, device).slice(0, 24).join("\n");
+  }, [sections, editable, thumbnail, device]);
   useEffect(() => {
     if (!warmKey) {
       setWarming(false);
@@ -21071,6 +22545,12 @@ function WeddingCanvasBody({
       window.removeEventListener("resize", schedule);
     };
   }, [hasScrollDeco, opened, editable, scrollViewportHeight, previewZoom, sections.length]);
+
+  // QA 15 TC-330 — laporkan status kunci cover ke WeddingCanvas (kolom).
+  const coverLockedNow = !editable && Boolean(coverEntry) && !opened;
+  useEffect(() => {
+    onCoverLockChange?.(coverLockedNow);
+  }, [coverLockedNow, onCoverLockChange]);
 
   if (page === "rsvp-page")
     return <RsvpPage guests={guests} addGuest={addGuest} />;
@@ -21431,6 +22911,11 @@ function WeddingCanvasBody({
                 } as React.CSSProperties
               }
             />
+            {/* QA 15 TC-332 — slideshow otomatis Layer 1. */}
+            {!section.backgroundVideoUrl &&
+              (section.backgroundSlides?.length || 0) > 0 && (
+                <BackgroundSlideshow section={section} />
+              )}
             {/* Ornamen pojok dengan gerak berulang. */}
             <SectionDecorations decorations={section.decorations} />
             {/* QA TC-108: layer background tambahan di atas background utama. */}
@@ -21573,17 +23058,20 @@ function WeddingCanvasBody({
                 );
               })()}
             <div
-              className={`canvas-columns columns-${section.columns.length}`}
-              style={
-                section.columnWidths &&
+              className={`canvas-columns columns-${section.columns.length}${section.columnsAlign && section.columnsAlign !== "top" ? ` cols-v-${section.columnsAlign}` : ""}`}
+              style={{
+                ...(section.columnWidths &&
                 section.columnWidths.length === section.columns.length
                   ? {
                       gridTemplateColumns: section.columnWidths
                         .map((value) => `${value}fr`)
                         .join(" "),
                     }
-                  : undefined
-              }
+                  : {}),
+                ...(section.columnsOffsetY
+                  ? { top: section.columnsOffsetY }
+                  : {}),
+              }}
             >
               {section.columns.map((column, columnIndex) => (
                 <div
@@ -21909,7 +23397,13 @@ function FeatureBlock({
     ensureFont(feature.fontFamily);
     ensureFont(feature.titleFontFamily);
     ensureFont(feature.bodyFontFamily);
-  }, [feature.fontFamily, feature.titleFontFamily, feature.bodyFontFamily]);
+    ensureFont(feature.iconTextFont);
+  }, [
+    feature.fontFamily,
+    feature.titleFontFamily,
+    feature.bodyFontFamily,
+    feature.iconTextFont,
+  ]);
   const objectStyle: React.CSSProperties =
     feature.type === "invitation-cover"
       ? { width: "100%", alignSelf: "stretch" }
@@ -21978,6 +23472,10 @@ function FeatureBlock({
     textDecoration: feature.underline ? "underline" : "none",
     position: feature.freePosition ? "absolute" : "relative",
     ...designerStyle(feature),
+    // QA 15 TC-340 — geser manual atas/bawah (fitur yang tidak bebas posisi).
+    ...(!feature.freePosition && feature.placementOffsetY
+      ? { top: feature.placementOffsetY }
+      : {}),
     ...(feature.loopEffect && feature.loopEffect !== "none"
       ? ({ "--loop-speed": `${feature.loopSpeed || 6}s` } as React.CSSProperties)
       : {}),
@@ -22120,7 +23618,7 @@ function FeatureBlock({
         feature.freePosition && feature.boxHeight ? "true" : undefined
       }
 data-feature-id={feature.id}
-            className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
+            className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.frameShape && (feature.type === "image" || feature.type === "gallery") ? `has-frame frame-${feature.frameShape}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
       style={style}
     >
       <FeatureEffect effect={feature.visualEffect || "none"} />
@@ -22146,8 +23644,11 @@ data-feature-id={feature.id}
         <div
           className={`event-feature ${feature.eventItems?.length ? "has-event-items" : ""} event-style-${feature.eventStyle || "card"}`}
         >
-          <CalendarDays size={25} />
+          <EventIcon feature={feature} />
           {editableText("title", "editable-title")}
+          {!feature.eventItems?.length && (
+            <InviteDateLine feature={feature} value={feature.eventDate} />
+          )}
           {editableText("body", "editable-body")}
           <EventItemsList feature={feature} editable={editable} />
           {/* QA TC-119: button lokasi selalu tampil pada section Event. */}
@@ -22179,7 +23680,9 @@ data-feature-id={feature.id}
               </span>
             );
           })()}
-          {!feature.eventItems?.length && <CalendarButtons feature={feature} />}
+          {!feature.eventItems?.length && (
+            <CalendarButtons feature={feature} editable={editable} />
+          )}
         </div>
       )}
       {feature.type === "gift" && (
@@ -23255,9 +24758,177 @@ function CountdownFeature({ feature }: { feature: Feature }) {
           </span>
         ))}
       </div>
+      <InviteDateLine feature={feature} value={feature.eventDate} />
       <CalendarButtons feature={feature} />
     </div>
   );
+}
+
+/** QA 15 TC-331 — pilihan format tanggal undangan. */
+const INVITE_DATE_FORMATS: [InviteDateFormat, string][] = [
+  ["none", "Tidak ditampilkan / teks manual"],
+  ["long", "12 Desember 2026"],
+  ["full", "Sabtu, 12 Desember 2026"],
+  ["day-short", "Sabtu 12 Des"],
+  ["numeric", "12/12/2026"],
+  ["dots", "12 . 12 . 2026"],
+  ["dash", "12-12-2026"],
+];
+
+function formatInviteDate(value: string | undefined, format?: InviteDateFormat) {
+  if (!value || !format || format === "none") return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const dd = String(date.getDate()).padStart(2, "0");
+  const mm = String(date.getMonth() + 1).padStart(2, "0");
+  const yyyy = date.getFullYear();
+  const part = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("id-ID", options).format(date);
+  switch (format) {
+    case "long":
+      return part({ day: "numeric", month: "long", year: "numeric" });
+    case "full":
+      return part({ weekday: "long", day: "numeric", month: "long", year: "numeric" });
+    case "day-short":
+      return `${part({ weekday: "long" })} ${date.getDate()} ${part({ month: "short" }).replace(".", "")}`;
+    case "numeric":
+      return `${dd}/${mm}/${yyyy}`;
+    case "dots":
+      return `${dd} . ${mm} . ${yyyy}`;
+    case "dash":
+      return `${dd}-${mm}-${yyyy}`;
+    default:
+      return "";
+  }
+}
+
+function InviteDateLine({
+  feature,
+  value,
+  className = "invite-date",
+}: {
+  feature: Feature;
+  value?: string;
+  className?: string;
+}) {
+  const text = formatInviteDate(value, feature.dateFormat);
+  if (!text) return null;
+  return (
+    <p
+      className={className}
+      style={{
+        ...(feature.dateTextSize ? { fontSize: feature.dateTextSize } : {}),
+        ...(feature.dateTextColor ? { color: feature.dateTextColor } : {}),
+      }}
+    >
+      {text}
+    </p>
+  );
+}
+
+function DateFormatEditor({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const sample =
+    feature.eventDate ||
+    feature.eventItems?.find((item) => item.datetime)?.datetime ||
+    "2026-12-12T10:00";
+  return (
+    <div className="calendar-button-editor date-format-editor">
+      <strong>Format tanggal</strong>
+      <label>
+        Tampilan tanggal
+        <select
+          value={feature.dateFormat || "none"}
+          onChange={(event) =>
+            update({
+              dateFormat:
+                event.target.value === "none"
+                  ? undefined
+                  : (event.target.value as InviteDateFormat),
+            })
+          }
+        >
+          {INVITE_DATE_FORMATS.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {feature.dateFormat && feature.dateFormat !== "none" && (
+        <>
+          <small className="field-hint">
+            Contoh: <b>{formatInviteDate(sample, feature.dateFormat)}</b> —
+            diambil dari Tanggal & waktu acara
+            {feature.type === "event" ? " (atau Tanggal & jam tiap acara)" : ""}.
+          </small>
+          <div className="two-inputs">
+            <label>
+              Ukuran <span>{feature.dateTextSize || 14}px</span>
+              <input
+                type="range"
+                min={9}
+                max={48}
+                value={feature.dateTextSize || 14}
+                onChange={(event) =>
+                  update({ dateTextSize: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Warna
+              <ColorInput
+                value={feature.dateTextColor}
+                fallback="#1f3a2e"
+                onChange={(dateTextColor) => update({ dateTextColor })}
+              />
+            </label>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** QA 15 TC-343 — gaya tombol Simpan Tanggal. Bila belum diatur sendiri,
+ *  tetap ikut gaya tombol lokasi (perilaku lama). */
+function calendarButtonStyle(feature: Feature): {
+  className: string;
+  style: React.CSSProperties | undefined;
+} {
+  const own =
+    feature.calendarShape ||
+    feature.calendarBackground ||
+    feature.calendarTextColor ||
+    feature.calendarFontSize !== undefined ||
+    feature.calendarRadius !== undefined;
+  if (!own) {
+    const button = mapButtonStyle(feature);
+    return {
+      className: `calendar-button ${button.customized ? `shape-${button.shape}` : ""}`,
+      style: button.customized ? button.style : undefined,
+    };
+  }
+  const shape = feature.calendarShape || "rounded";
+  const bg = feature.calendarBackground || "var(--accent, #125946)";
+  return {
+    className: `calendar-button shape-${shape}`,
+    style: {
+      background: shape === "outline" ? "transparent" : bg,
+      color:
+        feature.calendarTextColor ||
+        (shape === "outline" ? feature.calendarBackground || "#125946" : "#ffffff"),
+      border: shape === "outline" ? `1px solid ${bg}` : "0",
+      borderRadius:
+        shape === "pill" ? 999 : shape === "square" ? 0 : (feature.calendarRadius ?? 8),
+      ...(feature.calendarFontSize ? { fontSize: feature.calendarFontSize } : {}),
+    },
+  };
 }
 
 /** TC-236 — "Simpan Tanggal": Google Calendar (web/Android) dan berkas .ics
@@ -23266,11 +24937,30 @@ function CountdownFeature({ feature }: { feature: Feature }) {
 function CalendarButtons({
   feature,
   hideIcs = false,
+  editable = false,
 }: {
   feature: Feature;
   hideIcs?: boolean;
+  editable?: boolean;
 }) {
-  if (feature.calendarButton === false || !feature.eventDate) return null;
+  if (feature.calendarButton === false) return null;
+  if (!feature.eventDate) {
+    // QA 15 TC-343 — di editor tombol tetap terlihat agar gayanya bisa diatur.
+    if (!editable) return null;
+    const look = calendarButtonStyle(feature);
+    return (
+      <div className="calendar-buttons">
+        <span
+          className={`${look.className} placeholder`}
+          style={look.style}
+          title="Isi Tanggal & waktu acara agar tombol aktif"
+        >
+          {!feature.calendarIconHidden && <CalendarPlus size={14} />}{" "}
+          {feature.calendarLabel || "Simpan Tanggal"}
+        </span>
+      </div>
+    );
+  }
   const start = new Date(feature.eventDate);
   if (Number.isNaN(start.getTime())) return null;
   const hours = Math.max(0.5, feature.calendarDurationHours ?? 2);
@@ -23322,18 +25012,19 @@ function CalendarButtons({
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
-  const button = mapButtonStyle(feature);
+  const look = calendarButtonStyle(feature);
   return (
     <div className="calendar-buttons">
       <a
-        className={`calendar-button ${button.customized ? `shape-${button.shape}` : ""}`}
-        style={button.customized ? button.style : undefined}
+        className={look.className}
+        style={look.style}
         href={google}
         target="_blank"
         rel="noreferrer"
         onClick={(event) => event.stopPropagation()}
       >
-        <CalendarPlus size={14} /> {feature.calendarLabel || "Simpan Tanggal"}
+        {!feature.calendarIconHidden && <CalendarPlus size={14} />}{" "}
+        {feature.calendarLabel || "Simpan Tanggal"}
       </a>
       {!hideIcs && (
       <button
@@ -23384,7 +25075,26 @@ function EventItemsList({
       {items.map((item) => (
         <div className="event-item" key={item.id}>
           <h3 className="event-item-name">{item.name}</h3>
-          {item.dateText && <p className="event-item-date">{item.dateText}</p>}
+          {(() => {
+            // QA 15 TC-331 — format otomatis dari Tanggal & jam bila dipilih.
+            const auto = formatInviteDate(item.datetime, feature.dateFormat);
+            const text = auto || item.dateText;
+            return text ? (
+              <p
+                className="event-item-date"
+                style={
+                  auto
+                    ? {
+                        ...(feature.dateTextSize ? { fontSize: feature.dateTextSize } : {}),
+                        ...(feature.dateTextColor ? { color: feature.dateTextColor } : {}),
+                      }
+                    : undefined
+                }
+              >
+                {text}
+              </p>
+            ) : null;
+          })()}
           {item.timeText && <p className="event-item-time">{item.timeText}</p>}
           {item.venue && (
             <strong className="event-item-venue">{item.venue}</strong>
@@ -23395,10 +25105,12 @@ function EventItemsList({
           <div className="event-item-actions">
             {editable && !item.datetime && feature.calendarButton !== false && (
               <span
-                className="calendar-button placeholder"
+                className={`${calendarButtonStyle(feature).className} placeholder`}
+                style={calendarButtonStyle(feature).style}
                 title="Isi Tanggal & jam untuk Simpan Tanggal di panel Content"
               >
-                <CalendarPlus size={14} /> {feature.calendarLabel || "Simpan Tanggal"}
+                {!feature.calendarIconHidden && <CalendarPlus size={14} />}{" "}
+                {feature.calendarLabel || "Simpan Tanggal"}
               </span>
             )}
             <CalendarButtons
@@ -23719,9 +25431,81 @@ function CalendarButtonEditor({
               }
             />
           </label>
-          {!feature.eventDate && (
+          {/* QA 15 TC-343 — tampilan tombol Simpan Tanggal. */}
+          <label>
+            Bentuk tombol
+            <select
+              value={feature.calendarShape || ""}
+              onChange={(event) =>
+                update({
+                  calendarShape: (event.target.value || undefined) as Feature["calendarShape"],
+                })
+              }
+            >
+              <option value="">Ikuti tombol lokasi</option>
+              <option value="rounded">Rounded</option>
+              <option value="pill">Pill</option>
+              <option value="square">Kotak</option>
+              <option value="outline">Outline</option>
+            </select>
+          </label>
+          <div className="two-inputs">
+            <label>
+              Warna tombol
+              <ColorInput
+                value={feature.calendarBackground}
+                fallback="#125946"
+                onChange={(calendarBackground) => update({ calendarBackground })}
+              />
+            </label>
+            <label>
+              Warna teks
+              <ColorInput
+                value={feature.calendarTextColor}
+                fallback="#ffffff"
+                onChange={(calendarTextColor) => update({ calendarTextColor })}
+              />
+            </label>
+          </div>
+          <div className="two-inputs">
+            <label>
+              Ukuran teks <span>{feature.calendarFontSize || 11}px</span>
+              <input
+                type="range"
+                min={9}
+                max={24}
+                value={feature.calendarFontSize || 11}
+                onChange={(event) =>
+                  update({ calendarFontSize: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Sudut <span>{feature.calendarRadius ?? 8}px</span>
+              <input
+                type="range"
+                min={0}
+                max={30}
+                value={feature.calendarRadius ?? 8}
+                onChange={(event) =>
+                  update({ calendarRadius: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={!feature.calendarIconHidden}
+              onChange={(event) =>
+                update({ calendarIconHidden: !event.target.checked })
+              }
+            />
+            Tampilkan ikon kalender
+          </label>
+          {!feature.eventDate && !feature.eventItems?.length && (
             <small className="field-hint">
-              Isi Tanggal & waktu acara agar tombol tampil.
+              Isi Tanggal & waktu acara agar tombol aktif untuk tamu.
             </small>
           )}
         </>
@@ -23924,6 +25708,28 @@ function MediaFadeEditor({
   const mode = feature.mediaFade || "none";
   return (
     <div className="image-style-group media-fade-editor">
+      {/* QA 15 TC-334 — bentuk bingkai selain kotak. */}
+      <div className="group-heading">
+        <strong>Bentuk bingkai foto</strong>
+      </div>
+      <div className="frame-shape-picker" role="radiogroup" aria-label="Bentuk bingkai foto">
+        {FRAME_SHAPES.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={(feature.frameShape || "rect") === value}
+            className={(feature.frameShape || "rect") === value ? "active" : ""}
+            title={label}
+            onClick={() =>
+              update({ frameShape: value === "rect" ? undefined : value })
+            }
+          >
+            <i className={`frame-swatch frame-shape-${value}`} />
+            <small>{label}</small>
+          </button>
+        ))}
+      </div>
       <div className="group-heading">
         <strong>Gradien transparan foto</strong>
       </div>
@@ -25124,14 +26930,37 @@ function GuestsModal({
   );
 }
 
+const HELP_CATEGORY_ID: Record<string, string> = {
+  Media: "Media",
+  Publishing: "Publikasi",
+  RSVP: "RSVP",
+  Account: "Akun",
+  Invitation: "Undangan",
+  Layout: "Tata letak",
+  Support: "Bantuan",
+  "Web Designer": "Web Designer",
+};
 function HelpCenter() {
+  const t = useT();
+  const [lang] = useSiteLang();
+  const catLabel = (value: string) =>
+    value === "Semua"
+      ? t("Semua", "All")
+      : lang === "en"
+        ? value
+        : HELP_CATEGORY_ID[value] || value;
+  const items = faqItems.map((item) => ({
+    ...item,
+    q: lang === "en" ? item.qEn : item.q,
+    a: lang === "en" ? item.aEn : item.a,
+  }));
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("Semua");
   const categories = [
     "Semua",
-    ...Array.from(new Set(faqItems.map((item) => item.category))),
+    ...Array.from(new Set(items.map((item) => item.category))),
   ];
-  const filtered = faqItems.filter(
+  const filtered = items.filter(
     (item) =>
       (category === "Semua" || item.category === category) &&
       `${item.q} ${item.a}`.toLowerCase().includes(query.toLowerCase()),
@@ -25140,10 +26969,13 @@ function HelpCenter() {
     <div className="help-page">
       <section className="help-hero">
         <CircleHelp size={28} />
-        <div className="eyebrow light">ikrarku HELP CENTER</div>
-        <h1>Apa yang dapat kami bantu?</h1>
+        <div className="eyebrow light">{t("PUSAT BANTUAN ikrarku", "ikrarku HELP CENTER")}</div>
+        <h1>{t("Apa yang dapat kami bantu?", "How can we help?")}</h1>
         <p>
-          Cari panduan berdasarkan fitur, media, RSVP, publishing, atau akun.
+          {t(
+            "Cari panduan berdasarkan fitur, media, RSVP, publikasi, atau akun.",
+            "Search guides by feature, media, RSVP, publishing, or account.",
+          )}
         </p>
         <div className="help-search">
           <Search size={20} />
@@ -25151,7 +26983,10 @@ function HelpCenter() {
             autoFocus
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari fitur, contoh: column, gallery, background..."
+            placeholder={t(
+              "Cari fitur, contoh: column, gallery, background...",
+              "Search features, e.g. column, gallery, background...",
+            )}
           />
         </div>
       </section>
@@ -25163,22 +26998,24 @@ function HelpCenter() {
               className={category === item ? "active" : ""}
               onClick={() => setCategory(item)}
             >
-              {item}
+              {catLabel(item)}
             </button>
           ))}
         </div>
         <div className="faq-results">
           <div className="section-heading">
             <div>
-              <span>SEARCH RESULTS</span>
-              <h2>{filtered.length} artikel bantuan ditemukan</h2>
+              <span>{t("HASIL PENCARIAN", "SEARCH RESULTS")}</span>
+              <h2>
+                {filtered.length} {t("artikel bantuan ditemukan", "help articles found")}
+              </h2>
             </div>
           </div>
           {filtered.map((item) => (
             <details key={item.q}>
               <summary>
                 <div>
-                  <span>{item.category}</span>
+                  <span>{catLabel(item.category)}</span>
                   <strong>{item.q}</strong>
                 </div>
                 <Plus size={17} />
@@ -25189,8 +27026,13 @@ function HelpCenter() {
           {filtered.length === 0 && (
             <div className="faq-empty">
               <Search size={28} />
-              <h3>Panduan tidak ditemukan</h3>
-              <p>Coba gunakan kata kunci lain atau hubungi Live Chat.</p>
+              <h3>{t("Panduan tidak ditemukan", "No guide found")}</h3>
+              <p>
+                {t(
+                  "Coba gunakan kata kunci lain atau hubungi Live Chat.",
+                  "Try another keyword or contact Live Chat.",
+                )}
+              </p>
             </div>
           )}
         </div>
@@ -25210,6 +27052,7 @@ function ChatWidget({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useT();
   const [text, setText] = useState("");
   return (
     <div className={`chat-widget ${open ? "open" : ""}`}>
@@ -25221,11 +27064,14 @@ function ChatWidget({
               <div>
                 <strong>ikrarku Support</strong>
                 <span>
-                  <i /> Online · biasanya membalas cepat
+                  <i /> {t("Online · biasanya membalas cepat", "Online · usually replies quickly")}
                 </span>
               </div>
             </div>
-            <button onClick={() => onOpenChange(false)}>
+            <button
+              onClick={() => onOpenChange(false)}
+              aria-label={t("Tutup chat", "Close chat")}
+            >
               <X size={17} />
             </button>
           </header>
@@ -25233,7 +27079,12 @@ function ChatWidget({
             {messages.length === 0 && (
               <div className="chat-empty">
                 <MessageCircle size={22} />
-                <p>Mulai percakapan dengan Customer Service.</p>
+                <p>
+                  {t(
+                    "Mulai percakapan dengan Customer Service.",
+                    "Start a conversation with Customer Service.",
+                  )}
+                </p>
               </div>
             )}
             {messages.map((message) => (
@@ -25256,15 +27107,19 @@ function ChatWidget({
             <input
               value={text}
               onChange={(event) => setText(event.target.value)}
-              placeholder="Tulis pesan..."
+              placeholder={t("Tulis pesan...", "Write a message...")}
             />
-            <button type="submit">
+            <button type="submit" aria-label={t("Kirim", "Send")}>
               <Send size={16} />
             </button>
           </form>
         </div>
       )}
-      <button className="chat-launcher" onClick={() => onOpenChange(!open)}>
+      <button
+        className="chat-launcher"
+        onClick={() => onOpenChange(!open)}
+        aria-label={open ? t("Tutup chat", "Close chat") : "Live Chat"}
+      >
         {open ? (
           <X size={22} />
         ) : (
@@ -25502,6 +27357,11 @@ function ArticleEditorPage({
     article?.status || "Draft",
   );
   const [excerpt, setExcerpt] = useState(article?.excerpt || "");
+  // QA 15 TC-348 — versi bahasa Inggris (opsional).
+  const [editLang, setEditLang] = useState<SiteLang>("id");
+  const [titleEn, setTitleEn] = useState(article?.titleEn || "");
+  const [excerptEn, setExcerptEn] = useState(article?.excerptEn || "");
+  const editorEnRef = useRef<HTMLDivElement>(null);
   const [tags, setTags] = useState(article?.tags.join(", ") || "");
   const [coverUrl, setCoverUrl] = useState<string | undefined>(
     article?.coverUrl,
@@ -25514,9 +27374,11 @@ function ArticleEditorPage({
       editorRef.current.innerHTML =
         article?.content ||
         "<h2>Mulai menulis artikel...</h2><p>Gunakan toolbar untuk menambahkan heading, format teks, list, quote, link, dan image.</p>";
+    if (editorEnRef.current)
+      editorEnRef.current.innerHTML = article?.contentEn || "";
   }, [article]);
   const command = (name: string, value?: string) => {
-    editorRef.current?.focus();
+    (editLang === "en" ? editorEnRef : editorRef).current?.focus();
     document.execCommand(name, false, value);
   };
   const uploadArticleMedia = async (file: File, category: string) => {
@@ -25554,6 +27416,11 @@ function ArticleEditorPage({
       status: forcedStatus,
       excerpt: excerpt.trim(),
       content: editorRef.current?.innerHTML || "<p></p>",
+      titleEn: titleEn.trim(),
+      excerptEn: excerptEn.trim(),
+      contentEn: editorEnRef.current?.textContent?.trim()
+        ? editorEnRef.current.innerHTML
+        : "",
       author: role === "Admin" ? "Platform Admin" : "ikrarku Editorial",
       tags: tags
         .split(",")
@@ -25593,8 +27460,42 @@ function ArticleEditorPage({
       </div>
       <div className="article-editor-layout page-layout">
         <main>
+          <div className="article-lang-tabs" role="tablist" aria-label="Bahasa artikel">
+            {(
+              [
+                ["id", "Bahasa Indonesia"],
+                ["en", "English"],
+              ] as const
+            ).map(([code, label]) => (
+              <button
+                key={code}
+                role="tab"
+                aria-selected={editLang === code}
+                className={editLang === code ? "active" : ""}
+                onClick={() => setEditLang(code)}
+              >
+                {label}
+                {code === "en" && !titleEn.trim() && <small>belum diisi</small>}
+              </button>
+            ))}
+          </div>
+          {editLang === "en" && (
+            <div className="article-lang-note">
+              Versi English tampil saat pengunjung memilih EN. Bila judul
+              English kosong, artikel tampil dalam Bahasa Indonesia.
+            </div>
+          )}
+          {editLang === "en" && (
+            <input
+              className="article-title-input"
+              value={titleEn}
+              onChange={(event) => setTitleEn(event.target.value)}
+              placeholder="English title"
+            />
+          )}
           <input
             className="article-title-input"
+            hidden={editLang === "en"}
             value={title}
             onChange={(event) => {
               setTitle(event.target.value);
@@ -25663,17 +27564,37 @@ function ArticleEditorPage({
           <div
             ref={editorRef}
             className="article-rich-editor"
+            hidden={editLang === "en"}
             contentEditable
             suppressContentEditableWarning
           />
-          <label>
-            Excerpt
-            <textarea
-              value={excerpt}
-              onChange={(event) => setExcerpt(event.target.value)}
-              placeholder="Ringkasan untuk landing page dan daftar article."
-            />
-          </label>
+          <div
+            ref={editorEnRef}
+            className="article-rich-editor"
+            hidden={editLang !== "en"}
+            data-placeholder="Write the English article here..."
+            contentEditable
+            suppressContentEditableWarning
+          />
+          {editLang === "en" ? (
+            <label>
+              Excerpt (English)
+              <textarea
+                value={excerptEn}
+                onChange={(event) => setExcerptEn(event.target.value)}
+                placeholder="Short summary for the landing page and journal."
+              />
+            </label>
+          ) : (
+            <label>
+              Excerpt
+              <textarea
+                value={excerpt}
+                onChange={(event) => setExcerpt(event.target.value)}
+                placeholder="Ringkasan untuk landing page dan daftar article."
+              />
+            </label>
+          )}
         </main>
         <aside>
           <section>
@@ -25773,24 +27694,27 @@ function SettingsPage({
   notificationMuted: boolean;
   onNotificationMuted: (muted: boolean) => Promise<void>;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<
     "general" | "notifications" | "domain" | "privacy"
   >("general");
   const tabs: [typeof tab, string][] = [
-    ["general", "General"],
-    ["notifications", "Notifications"],
-    ["domain", "Domain"],
-    ["privacy", "Privacy"],
+    ["general", t("Umum", "General")],
+    ["notifications", t("Notifikasi", "Notifications")],
+    ["domain", t("Alamat website", "Domain")],
+    ["privacy", t("Privasi", "Privacy")],
   ];
   return (
     <div className="page narrow-page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">PREFERENCES</div>
-          <h1>Website & Notification Settings</h1>
+          <div className="eyebrow">{t("PENGATURAN", "PREFERENCES")}</div>
+          <h1>{t("Pengaturan website & notifikasi", "Website & notification settings")}</h1>
           <p>
-            Kelola pengalaman workspace, domain publik, notifikasi, dan
-            visibilitas website.
+            {t(
+              "Kelola bahasa, alamat website, notifikasi, dan visibilitas website.",
+              "Manage language, website address, notifications, and visibility.",
+            )}
           </p>
         </div>
       </div>
@@ -25809,44 +27733,72 @@ function SettingsPage({
         <div className="settings-card">
           {tab === "general" && (
             <>
-              <h3>Workspace preferences</h3>
+              <h3>{t("Preferensi umum", "General preferences")}</h3>
               <p>
-                Gunakan menu ini untuk mengelola preferensi umum. Perubahan
-                konten website tetap disimpan melalui Canvas Editor.
+                {t(
+                  "Perubahan isi undangan tetap disimpan melalui editor.",
+                  "Invitation content is still saved through the editor.",
+                )}
               </p>
+              {/* QA 15 TC-362 — pilihan bahasa dashboard. */}
+              <div className="setting-row">
+                <div>
+                  <Globe2 size={18} />
+                  <span>
+                    <strong>{t("Bahasa", "Language")}</strong>
+                    <small>
+                      {t(
+                        "Berlaku untuk dashboard dan halaman publik ikrarku.",
+                        "Applies to the dashboard and ikrarku public pages.",
+                      )}
+                    </small>
+                  </span>
+                </div>
+                <LangSwitch />
+              </div>
               <div className="setting-row">
                 <div>
                   <WandSparkles size={18} />
                   <span>
-                    <strong>Visual website editor</strong>
+                    <strong>{t("Editor visual", "Visual editor")}</strong>
                     <small>
-                      Edit konten, layout, dan styling dari Canvas Editor.
+                      {t(
+                        "Ubah isi, tata letak, dan tampilan undangan dari editor.",
+                        "Change your invitation content, layout, and style in the editor.",
+                      )}
                     </small>
                   </span>
                 </div>
               </div>
               <details className="howto-panel">
-                <summary>How it works — panduan singkat</summary>
+                <summary>{t("Cara kerja — panduan singkat", "How it works — quick guide")}</summary>
                 <ol>
                   <li>
-                    Buka menu <strong>Templates &amp; Canvas</strong> di
-                    sidebar.
+                    {t("Buka menu", "Open")} <strong>{t("Template & Canvas", "Templates & Canvas")}</strong>{" "}
+                    {t("di sidebar.", "in the sidebar.")}
                   </li>
                   <li>
-                    Pilih template, lalu klik <strong>Canvas Editor</strong>{" "}
-                    untuk mulai mengedit.
+                    {t("Klik", "Click")} <strong>Edit</strong>{" "}
+                    {t("pada kartu undangan untuk mulai mengedit.", "on your invitation card to start editing.")}
                   </li>
                   <li>
-                    Klik elemen (teks, gambar, section) untuk mengubah isi,
-                    warna, dan tata letak.
+                    {t(
+                      "Klik elemen (teks, gambar, section) untuk mengubah isi, warna, dan tata letak.",
+                      "Click an element (text, image, section) to change its content, colour, and layout.",
+                    )}
                   </li>
                   <li>
-                    Gunakan tab <strong>Style</strong> di panel kanan untuk
-                    gradient, background, dan animasi.
+                    {t("Gunakan tab", "Use the")} <strong>Style</strong>{" "}
+                    {t(
+                      "di panel kanan untuk gradient, background, dan animasi.",
+                      "tab in the right panel for gradients, backgrounds, and animation.",
+                    )}
                   </li>
                   <li>
-                    Klik <strong>Save &amp; Publish</strong>; atur URL publik di
-                    tab <strong>Domain</strong>.
+                    {t("Klik", "Click")} <strong>Save &amp; Publish</strong>;{" "}
+                    {t("atur alamat website di tab", "set your website address in the")}{" "}
+                    <strong>{t("Alamat website", "Domain")}</strong>
+                    {t(".", " tab.")}
                   </li>
                 </ol>
               </details>
@@ -25854,10 +27806,12 @@ function SettingsPage({
           )}
           {tab === "notifications" && (
             <>
-              <h3>Notification sound</h3>
+              <h3>{t("Suara notifikasi", "Notification sound")}</h3>
               <p>
-                Suara diputar saat task atau chat baru masuk. Visual
-                notification tetap muncul saat suara dimute.
+                {t(
+                  "Suara diputar saat pesan atau tugas baru masuk. Notifikasi visual tetap muncul saat suara dimatikan.",
+                  "A sound plays when a new message or task arrives. Visual notifications still appear when muted.",
+                )}
               </p>
               <div className="setting-row">
                 <div>
@@ -25869,14 +27823,15 @@ function SettingsPage({
                   <span>
                     <strong>
                       {notificationMuted
-                        ? "Notification sound muted"
-                        : "Notification sound active"}
+                        ? t("Suara notifikasi dimatikan", "Notification sound muted")
+                        : t("Suara notifikasi aktif", "Notification sound on")}
                     </strong>
-                    <small>Preferensi disimpan ke akun Anda.</small>
+                    <small>{t("Preferensi disimpan ke akun Anda.", "Saved to your account.")}</small>
                   </span>
                 </div>
                 <button
                   className={`toggle ${notificationMuted ? "" : "on"}`}
+                  aria-label={t("Suara notifikasi", "Notification sound")}
                   onClick={() => void onNotificationMuted(!notificationMuted)}
                 >
                   <i />
@@ -25886,16 +27841,18 @@ function SettingsPage({
                 className="secondary-btn"
                 onClick={() => playNotificationTone()}
               >
-                <Play size={14} /> Test sound
+                <Play size={14} /> {t("Coba suara", "Test sound")}
               </button>
             </>
           )}
           {tab === "domain" && (
             <>
-              <h3>Public website URL</h3>
+              <h3>{t("Alamat website publik", "Public website address")}</h3>
               <p>
-                Pilih URL yang mudah dibaca. Sistem akan memvalidasi duplikasi
-                saat Save & Publish.
+                {t(
+                  "Pilih alamat yang mudah dibaca. Ketersediaan diperiksa saat Save & Publish.",
+                  "Choose an easy-to-read address. Availability is checked on Save & Publish.",
+                )}
               </p>
               <div className="slug-field large">
                 <span>{window.location.origin}/</span>
@@ -25910,6 +27867,7 @@ function SettingsPage({
                   }
                 />
                 <button
+                  aria-label={t("Salin alamat", "Copy address")}
                   onClick={() =>
                     void navigator.clipboard?.writeText(
                       `${window.location.origin}/${slug}`,
@@ -25920,32 +27878,36 @@ function SettingsPage({
                 </button>
               </div>
               <div className="availability">
-                <Check size={15} /> Availability diperiksa saat publish
+                <Check size={15} />{" "}
+                {t("Ketersediaan diperiksa saat publish", "Availability is checked on publish")}
               </div>
             </>
           )}
           {tab === "privacy" && (
             <>
-              <h3>Website visibility</h3>
+              <h3>{t("Visibilitas website", "Website visibility")}</h3>
               <p>
-                Website dengan status Published dapat dibuka oleh siapa pun yang
-                mengetahui URL. Draft dan template editor tidak dipublikasikan
-                sebagai URL customer.
+                {t(
+                  "Website yang sudah terbit dapat dibuka oleh siapa pun yang mengetahui alamatnya. Draf tidak dipublikasikan.",
+                  "A published website can be opened by anyone who knows its address. Drafts are not published.",
+                )}
               </p>
               <div className="setting-row">
                 <div>
                   <ShieldCheck size={18} />
                   <span>
-                    <strong>Public after publish</strong>
+                    <strong>{t("Publik setelah terbit", "Public after publishing")}</strong>
                     <small>
-                      Pastikan data tamu dan konten yang ditampilkan memang
-                      dimaksudkan untuk publik.
+                      {t(
+                        "Pastikan data tamu dan konten yang ditampilkan memang dimaksudkan untuk publik.",
+                        "Make sure the guest data and content shown are meant to be public.",
+                      )}
                     </small>
                   </span>
                 </div>
                 <span className="published-badge">
                   <i />
-                  Controlled by publish status
+                  {t("Mengikuti status publikasi", "Follows publish status")}
                 </span>
               </div>
             </>
@@ -27032,7 +28994,7 @@ function PaymentCountdown({ deadline }: { deadline: string }) {
 }
 
 function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("id-ID", {
+  return new Intl.DateTimeFormat(getSiteLang() === "en" ? "en-GB" : "id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -27041,17 +29003,115 @@ function formatDateTime(value: string) {
   }).format(new Date(value));
 }
 
+/** QA 15 TC-360 — satu sumber kebenaran untuk progres pesanan customer.
+ *
+ *  Dulu Wedding Dashboard menampilkan "Published" (hard-coded) dan kesiapan
+ *  website 71%, sementara My Order menampilkan "Progress pengerjaan 0%" dari
+ *  tiket internal ("Onboarding order … Open · High"). Kini keduanya memakai
+ *  fungsi yang sama: status website nyata, persentase kesiapan website yang
+ *  sama, dan tahapan pengerjaan dalam bahasa customer. */
+export function websiteReadiness(
+  sections: CanvasSection[],
+  siteTitle: string,
+  slug: string,
+  lang: SiteLang = getSiteLang(),
+) {
+  const en = lang === "en";
+  const has = (type: FeatureType) =>
+    sections.some((section) =>
+      section.columns.some((column) =>
+        column.features.some((feature) => feature.type === type),
+      ),
+    );
+  const checks: [string, boolean][] = [
+    [en ? "Website title" : "Judul website", Boolean(siteTitle.trim())],
+    [en ? "Public URL" : "Alamat publik", Boolean(slug.trim())],
+    ["Canvas", sections.length > 0],
+    [en ? "Invitation cover" : "Buka Undangan", has("invitation-cover")],
+    [en ? "Event detail" : "Detail acara", has("event")],
+    [en ? "Location" : "Lokasi", has("location")],
+    [
+      en ? "Guest list" : "Daftar tamu",
+      sections.some((section) => section.invitees.length > 0),
+    ],
+  ];
+  const done = checks.filter(([, ok]) => ok).length;
+  return {
+    checks,
+    done,
+    total: checks.length,
+    percent: Math.round((done / checks.length) * 100),
+  };
+}
+const TASK_DONE = ["Done", "Approved"];
+export function orderMilestones(
+  order: any,
+  options: { sitePublished: boolean; hasDesign: boolean },
+  lang: SiteLang = getSiteLang(),
+) {
+  const en = lang === "en";
+  const tasks: any[] = order.tasks || [];
+  const taskDone = (pattern: RegExp) =>
+    tasks.some((task) => pattern.test(task.title) && TASK_DONE.includes(task.status));
+  const paid = order.payment_status === "Paid";
+  const published = paid && options.sitePublished && options.hasDesign;
+  const designDone = published || taskDone(/build|desain|design/i);
+  const onboardingDone = designDone || taskDone(/onboarding/i) || (paid && options.hasDesign);
+  const steps: { label: string; done: boolean }[] = [
+    { label: en ? "Payment received" : "Pembayaran diterima", done: paid },
+    { label: en ? "Onboarding with Customer Service" : "Onboarding bersama Customer Service", done: paid && onboardingDone },
+    { label: en ? "Invitation designed by Web Designer" : "Undangan dikerjakan Web Designer", done: paid && designDone },
+    { label: en ? "Website published" : "Website terbit", done: published },
+  ];
+  const current = steps.findIndex((step) => !step.done);
+  return { steps, current };
+}
+export function customerPaymentLabel(order: any, lang: SiteLang = getSiteLang()) {
+  const en = lang === "en";
+  if (order?.payment_status === "Paid") return en ? "Paid" : "Lunas";
+  if (order?.payment_status === "Expired")
+    return en ? "Expired (not paid within 24 hours)" : "Hangus (lewat 1x24 jam)";
+  return en ? "Awaiting payment" : "Menunggu pembayaran";
+}
+export function customerProgressLabel(
+  order: any,
+  lang: SiteLang = getSiteLang(),
+  sitePublished?: boolean,
+) {
+  const en = lang === "en";
+  if (order?.payment_status === "Expired") return en ? "Expired" : "Hangus";
+  if (order?.payment_status !== "Paid")
+    return en ? "Awaiting payment" : "Menunggu pembayaran";
+  if (sitePublished) return en ? "Website published" : "Website terbit";
+  return en ? "In progress" : "Sedang dikerjakan";
+}
+
 function MyOrdersPage({
   orders,
   setView,
   onReload,
   flash,
+  designs = [],
+  siteTitle = "",
+  slug = "",
+  siteStatus = "Draft",
 }: {
   orders: any[];
   setView: (view: View) => void;
   onReload?: () => Promise<void>;
   flash?: (message: string) => void;
+  /** QA 15 TC-360 — design per order untuk kesiapan website yang sama
+   *  dengan Wedding Dashboard. */
+  designs?: WebsiteDesignGroup[];
+  siteTitle?: string;
+  slug?: string;
+  siteStatus?: string;
 }) {
+  const t = useT();
+  const [lang] = useSiteLang();
+  const sitePublished = siteStatus === "Published";
+  const designFor = (order: any) =>
+    designs.find((design) => design.orderNo === order.order_no);
   // Revisi 29 Okt — status dibayar di Mayar tidak berubah otomatis bila
   // webhook tidak datang. Order pending yang sudah punya invoice Mayar dicek
   // langsung ke Mayar: saat halaman dibuka, tiap 20 detik selama masih ada
@@ -27101,19 +29161,27 @@ function MyOrdersPage({
     try {
       const result = await api.checkPayment(order.id);
       if (result.status === "Paid") {
-        flash?.("Pembayaran diterima. Order Anda sedang diproses.");
+        flash?.(t("Pembayaran diterima. Order Anda sedang diproses.", "Payment received. Your order is being processed."));
         await onReload?.();
       } else if (result.reason === "no-invoice")
         flash?.(
-          "Order ini belum punya tagihan Mayar. Lanjutkan pembayaran dari halaman checkout atau hubungi support.",
+          t(
+            "Order ini belum punya tagihan Mayar. Lanjutkan pembayaran dari halaman checkout atau hubungi support.",
+            "This order has no Mayar invoice yet. Continue the payment from checkout or contact support.",
+          ),
         );
       else
         flash?.(
-          "Pembayaran belum terkonfirmasi oleh Mayar. Bila baru saja membayar, tunggu 1–2 menit lalu cek lagi.",
+          t(
+            "Pembayaran belum terkonfirmasi oleh Mayar. Bila baru saja membayar, tunggu 1–2 menit lalu cek lagi.",
+            "Mayar has not confirmed the payment yet. If you just paid, wait 1–2 minutes and check again.",
+          ),
         );
     } catch (error) {
       flash?.(
-        error instanceof Error ? error.message : "Gagal mengecek pembayaran.",
+        error instanceof Error
+          ? error.message
+          : t("Gagal mengecek pembayaran.", "Could not check the payment."),
       );
     } finally {
       setCheckingId("");
@@ -27124,23 +29192,27 @@ function MyOrdersPage({
       <div className="page">
         <div className="page-heading">
           <div>
-            <div className="eyebrow">MY ORDER</div>
-            <h1>Order undangan Anda</h1>
+            <div className="eyebrow">{t("PESANAN SAYA", "MY ORDERS")}</div>
+            <h1>{t("Pesanan undangan Anda", "Your invitation orders")}</h1>
             <p>
-              Riwayat pembelian, receipt, assignment, dan progress onboarding
-              Anda akan tampil di sini.
+              {t(
+                "Riwayat pembelian, receipt, tim yang menangani, dan progres pengerjaan Anda akan tampil di sini.",
+                "Your purchases, receipts, assigned team, and progress will appear here.",
+              )}
             </p>
           </div>
         </div>
         <div className="empty-state">
           <PackageCheck size={34} />
-          <h2>Belum ada order</h2>
+          <h2>{t("Belum ada pesanan", "No orders yet")}</h2>
           <p>
-            Pesan template dari landing page untuk memulai project wedding
-            website.
+            {t(
+              "Pesan template dari katalog untuk mulai membuat undangan.",
+              "Order a template from the catalog to start your invitation.",
+            )}
           </p>
-          <button className="primary-btn" onClick={() => setView("landing")}>
-            Explore templates
+          <button className="primary-btn" onClick={() => setView("designs")}>
+            {t("Lihat katalog desain", "Browse designs")}
           </button>
         </div>
       </div>
@@ -27151,34 +29223,29 @@ function MyOrdersPage({
   // Roleplay 31 Okt — "Selesai" berarti seluruh tiket pengerjaan sudah Done,
   // bukan sekadar onboarding otomatis selesai (fulfillment_status Complete
   // terisi sesaat setelah bayar, sehingga order baru terhitung "Selesai").
-  const doneOrders = paidOrders.filter((order) => {
-    const tasks = order.tasks || [];
-    return (
-      tasks.length > 0 &&
-      tasks.every((task: any) => ["Done", "Approved"].includes(task.status))
-    );
-  });
+  // QA 15 TC-360 — "Selesai" = seluruh tahapan selesai (website terbit),
+  // sama dengan tahapan yang tampil di kartu.
+  const doneOrders = paidOrders.filter(
+    (order) =>
+      orderMilestones(order, { sitePublished, hasDesign: Boolean(designFor(order)) }, lang)
+        .current === -1,
+  );
   const totalValue = paidOrders.reduce(
     (total, order) => total + (Number(order.amount) || 0),
     0,
   );
-  const taskProgress = (order: any) => {
-    const tasks = order.tasks || [];
-    if (!tasks.length) return 0;
-    const done = tasks.filter((task: any) =>
-      ["Done", "Approved"].includes(task.status),
-    ).length;
-    return Math.round((done / tasks.length) * 100);
-  };
+
   return (
     <div className="page my-orders-page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">MY ORDER</div>
-          <h1>Order &amp; progress undangan Anda</h1>
+          <div className="eyebrow">{t("PESANAN SAYA", "MY ORDERS")}</div>
+          <h1>{t("Pesanan & progres undangan Anda", "Your orders & invitation progress")}</h1>
           <p>
-            Pantau pembayaran, tim yang mengerjakan, progress pengerjaan, dan
-            receipt dalam satu halaman.
+            {t(
+              "Pantau pembayaran, tim yang mengerjakan, progres pengerjaan, dan receipt dalam satu halaman.",
+              "Track payments, your team, progress, and receipts on one page.",
+            )}
           </p>
         </div>
       </div>
@@ -27186,34 +29253,38 @@ function MyOrdersPage({
         <article>
           <PackageCheck size={20} />
           <strong>{orders.length}</strong>
-          <span>Total order</span>
+          <span>{t("Total pesanan", "Total orders")}</span>
         </article>
         <article>
           <Clock3 size={20} />
           <strong>{paidOrders.length - doneOrders.length}</strong>
-          <span>Sedang dikerjakan</span>
+          <span>{t("Sedang dikerjakan", "In progress")}</span>
         </article>
         <article>
           <CheckCircle size={20} />
           <strong>{doneOrders.length}</strong>
-          <span>Selesai</span>
+          <span>{t("Selesai", "Completed")}</span>
         </article>
         <article>
           <ReceiptText size={20} />
           <strong>{formatRupiah(totalValue)}</strong>
-          <span>Total dibayar</span>
+          <span>{t("Total dibayar", "Total paid")}</span>
         </article>
       </section>
       <div className="project-order-grid">
         {orders.map((order) => {
-          const progress = taskProgress(order);
           const paid = order.payment_status === "Paid";
           const expired = order.payment_status === "Expired";
-          const paymentText = paid
-            ? "Lunas"
-            : expired
-              ? "Hangus (lewat 1x24 jam)"
-              : "Menunggu pembayaran";
+          const paymentText = customerPaymentLabel(order, lang);
+          const design = designFor(order);
+          const readiness = design
+            ? websiteReadiness(design.sections, siteTitle, slug, lang)
+            : null;
+          const milestones = orderMilestones(
+            order,
+            { sitePublished, hasDesign: Boolean(design) },
+            lang,
+          );
           return (
           <article key={order.id} className="project-order-card">
             <header>
@@ -27221,7 +29292,7 @@ function MyOrdersPage({
                 <span>{order.order_no}</span>
                 <h2>{order.template_name}</h2>
                 <small className="project-order-date">
-                  Dipesan {formatShortDate(order.created_at)}
+                  {t("Dipesan", "Ordered")} {formatShortDate(order.created_at)}
                 </small>
               </div>
               <span
@@ -27230,24 +29301,43 @@ function MyOrdersPage({
                 {paymentText}
               </span>
             </header>
-            {/* QA TC-176: progress pengerjaan ditampilkan sebagai bar, bukan
-                hanya daftar task yang harus dibaca satu per satu. */}
-            {paid && (order.tasks || []).length > 0 && (
+            {/* QA 15 TC-360 — status website & kesiapan website sama persis
+                dengan Wedding Dashboard. */}
+            {paid && (
               <div className="project-progress">
                 <div className="project-progress-head">
-                  <span>Progress pengerjaan</span>
-                  <strong>{progress}%</strong>
+                  <span>
+                    {t("Status website", "Website status")}:{" "}
+                    <b>
+                      {design && sitePublished
+                        ? t("Terbit", "Published")
+                        : t("Draf", "Draft")}
+                    </b>
+                  </span>
+                  {readiness && (
+                    <strong>
+                      {t("Kesiapan", "Readiness")} {readiness.percent}%
+                    </strong>
+                  )}
                 </div>
-                <div className="project-progress-bar">
-                  <i style={{ width: `${progress}%` }} />
-                </div>
+                {readiness && (
+                  <>
+                    <div className="project-progress-bar">
+                      <i style={{ width: `${readiness.percent}%` }} />
+                    </div>
+                    <small className="project-progress-note">
+                      {readiness.done}/{readiness.total}{" "}
+                      {t("setup penting selesai", "key setup steps done")}
+                    </small>
+                  </>
+                )}
               </div>
             )}
             {/* TC-222 — billing sebagai daftar ke bawah (label kiri, nilai
                 kanan), bukan kotak-kotak, supaya terbaca seperti tagihan. */}
             <dl className="billing-list">
               <div>
-                <dt>No. order</dt>
+                <dt>{t("No. pesanan", "Order no.")}</dt>
                 <dd>{order.order_no}</dd>
               </div>
               <div>
@@ -27255,36 +29345,36 @@ function MyOrdersPage({
                 <dd>{order.template_name}</dd>
               </div>
               <div>
-                <dt>Tanggal pesan</dt>
+                <dt>{t("Tanggal pesan", "Order date")}</dt>
                 <dd>{formatShortDate(order.created_at)}</dd>
               </div>
               <div>
-                <dt>Status pembayaran</dt>
+                <dt>{t("Status pembayaran", "Payment status")}</dt>
                 <dd>{paymentText}</dd>
               </div>
               {order.payment_method && (
                 <div>
-                  <dt>Metode pembayaran</dt>
+                  <dt>{t("Metode pembayaran", "Payment method")}</dt>
                   <dd>{order.payment_method}</dd>
                 </div>
               )}
               {order.paid_at && (
                 <div>
-                  <dt>Tanggal bayar</dt>
+                  <dt>{t("Tanggal bayar", "Payment date")}</dt>
                   <dd>{formatShortDate(order.paid_at)}</dd>
                 </div>
               )}
               <div>
-                <dt>Status project</dt>
-                <dd>{order.order_status}</dd>
+                <dt>{t("Status pengerjaan", "Progress status")}</dt>
+                <dd>{customerProgressLabel(order, lang, Boolean(design) && sitePublished)}</dd>
               </div>
               <div>
                 <dt>Customer Service</dt>
-                <dd>{order.cs_name || "Menunggu assignment"}</dd>
+                <dd>{order.cs_name || t("Sedang ditentukan", "Being assigned")}</dd>
               </div>
               <div>
                 <dt>Web Designer</dt>
-                <dd>{order.editor_name || "Menunggu assignment"}</dd>
+                <dd>{order.editor_name || t("Sedang ditentukan", "Being assigned")}</dd>
               </div>
               <div className="billing-total">
                 <dt>Total</dt>
@@ -27294,13 +29384,19 @@ function MyOrdersPage({
             {expired && (
               <div className="order-pay-note expired">
                 <p>
-                  <strong>Order ini hangus.</strong> Pembayaran tidak diterima
-                  dalam 1x24 jam sejak dipesan
+                  <strong>{t("Order ini hangus.", "This order has expired.")}</strong>{" "}
+                  {t(
+                    "Pembayaran tidak diterima dalam 1x24 jam sejak dipesan",
+                    "Payment was not received within 24 hours of ordering",
+                  )}
                   {order.payment_deadline
-                    ? ` (batas ${formatDateTime(order.payment_deadline)})`
+                    ? ` (${t("batas", "deadline")} ${formatDateTime(order.payment_deadline)})`
                     : ""}
-                  . Tagihan lamanya tidak berlaku lagi — silakan pesan ulang
-                  template ini.
+                  .{" "}
+                  {t(
+                    "Tagihan lamanya tidak berlaku lagi — silakan pesan ulang template ini.",
+                    "The old invoice is no longer valid — please order this template again.",
+                  )}
                 </p>
                 <button
                   type="button"
@@ -27308,7 +29404,7 @@ function MyOrdersPage({
                   onClick={() => setView("templates")}
                 >
                   <RefreshCw size={14} />
-                  Pesan ulang
+                  {t("Pesan ulang", "Order again")}
                 </button>
               </div>
             )}
@@ -27319,21 +29415,30 @@ function MyOrdersPage({
                     {/* QC 8 Nov — batas bayar 1x24 jam, lewat itu hangus. */}
                     {order.payment_deadline && (
                       <p className="order-deadline">
-                        <strong>Bayar sebelum {formatDateTime(order.payment_deadline)}</strong>{" "}
-                        <PaymentCountdown deadline={order.payment_deadline} />.
-                        Lewat batas ini order hangus otomatis.
+                        <strong>
+                          {t("Bayar sebelum", "Pay before")} {formatDateTime(order.payment_deadline)}
+                        </strong>{" "}
+                        <PaymentCountdown deadline={order.payment_deadline} />.{" "}
+                        {t(
+                          "Lewat batas ini order hangus otomatis.",
+                          "After this deadline the order expires automatically.",
+                        )}
                       </p>
                     )}
                     <p>
-                      <strong>Belum dibayar?</strong> Silakan cek email{" "}
-                      <b>{order.email}</b> (termasuk folder Spam/Promosi) untuk
-                      tagihan dari Mayar, lalu selesaikan pembayaran lewat
-                      link di email tersebut.
+                      <strong>{t("Belum dibayar?", "Not paid yet?")}</strong>{" "}
+                      {t("Silakan cek email", "Check the email")} <b>{order.email}</b>{" "}
+                      {t(
+                        "(termasuk folder Spam/Promosi) untuk tagihan dari Mayar, lalu selesaikan pembayaran lewat link di email tersebut.",
+                        "(including Spam/Promotions) for the Mayar invoice, then complete the payment using the link in that email.",
+                      )}
                     </p>
                     <p>
-                      <strong>Sudah bayar?</strong> Status diperbarui otomatis
-                      dalam beberapa menit. Klik tombol di bawah untuk mengecek
-                      sekarang.
+                      <strong>{t("Sudah bayar?", "Already paid?")}</strong>{" "}
+                      {t(
+                        "Status diperbarui otomatis dalam beberapa menit. Klik tombol di bawah untuk mengecek sekarang.",
+                        "The status updates automatically within a few minutes. Click the button below to check now.",
+                      )}
                     </p>
                     <button
                       type="button"
@@ -27343,42 +29448,49 @@ function MyOrdersPage({
                     >
                       <RefreshCw size={14} />
                       {checkingId === order.id
-                        ? "Mengecek pembayaran…"
-                        : "Cek status pembayaran"}
+                        ? t("Mengecek pembayaran…", "Checking payment…")
+                        : t("Cek status pembayaran", "Check payment status")}
                     </button>
                   </>
                 ) : (
                   <p>
-                    <strong>Harga template belum ditetapkan.</strong> Order ini
-                    belum bisa dibayar. Hubungi support ikrarku lewat Live Chat.
+                    <strong>
+                      {t("Harga template belum ditetapkan.", "The template price has not been set.")}
+                    </strong>{" "}
+                    {t(
+                      "Order ini belum bisa dibayar. Hubungi support ikrarku lewat Live Chat.",
+                      "This order cannot be paid yet. Contact ikrarku support via Live Chat.",
+                    )}
                   </p>
                 )}
               </div>
             )}
-            <div className="project-timeline">
-              {(order.tasks || []).map((task: any, index: number) => (
-                <div
-                  key={task.id}
-                  className={
-                    ["Done", "Approved"].includes(task.status) ? "done" : ""
-                  }
-                >
-                  <i>
-                    {["Done", "Approved"].includes(task.status) ? (
-                      <Check size={12} />
-                    ) : (
-                      index + 1
-                    )}
-                  </i>
-                  <span>
-                    <strong>{task.title}</strong>
-                    <small>
-                      {task.status} · {task.priority}
-                    </small>
-                  </span>
-                </div>
-              ))}
-            </div>
+            {/* QA 15 TC-360 — tahapan dalam bahasa customer, bukan tiket
+                internal ("Onboarding order … Open · High"). */}
+            {paid && (
+              <div className="project-timeline">
+                {milestones.steps.map((step, index) => (
+                  <div
+                    key={step.label}
+                    className={
+                      step.done ? "done" : index === milestones.current ? "current" : ""
+                    }
+                  >
+                    <i>{step.done ? <Check size={12} /> : index + 1}</i>
+                    <span>
+                      <strong>{step.label}</strong>
+                      <small>
+                        {step.done
+                          ? t("Selesai", "Done")
+                          : index === milestones.current
+                            ? t("Sedang berjalan", "In progress")
+                            : t("Menunggu", "Upcoming")}
+                      </small>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
             <footer>
               {order.receiptUrl && (
                 <a
@@ -27387,13 +29499,13 @@ function MyOrdersPage({
                   rel="noreferrer"
                 >
                   <ReceiptText size={15} />
-                  Download receipt
+                  {t("Unduh receipt", "Download receipt")}
                 </a>
               )}
               {order.conversation && (
                 <button onClick={() => setView("help")}>
                   <MessageCircle size={15} />
-                  Hubungi support
+                  {t("Hubungi support", "Contact support")}
                 </button>
               )}
             </footer>
@@ -27777,20 +29889,164 @@ function AccountCreateModal({
   );
 }
 
+/** QA 15 TC-346 — tautan di isi artikel.
+ *
+ *  Penulis sering menautkan "Baca juga: <judul>" atau ajakan membuat undangan
+ *  ke alamat beranda (https://dev.ikrarku.id / https://ikrarku.id) sehingga
+ *  pembaca mendarat di landing page, bukan artikel/halaman yang dimaksud.
+ *  Tautan dirapikan saat dirender:
+ *  - "Baca juga: <judul>" (atau tautan internal ke /articles/, /jurnal/)
+ *    diarahkan ke artikel yang judul/slug-nya cocok;
+ *  - tautan ke beranda situs sendiri diarahkan ke katalog desain (/desain);
+ *  - domain ikrarku.id/dev.ikrarku.id dijadikan alamat relatif agar staging
+ *    tetap di staging;
+ *  - tautan luar dibuka di tab baru. */
+const OWN_HOSTS = /^(www\.)?(dev\.)?ikrarku\.id$/i;
+const normalizeTitle = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[“”"'’]/g, "")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
+export function resolveArticleLinks(
+  html: string,
+  articles: Pick<ArticleItem, "slug" | "title" | "titleEn">[],
+): string {
+  if (typeof DOMParser === "undefined" || !html.includes("<a")) return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, "text/html");
+  const findByText = (text: string) => {
+    const wanted = normalizeTitle(text);
+    if (!wanted) return undefined;
+    return (
+      articles.find(
+        (item) =>
+          normalizeTitle(item.title) === wanted ||
+          normalizeTitle(item.titleEn || "") === wanted,
+      ) ||
+      articles.find(
+        (item) =>
+          wanted.length > 12 &&
+          (normalizeTitle(item.title).includes(wanted) ||
+            wanted.includes(normalizeTitle(item.title))),
+      )
+    );
+  };
+  doc.querySelectorAll("a[href]").forEach((anchor) => {
+    const raw = anchor.getAttribute("href") || "";
+    let url: URL;
+    try {
+      url = new URL(raw, window.location.origin);
+    } catch {
+      return;
+    }
+    const own =
+      url.origin === window.location.origin || OWN_HOSTS.test(url.hostname);
+    const text = anchor.textContent || "";
+    const readAlso = /^\s*baca juga\s*:?\s*(.+)$/i.exec(text);
+    if (readAlso) {
+      const target = findByText(readAlso[1]);
+      if (target) {
+        anchor.setAttribute("href", articleHref(target.slug));
+        anchor.removeAttribute("target");
+        return;
+      }
+    }
+    if (!own) {
+      if (/^https?:$/.test(url.protocol)) {
+        anchor.setAttribute("target", "_blank");
+        anchor.setAttribute("rel", "noopener noreferrer");
+      }
+      return;
+    }
+    anchor.removeAttribute("target");
+    const parts = url.pathname.replace(/^\/+|\/+$/g, "").split("/");
+    if (
+      parts.length === 2 &&
+      (parts[0] === ARTICLE_PATH_SEGMENT || parts[0] === "jurnal")
+    ) {
+      const slug = decodeURIComponent(parts[1]);
+      const target =
+        articles.find((item) => item.slug === slug) ||
+        findByText(text) ||
+        findByText(slug.replace(/-/g, " "));
+      anchor.setAttribute("href", articleHref(target?.slug || slug));
+      return;
+    }
+    // Tautan internal lain yang teksnya judul artikel (mis. "Baca juga:
+    // <judul>" dengan alamat salah ketik) diarahkan ke artikel tersebut.
+    const byTitle = parts[0] ? findByText(text) : undefined;
+    if (byTitle) {
+      anchor.setAttribute("href", articleHref(byTitle.slug));
+      return;
+    }
+    if (!parts[0]) {
+      // Tautan ke beranda: arahkan ke artikel bila teksnya judul artikel,
+      // selain itu ke katalog desain (ajakan membuat undangan).
+      const target = findByText(text);
+      anchor.setAttribute(
+        "href",
+        target ? articleHref(target.slug) : `/desain${url.hash}`,
+      );
+      return;
+    }
+    anchor.setAttribute("href", url.pathname + url.search + url.hash);
+  });
+  return doc.body.firstElementChild?.innerHTML ?? html;
+}
+
 function ArticleReaderPage({
   article,
   onBack,
   publicMode = false,
+  articles = [],
+  onOpenArticle,
+  setView,
 }: {
   article: ArticleItem;
   onBack: () => void;
   publicMode?: boolean;
+  articles?: ArticleItem[];
+  onOpenArticle?: (slug: string) => void;
+  setView?: (view: View) => void;
 }) {
+  const t = useT();
+  const html = useMemo(
+    () => resolveArticleLinks(article.content, articles),
+    [article.content, articles],
+  );
+  // Tautan internal dibuka di dalam aplikasi (tanpa muat ulang halaman).
+  const onContentClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as HTMLElement).closest("a");
+    if (
+      !anchor ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      anchor.target === "_blank"
+    )
+      return;
+    const href = anchor.getAttribute("href") || "";
+    if (!href.startsWith("/")) return;
+    const parts = href.split(/[?#]/)[0].replace(/^\/+|\/+$/g, "").split("/");
+    if (parts[0] === ARTICLE_PATH_SEGMENT && parts[1] && onOpenArticle) {
+      event.preventDefault();
+      onOpenArticle(decodeURIComponent(parts[1]));
+      window.scrollTo({ top: 0 });
+      return;
+    }
+    if ((parts[0] === "desain" || parts[0] === "templates") && setView) {
+      event.preventDefault();
+      onBack();
+      setView("designs");
+    }
+  };
   return (
     <div className={`article-reader-page wide ${publicMode ? "public" : ""}`}>
       <header>
         <button onClick={onBack}>
-          <ArrowLeft size={16} /> Back
+          <ArrowLeft size={16} /> {publicMode ? t("Kembali", "Back") : "Back"}
         </button>
         {publicMode ? <Brand /> : <span>IKRARKU ARTICLE</span>}
         <div>{article.category}</div>
@@ -27817,10 +30073,16 @@ function ArticleReaderPage({
           </div>
         </section>
         <div className="reader-body-wide">
-          <article>
+          <article lang={article.langFallback ? "id" : undefined}>
+            {publicMode && article.langFallback && (
+              <p className="article-lang-fallback">
+                This article is currently available in Indonesian only.
+              </p>
+            )}
             <div
               className="reader-page-content"
-              dangerouslySetInnerHTML={{ __html: article.content }}
+              onClick={onContentClick}
+              dangerouslySetInnerHTML={{ __html: html }}
             />
             <footer>
               {article.tags.map((tag) => (
@@ -27830,11 +30092,26 @@ function ArticleReaderPage({
           </article>
           <aside>
             <Brand />
-            <strong>Continue your wedding journey.</strong>
+            <strong>
+              {t("Lanjutkan persiapan pernikahan Anda.", "Continue your wedding journey.")}
+            </strong>
             <p>
-              Explore template, planning guide, dan wedding website yang
-              dikelola dalam satu platform.
+              {t(
+                "Jelajahi template, panduan persiapan, dan wedding website yang dikelola dalam satu platform.",
+                "Explore templates, planning guides, and wedding websites managed in one platform.",
+              )}
             </p>
+            {publicMode && setView && (
+              <button
+                className="primary-btn"
+                onClick={() => {
+                  onBack();
+                  setView("designs");
+                }}
+              >
+                {t("Lihat desain undangan", "Browse invitation designs")}
+              </button>
+            )}
           </aside>
         </div>
       </main>
@@ -29288,6 +31565,27 @@ function bankLogoStyle(feature: Feature): React.CSSProperties {
   };
 }
 /** QA 13 TC-281 — pilihan ikon Wedding Gift. */
+/** QA 15 TC-342 — ikon fitur Event bisa diganti atau dihapus. */
+function EventIcon({ feature }: { feature: Feature }) {
+  const size = feature.eventIconSize || 25;
+  const style = feature.eventIconColor ? { color: feature.eventIconColor } : undefined;
+  const props = { size, style, className: "event-icon" };
+  switch (feature.eventIcon) {
+    case "none":
+      return null;
+    case "heart":
+      return <Heart {...props} />;
+    case "rings":
+      return <Gem {...props} />;
+    case "sparkles":
+      return <Sparkles {...props} />;
+    case "clock":
+      return <Clock {...props} />;
+    default:
+      return <CalendarDays {...props} />;
+  }
+}
+
 function GiftIcon({ feature }: { feature: Feature }) {
   const size = feature.giftIconSize || 25;
   const style = feature.giftIconColor
@@ -29468,8 +31766,25 @@ function GiftAccountsBlock({ feature }: { feature: Feature }) {
               {account.bank}
             </span>
           )}
-          <strong>{account.accountNumber}</strong>
-          <small>a.n. {account.accountName}</small>
+          <strong
+            style={
+              feature.giftAccountNumberSize
+                ? { fontSize: feature.giftAccountNumberSize }
+                : undefined
+            }
+          >
+            {account.accountNumber}
+          </strong>
+          <small
+            className="gift-account-name"
+            style={
+              feature.giftAccountNameSize
+                ? { fontSize: feature.giftAccountNameSize }
+                : undefined
+            }
+          >
+            a.n. {account.accountName}
+          </small>
           {account.note && <em>{account.note}</em>}
           <button
             type="button"
@@ -29633,6 +31948,16 @@ function SocialGlyph({
       );
   }
 }
+function iconTextStyle(feature: Feature): React.CSSProperties | undefined {
+  const style: React.CSSProperties = {};
+  if (feature.iconTextSize) style.fontSize = feature.iconTextSize;
+  if (feature.iconTextFont) style.fontFamily = `"${feature.iconTextFont}"`;
+  if (feature.iconTextColor) style.color = feature.iconTextColor;
+  if (feature.iconTextBold !== undefined)
+    style.fontWeight = feature.iconTextBold ? 700 : 400;
+  return Object.keys(style).length ? style : undefined;
+}
+
 function IconFeature({ feature }: { feature: Feature }) {
   const icons = feature.icons || [];
   if (!icons.length)
@@ -29670,7 +31995,7 @@ function IconFeature({ feature }: { feature: Feature }) {
             {feature.iconTextPosition !== "none" && (
               <span
                 className="icon-text"
-                style={feature.iconTextSize ? { fontSize: feature.iconTextSize } : undefined}
+                style={iconTextStyle(feature)}
               >
                 {item.text || item.label}
               </span>
@@ -29682,7 +32007,7 @@ function IconFeature({ feature }: { feature: Feature }) {
             {feature.iconTextPosition !== "none" && (
               <span
                 className="icon-text"
-                style={feature.iconTextSize ? { fontSize: feature.iconTextSize } : undefined}
+                style={iconTextStyle(feature)}
               >
                 {item.text || item.label}
               </span>
@@ -30160,6 +32485,36 @@ function GiftAccountEditor({
           </>
         )}
       </div>
+      {/* QA 15 TC-335 — ukuran teks rekening. */}
+      <div className="bank-logo-style">
+        <strong>Teks rekening</strong>
+        <div className="two-inputs">
+          <label>
+            Nomor rekening <span>{feature.giftAccountNumberSize || 14}px</span>
+            <input
+              type="range"
+              min={10}
+              max={36}
+              value={feature.giftAccountNumberSize || 14}
+              onChange={(event) =>
+                update({ giftAccountNumberSize: Number(event.target.value) })
+              }
+            />
+          </label>
+          <label>
+            Nama pemilik <span>{feature.giftAccountNameSize || 8}px</span>
+            <input
+              type="range"
+              min={7}
+              max={32}
+              value={feature.giftAccountNameSize || 8}
+              onChange={(event) =>
+                update({ giftAccountNameSize: Number(event.target.value) })
+              }
+            />
+          </label>
+        </div>
+      </div>
       {/* QA 13 TC-281 & TC-291 — ikon Wedding Gift dan lebar kotak seragam. */}
       <div className="bank-logo-style">
         <strong>Ikon & kotak</strong>
@@ -30526,6 +32881,37 @@ function IconListEditor({
             }
           />
         </label>
+        {/* QA 15 TC-333 — font teks icon. */}
+        <label>
+          Font teks
+          <FontSelect
+            value={feature.iconTextFont}
+            onChange={(iconTextFont) =>
+              update({ iconTextFont: iconTextFont || undefined })
+            }
+            allowInherit
+          />
+        </label>
+        <div className="two-inputs">
+          <label>
+            Warna teks
+            <ColorInput
+              value={feature.iconTextColor}
+              fallback={feature.iconColor || "#1f3a2e"}
+              onChange={(iconTextColor) => update({ iconTextColor })}
+            />
+          </label>
+          <label className="inline-check">
+            <input
+              type="checkbox"
+              checked={Boolean(feature.iconTextBold)}
+              onChange={(event) =>
+                update({ iconTextBold: event.target.checked })
+              }
+            />
+            Tebal
+          </label>
+        </div>
       </div>
       {icons.map((item) => (
         <div className="icon-row" key={item.id}>
@@ -31990,6 +34376,7 @@ function CreditEditor({
 
 // QA TC-105 — permintaan tautan reset password dari halaman login.
 function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
+  const t = useT();
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
   const [devUrl, setDevUrl] = useState("");
@@ -32006,7 +34393,9 @@ function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
       if (result?.devResetUrl) setDevUrl(result.devResetUrl);
     } catch (issue) {
       setError(
-        issue instanceof Error ? issue.message : "Gagal mengirim tautan reset.",
+        issue instanceof Error
+          ? issue.message
+          : t("Gagal mengirim tautan reset.", "Could not send the reset link."),
       );
     }
     setBusy(false);
@@ -32015,18 +34404,23 @@ function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
     <div className="auth-page simple-auth">
       <section className="auth-form-wrap">
         <div className="auth-card">
-          <div className="mobile-brand">
-            <Brand />
+          <div className="auth-card-top">
+            <div className="mobile-brand">
+              <Brand />
+            </div>
+            <LangSwitch />
           </div>
-          <span className="auth-kicker">ACCOUNT RECOVERY</span>
-          <h2>Lupa password</h2>
+          <span className="auth-kicker">{t("PEMULIHAN AKUN", "ACCOUNT RECOVERY")}</span>
+          <h2>{t("Lupa password", "Forgot password")}</h2>
           <p>
-            Masukkan email akun ikrarku Anda. Kami akan mengirim tautan untuk
-            membuat password baru. Tautan berlaku 1 jam.
+            {t(
+              "Masukkan email akun ikrarku Anda. Kami akan mengirim tautan untuk membuat password baru. Tautan berlaku 1 jam.",
+              "Enter the email of your ikrarku account. We will send a link to create a new password. The link is valid for 1 hour.",
+            )}
           </p>
           <form className="auth-fields" onSubmit={submit}>
             <label>
-              Email terdaftar
+              {t("Email terdaftar", "Registered email")}
               <input
                 type="email"
                 value={email}
@@ -32034,7 +34428,7 @@ function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
                   setEmail(event.target.value);
                   setError("");
                 }}
-                placeholder="nama@email.com"
+                placeholder={t("nama@email.com", "name@email.com")}
               />
             </label>
             {error && (
@@ -32047,10 +34441,12 @@ function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
               <div className="verification-dev-link">
                 <CheckCircle2 size={18} />
                 <div>
-                  <strong>Tautan reset dikirim.</strong>
+                  <strong>{t("Tautan reset dikirim.", "Reset link sent.")}</strong>
                   <span>
-                    Jika email terdaftar, tautan reset password sudah dikirim ke{" "}
-                    {email}. Cek inbox dan folder spam.
+                    {t(
+                      `Jika email terdaftar, tautan reset password sudah dikirim ke ${email}. Cek inbox dan folder spam.`,
+                      `If the email is registered, a password reset link has been sent to ${email}. Check your inbox and spam folder.`,
+                    )}
                   </span>
                   {devUrl && (
                     <button
@@ -32064,7 +34460,7 @@ function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
                         setView("reset-password");
                       }}
                     >
-                      Buka tautan reset
+                      {t("Buka tautan reset", "Open reset link")}
                     </button>
                   )}
                 </div>
@@ -32075,14 +34471,16 @@ function ForgotPasswordPage({ setView }: { setView: (view: View) => void }) {
               className="primary-btn full"
               disabled={busy || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)}
             >
-              {busy ? "Mengirim..." : "Kirim tautan reset"}{" "}
+              {busy
+                ? t("Mengirim...", "Sending...")
+                : t("Kirim tautan reset", "Send reset link")}{" "}
               <ArrowRight size={16} />
             </button>
           </form>
           <div className="auth-switch">
-            Ingat password Anda?{" "}
+            {t("Ingat password Anda?", "Remember your password?")}{" "}
             <button type="button" onClick={() => setView("login")}>
-              Kembali ke Sign in
+              {t("Kembali ke halaman masuk", "Back to sign in")}
             </button>
           </div>
         </div>
@@ -32469,7 +34867,7 @@ function formatShortDate(value?: string) {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return date.toLocaleDateString("id-ID", {
+  return date.toLocaleDateString(getSiteLang() === "en" ? "en-GB" : "id-ID", {
     day: "2-digit",
     month: "short",
     year: "numeric",

@@ -355,6 +355,32 @@ build ulang (langkah A–E). Cek setelah deploy:
 10. Template Tata letak Kolom → hapus background canvas → Save → refresh →
     Preview: background tidak muncul lagi.
 
+## L. QA 15 — 0.19.0 (17 Nov)
+
+Kolom database baru dibuat otomatis (`articles.title_en`, `excerpt_en`,
+`content_en`). Konfigurasi opsional untuk footer & FAQ (tambahkan ke
+`.env.staging` / `.env.production`, lalu buat ulang container):
+
+```env
+CS_WHATSAPP=08xxxxxxxxxx
+SUPPORT_EMAIL=halo@ikrarku.id          # kosong = pakai SMTP_REPLY_TO
+SOCIAL_INSTAGRAM=https://instagram.com/ikrarku.id
+SOCIAL_TIKTOK=https://tiktok.com/@ikrarku.id
+SOCIAL_FACEBOOK=
+```
+
+Cek setelah deploy:
+1. Landing → pilih **EN** → Jurnal, Login, Daftar, Lupa password, Katalog,
+   Checkout: tidak ada campuran bahasa. Footer berisi FAQ, Privacy Policy,
+   Terms, kontak.
+2. Articles CMS → buka artikel → tab **EN** → isi judul/ringkasan/isi EN →
+   Save. Artikel tanpa EN tetap tampil dengan label "ID".
+3. Login customer → menu My Order / Settings: alamat `/workspace/...`,
+   judul tab sesuai menu, Back browser berfungsi.
+4. Editor → ornamen: Ukuran sampai 1600 px, Geser X/Y bisa diketik.
+5. Template Tata letak Kolom → Preview Desktop: cover full layout →
+   Buka Undangan → kolom ala Serein.
+
 ## F. Rollback
 
 ```bash

@@ -16,6 +16,7 @@ import {
   Globe,
 } from "lucide-react";
 import type { Template, ArticleItem, View } from "../App";
+import { useSiteLang } from "../i18n";
 import "./LandingPage.css";
 
 /** TC-246 — teks landing page dalam dua bahasa. Pilihan tersimpan per
@@ -169,17 +170,6 @@ const COPY = {
   },
 };
 type Copy = (typeof COPY)["id"];
-const LANG_KEY = "ikrarku.landingLang";
-function readLang(): LandingLang {
-  try {
-    const saved = window.localStorage.getItem(LANG_KEY);
-    if (saved === "en" || saved === "id") return saved;
-  } catch {
-    /* storage tidak tersedia */
-  }
-  return "id";
-}
-
 type Props = {
   setView: (view: View) => void;
   templates: Template[];
@@ -192,6 +182,8 @@ type Props = {
   onScrolled?: () => void;
   databaseOnline: boolean;
   renderPreview: (template: Template) => ReactNode;
+  /** QA 15 TC-354 — footer lengkap (navigasi, bantuan, legal, kontak). */
+  renderFooter?: (scrollTo: (id: string) => void) => ReactNode;
 };
 // Kartu artikel dipakai bersama oleh landing dan halaman Jurnal supaya
 // layout-nya seragam berapa pun panjang judulnya.
@@ -242,8 +234,15 @@ export function JournalCard({
         )}
       </span>
       <span className="ikr-journal-body">
-        <small>{article.category}</small>
-        <h3>{article.title}</h3>
+        <small>
+          {article.category}
+          {article.langFallback && (
+            <em className="ikr-lang-badge" title="Available in Indonesian only">
+              ID
+            </em>
+          )}
+        </small>
+        <h3 lang={article.langFallback ? "id" : undefined}>{article.title}</h3>
         <p>{article.excerpt}</p>
       </span>
       <span className="ikr-journal-foot">
@@ -435,25 +434,15 @@ export default function LandingPage({
   onScrolled,
   databaseOnline,
   renderPreview,
+  renderFooter,
 }: Props) {
   const [menu, setMenu] = useState(false),
     [category, setCategory] = useState(ALL);
-  const [lang, setLangState] = useState<LandingLang>(readLang);
+  // QA 15 — bahasa dipakai bersama seluruh situs (src/i18n.ts).
+  const [lang, setLang] = useSiteLang();
   const tx = COPY[lang];
-  const setLang = (next: LandingLang) => {
-    setLangState(next);
-    try {
-      window.localStorage.setItem(LANG_KEY, next);
-    } catch {
-      /* storage tidak tersedia */
-    }
-  };
   useEffect(() => {
-    const previous = document.documentElement.lang;
     document.documentElement.lang = lang;
-    return () => {
-      document.documentElement.lang = previous || "id";
-    };
   }, [lang]);
   const root = useRef<HTMLDivElement>(null);
   const categories = useMemo(
@@ -883,16 +872,20 @@ export default function LandingPage({
           </button>
         </section>
       </main>
-      <footer className="ikr-footer">
-        <img
-          src="/brand/ikrarku-logo.png"
-          alt="ikrarku"
-          width="130"
-          height="39"
-        />
-        <p>{tx.footer}</p>
-        <small>© {new Date().getFullYear()} ikrarku</small>
-      </footer>
+      {renderFooter ? (
+        renderFooter(scrollToSection)
+      ) : (
+        <footer className="ikr-footer">
+          <img
+            src="/brand/ikrarku-logo.png"
+            alt="ikrarku"
+            width="130"
+            height="39"
+          />
+          <p>{tx.footer}</p>
+          <small>© {new Date().getFullYear()} ikrarku</small>
+        </footer>
+      )}
     </div>
   );
 }

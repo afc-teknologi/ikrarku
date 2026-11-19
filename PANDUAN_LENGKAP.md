@@ -1464,6 +1464,35 @@ Setelah update 0.18.3:
 3. Bila template juga dipakai dengan Tata letak **Penuh**, hapus juga
    background di mode Desktop (versi Desktop tersimpan terpisah).
 
+## W.11 — QA 15 (17 November, 0.19.0)
+
+**Web Designer — pengaturan baru di editor**
+| Kebutuhan | Letak |
+|---|---|
+| Cover full layout, kolom setelah Buka Undangan | Panel kiri → Tata letak desktop → Tampilan cover |
+| Format tanggal | Fitur Save The Date / Event → Content → Format tanggal |
+| Slideshow Layer 1 | Canvas → Style → Slideshow Layer 1 → Tambah foto |
+| Font teks Icon | Fitur Icon → Content → Font teks |
+| Bentuk bingkai foto | Fitur Image / Gallery → Content → Bentuk bingkai foto |
+| Ukuran nama pemilik rekening | Wedding Gift → Content → Teks rekening |
+| Font heading & teks Guest Form | Guest Form → Style → Font heading / Font teks |
+| Geser & ukuran ornamen besar | Canvas → Style → Ornamen (ketik angka / tombol panah) |
+| Posisi vertikal kolom 2/3/4 | Canvas → Content → Posisi vertikal kolom, Geser kolom atas-bawah |
+| Geser manual fitur | Fitur → Style → Geser manual atas-bawah |
+| Ikon Event (hapus/ganti) | Event → Content → Ikon Event |
+| Gaya tombol Simpan Tanggal | Save The Date / Event → Content → Tombol Simpan Tanggal |
+| Ornamen sisi 70% (70:30) | Panel kiri → Tata letak desktop → sisi visual → Ornamen |
+| Warna teks button slide | Panel kiri → Bottom navigation → Warna teks / Warna teks aktif |
+
+Catatan: Atas/Tengah/Bawah hanya terlihat berbeda bila canvas lebih tinggi
+dari isinya (naikkan Minimum height) — atau pakai geser manual.
+
+**Admin — konten EN**
+- Articles CMS → tab **EN** untuk tiap artikel. Selama kosong, artikel
+  tampil berbahasa Indonesia dengan label "ID" pada mode EN.
+- Kontak & media sosial di footer/FAQ diatur lewat `.env`
+  (lihat PANDUAN_DEPLOY_PRODUCTION bagian L).
+
 # Keamanan
 
 - Jangan mengirim API key lewat chat grup atau dokumen bersama

@@ -304,6 +304,11 @@ function initDb() {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
   };
   ensureColumn("tasks", "task_type", "TEXT NOT NULL DEFAULT 'General'");
+  // QA 15 TC-348 — versi bahasa Inggris artikel jurnal (opsional; kosong =
+  // pakai versi Indonesia).
+  ensureColumn("articles", "title_en", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("articles", "excerpt_en", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn("articles", "content_en", "TEXT NOT NULL DEFAULT ''");
   ensureColumn("tasks", "template_id", "TEXT");
   ensureColumn("tasks", "requestor_id", "TEXT");
   ensureColumn("tasks", "decision_note", "TEXT NOT NULL DEFAULT ''");
@@ -963,6 +968,19 @@ app.get("/api/health", (_req, res) =>
   res.json({ ok: true, database: "sqlite", time: now() }),
 );
 
+/** Kontak publik (footer landing, halaman FAQ/legal). Diisi lewat .env:
+ *  CS_WHATSAPP, SUPPORT_EMAIL (fallback SMTP_REPLY_TO), SOCIAL_INSTAGRAM,
+ *  SOCIAL_TIKTOK, SOCIAL_FACEBOOK. Kosong = tidak ditampilkan. */
+function publicContact() {
+  const clean = (value) => String(value || "").trim() || null;
+  return {
+    whatsapp: clean(process.env.CS_WHATSAPP),
+    email: clean(process.env.SUPPORT_EMAIL || process.env.SMTP_REPLY_TO),
+    instagram: clean(process.env.SOCIAL_INSTAGRAM),
+    tiktok: clean(process.env.SOCIAL_TIKTOK),
+    facebook: clean(process.env.SOCIAL_FACEBOOK),
+  };
+}
 app.get("/api/public/bootstrap", (_req, res) => {
   const templates = db
     .prepare(
@@ -985,6 +1003,8 @@ app.get("/api/public/bootstrap", (_req, res) => {
     articles,
     paymentMethods,
     environment: NODE_ENV === "production" ? "production" : "staging",
+    // QA 15 TC-354 — kontak & media sosial untuk footer landing page.
+    contact: publicContact(),
   });
 });
 
@@ -1603,6 +1623,9 @@ function mapArticle(row) {
     coverUrl: row.cover_url,
     date: row.published_at || row.created_at,
     views: "0",
+    titleEn: row.title_en || "",
+    excerptEn: row.excerpt_en || "",
+    contentEn: row.content_en || "",
   };
 }
 function mapPayment(row) {
@@ -2485,6 +2508,9 @@ app.post("/api/articles", auth, permit("articles.manage"), (req, res) => {
     status = "Draft",
     tags = [],
     coverUrl = null,
+    titleEn = "",
+    excerptEn = "",
+    contentEn = "",
   } = req.body || {};
   if (!title) return res.status(400).json({ error: "Judul wajib diisi" });
   const articleId = id("art");
@@ -2512,6 +2538,9 @@ app.post("/api/articles", auth, permit("articles.manage"), (req, res) => {
     now(),
     now(),
   );
+  db.prepare(
+    "UPDATE articles SET title_en=?,excerpt_en=?,content_en=? WHERE id=?",
+  ).run(String(titleEn), String(excerptEn), String(contentEn), articleId);
   const row = db
     .prepare(
       `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.id=?`,
@@ -2565,6 +2594,16 @@ app.patch("/api/articles/:id", auth, permit("articles.manage"), (req, res) => {
     now(),
     row.id,
   );
+  const body = req.body || {};
+  if ("titleEn" in body || "excerptEn" in body || "contentEn" in body)
+    db.prepare(
+      "UPDATE articles SET title_en=?,excerpt_en=?,content_en=? WHERE id=?",
+    ).run(
+      String(body.titleEn ?? row.title_en ?? ""),
+      String(body.excerptEn ?? row.excerpt_en ?? ""),
+      String(body.contentEn ?? row.content_en ?? ""),
+      row.id,
+    );
   const updated = db
     .prepare(
       `SELECT a.*,u.first_name||' '||u.last_name author FROM articles a LEFT JOIN users u ON u.id=a.author_id WHERE a.id=?`,
