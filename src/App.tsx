@@ -1052,7 +1052,7 @@ type CanvasSection = {
   desktopColumnAlign?: "center" | "left" | "right";
   /** QA 15 TC-330 — cover (slide pertama) tampil full layout desktop, kolom
    *  ala serein baru muncul setelah Buka Undangan. "column" = cara lama. */
-  desktopCoverMode?: "full" | "column";
+  desktopCoverMode?: "full" | "desktop" | "column";
   desktopBackdropUrl?: string; // background luar kolom (opsional)
   desktopBackdropKey?: string;
   desktopBackdropColor?: string;
@@ -20687,7 +20687,15 @@ function WeddingCanvas(props: WeddingCanvasProps) {
           }
         >
           <PreviewZoomContext value={coverPhase ? previewZoom : previewZoom * columnZoom}>
-            <DeviceContext value={coverPhase ? "desktop" : "mobile"}>
+            {/* Cover penuh memakai desain Mobile (yang memang diedit Web
+                Designer pada tata letak Kolom); "desktop" = desain Desktop. */}
+            <DeviceContext
+              value={
+                coverPhase && first.desktopCoverMode === "desktop"
+                  ? "desktop"
+                  : "mobile"
+              }
+            >
               <WeddingCanvasBody
                 {...props}
                 onCoverLockChange={coverFull ? setCoverLocked : undefined}
@@ -22054,7 +22062,8 @@ function DesktopLayoutPanel({
                 })
               }
             >
-              <option value="full">Full layout desktop, lalu kolom setelah Buka Undangan</option>
+              <option value="full">Layar penuh (desain cover Mobile), lalu kolom</option>
+              <option value="desktop">Layar penuh (desain cover Desktop), lalu kolom</option>
               <option value="column">Langsung di dalam kolom</option>
             </select>
           </label>
