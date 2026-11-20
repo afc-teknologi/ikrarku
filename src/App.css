@@ -1207,7 +1207,7 @@ label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8p
 .template-preview-dialog header .journey-device-switch button{border-color:rgba(20,70,56,.22);color:#3c5b50}
 .template-preview-dialog header .journey-device-switch button.active{background:#125946;color:#fff;border-color:#125946}
 .template-dialog-actual-preview.live.device-mobile{padding:18px;display:block}
-.template-dialog-actual-preview.live.device-mobile>*{width:390px;max-width:100%;margin:0 auto;box-shadow:0 15px 50px rgba(18,48,39,.2);border-radius:14px;overflow:hidden}
+.template-dialog-actual-preview.live.device-mobile>*{width:390px;max-width:100%;margin:0 auto;box-shadow:none;border-radius:14px;overflow:hidden}
 .template-dialog-actual-preview.live.device-mobile .canvas-columns{grid-template-columns:1fr!important}
 .template-dialog-actual-preview.live.device-mobile .wedding-site>nav>div:last-child{display:none}
 .template-dialog-actual-preview.live.device-mobile .greetings-widget,
@@ -2831,7 +2831,7 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
 .decor-nudge .decor-nudge-reset{font-size:11px;padding:0 10px}
 /* QA 15 TC-341 — "Di depan isi" benar-benar di atas isi fitur (mis. kartu
    Event berlatar warna). Kolom canvas memakai z-index 5, ornamen depan dulu 4. */
-.canvas-section>.section-decoration.deco-front,.section-decoration.deco-front{z-index:6}
+.canvas-section>.section-decoration.deco-top,.section-decoration.deco-top{z-index:6}
 /* QA 15 TC-339 — posisi vertikal layout kolom 2/3/4 */
 .canvas-columns.cols-v-center{align-items:center}
 .canvas-columns.cols-v-bottom{align-items:end}
@@ -2894,3 +2894,7 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
 .desktop-column-stage.cover-phase .wedding-site.invitation-locked>.canvas-section{min-height:var(--site-viewport-h,100vh)!important;margin-block:0!important;flex:none}
 .desktop-column-stage.cover-phase .wedding-site.invitation-locked{display:flex;flex-direction:column}
 .desktop-column-stage.cover-phase .wedding-site.invitation-locked>.canvas-section>.canvas-columns{width:min(560px,92%)!important;max-width:560px;margin-inline:auto!important}
+/* 20 Nov — tombol lagu tidak tertutup menu bawah (bottom navigation):
+   bila menu bawah aktif, tombol lagu posisi bawah naik di atas menu. */
+.wedding-site.has-bottom-nav .fixed-sound-disc:not(.sound-vpos-top):not(.sound-vpos-center),
+.wedding-site.has-bottom-nav .sound-dock.dock-bottom>.fixed-sound-disc.is-contained{bottom:calc(var(--sound-offset-y,22px) + var(--bn-space,0px) + 84px)}

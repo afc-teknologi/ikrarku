@@ -520,7 +520,9 @@ type SectionDecoration = {
   offsetX?: number;
   offsetY?: number;
   /** QA 13 TC-297 — di depan (default) atau di belakang isi canvas. */
-  layer?: "front" | "back";
+  /** "top" (20 Nov) = paling depan, di atas isi fitur (TC-341). "front"
+   *  tetap seperti dulu: di depan background, di belakang isi fitur. */
+  layer?: "top" | "front" | "back";
   /** QA 13 TC-298 — menempel di layar selama canvas-nya digulir (seperti Background tetap). */
   pinned?: boolean;
   /** QA 13 TC-299 — gerak mengikuti gulir halaman. */
@@ -693,6 +695,9 @@ type Feature = DesignerLayout & {
   guestNameFontSize?: number;
   // TC-198 — penempatan disc backsound di dalam area canvas.
   soundVerticalAlign?: "top" | "center" | "bottom";
+  /** 20 Nov — posisi horizontal tombol lagu. Dulu ikut objectAlign, yang
+   *  pada Credit adalah perataan teks credit (sering "tengah"). */
+  soundHorizontalAlign?: "left" | "center" | "right";
   soundOffsetX?: number; // px dari sisi horizontal aktif
   soundOffsetY?: number; // px dari sisi vertikal aktif
   saveTheDateStyle?: SaveTheDateStyle; // TC-078
@@ -15390,12 +15395,29 @@ function FeatureInspector({
           selalu menempel 22px dari dasar layar. Sekarang sisi vertikal dan
           jaraknya bisa diatur, sehingga player bisa ditempatkan di dalam area
           canvas dan tidak menutupi desain. */}
-      {feature.type === "sound" && (
+      {(feature.type === "sound" ||
+        (feature.type === "credit" && Boolean(feature.mediaUrl || feature.soundPreset))) && (
         <div className="sound-position-editor">
           <div className="group-heading">
             <strong>Posisi Player</strong>
             <span>Di dalam canvas</span>
           </div>
+          <label>
+            Sisi horizontal
+            <select
+              value={soundHorizontal(feature)}
+              onChange={(event) =>
+                update({
+                  soundHorizontalAlign: event.target
+                    .value as Feature["soundHorizontalAlign"],
+                })
+              }
+            >
+              <option value="left">Kiri</option>
+              <option value="center">Tengah</option>
+              <option value="right">Kanan</option>
+            </select>
+          </label>
           <label>
             Sisi vertikal
             <select
@@ -18780,7 +18802,7 @@ function SectionDecorationEditor({
       const list = [...current];
       const [item] = list.splice(index, 1);
       if (move === "front")
-        return [...list, { ...item, layer: "front" as const }];
+        return [...list, { ...item, layer: "top" as const }];
       if (move === "back")
         return [{ ...item, layer: "back" as const }, ...list];
       const target = move === "forward" ? index + 1 : index - 1;
@@ -19070,7 +19092,8 @@ function SectionDecorationEditor({
                   })
                 }
               >
-                <option value="front">Di depan isi</option>
+                <option value="top">Paling depan (menutupi isi)</option>
+                <option value="front">Di depan background (di belakang isi)</option>
                 <option value="back">Di belakang isi</option>
               </select>
             </label>
@@ -20610,7 +20633,11 @@ function WeddingCanvas(props: WeddingCanvasProps) {
   const coverFull =
     column &&
     !props.editable &&
-    (props.sections[0]?.desktopCoverMode || "full") === "full" &&
+    // 20 Nov — bawaan kembali ke cover di dalam kolom (seperti Serein):
+    // desain Mobile yang direntang selebar layar membuat lengkung/ornamen
+    // berukuran ponsel tampak raksasa. Layar penuh kini pilihan per template.
+    (props.sections[0]?.desktopCoverMode === "full" ||
+      props.sections[0]?.desktopCoverMode === "desktop") &&
     props.sections.some((section) =>
       section.columns.some((col) =>
         col.features.some((feature) => feature.type === "invitation-cover"),
@@ -22054,7 +22081,7 @@ function DesktopLayoutPanel({
           <label>
             Tampilan cover (slide pertama)
             <select
-              value={first.desktopCoverMode || "full"}
+              value={first.desktopCoverMode || "column"}
               onChange={(event) =>
                 update({
                   desktopCoverMode: event.target
@@ -22062,9 +22089,9 @@ function DesktopLayoutPanel({
                 })
               }
             >
-              <option value="full">Layar penuh (desain cover Mobile), lalu kolom</option>
-              <option value="desktop">Layar penuh (desain cover Desktop), lalu kolom</option>
-              <option value="column">Langsung di dalam kolom</option>
+              <option value="column">Di dalam kolom, seperti Serein (bawaan)</option>
+              <option value="desktop">Layar penuh — desain cover Desktop, lalu kolom</option>
+              <option value="full">Layar penuh — desain cover Mobile direntang, lalu kolom</option>
             </select>
           </label>
           <label>
@@ -22742,7 +22769,9 @@ function WeddingCanvasBody({
           ditambatkan ke pojok layar dan tidak ikut tergulir. */}
       {(["back", "front"] as const).map((layer) => {
           const list = pinnedDecorations.filter(
-            (decoration) => (decoration.layer || "front") === layer,
+            (decoration) =>
+              (decoration.layer === "top" ? "front" : decoration.layer || "front") ===
+              layer,
           );
           if (!list.length) return null;
           return (
@@ -32028,6 +32057,14 @@ function IconFeature({ feature }: { feature: Feature }) {
   );
 }
 
+function soundHorizontal(feature: Feature): "left" | "center" | "right" {
+  if (feature.soundHorizontalAlign) return feature.soundHorizontalAlign;
+  // Lagu dari Credit: perataan credit bukan posisi tombol → bawaan kiri.
+  if (feature.type === "credit") return "left";
+  const align = feature.objectAlign;
+  return align === "center" || align === "right" ? align : "left";
+}
+
 // TC-089 — player backsound yang dikendalikan dari WeddingCanvas agar tidak mati saat pindah section.
 function ControlledSoundPlayer({
   feature,
@@ -32043,7 +32080,7 @@ function ControlledSoundPlayer({
   return (
     <button
       type="button"
-      className={`fixed-sound-disc sound-pos-${feature.objectAlign || "left"} sound-vpos-${feature.soundVerticalAlign || "bottom"} ${playing ? "playing" : ""} ${contained ? "is-contained" : ""} sound-icon-${feature.soundIcon || "disc"} sound-shape-${feature.soundIconShape || "pill"}`}
+      className={`fixed-sound-disc sound-pos-${soundHorizontal(feature)} sound-vpos-${feature.soundVerticalAlign || "bottom"} ${playing ? "playing" : ""} ${contained ? "is-contained" : ""} sound-icon-${feature.soundIcon || "disc"} sound-shape-${feature.soundIconShape || "pill"}`}
       style={
         {
           "--sound-offset-x": `${feature.soundOffsetX ?? 22}px`,
