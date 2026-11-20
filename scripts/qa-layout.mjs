@@ -922,7 +922,7 @@ test("Serein: tata letak desktop Kolom — isi Mobile di kolom sempit, backdrop 
   const wrap = appTsx.slice(appTsx.indexOf("function WeddingCanvas(props"), appTsx.indexOf("function WeddingCanvasBody("));
   assert.ok(wrap.length > 0);
   assert.match(wrap, /device === "desktop" &&\n\s*!thumbnail &&/);
-  assert.match(wrap, /<DeviceContext value=\{coverPhase \? "desktop" : "mobile"\}>\n\s*<WeddingCanvasBody/);
+  assert.match(wrap, /<DeviceContext\n\s*value=\{\n\s*coverPhase && first\.desktopCoverMode === "desktop"/);
   assert.match(wrap, /source=\{desktopColumnBackdrop\(first\)\}/);
   // Di editor, mode Desktop + Kolom menulis ke Mobile (yang tampil).
   assert.match(appTsx, /previewMode === "desktop" && desktopColumn \? "mobile" : previewMode;/);
@@ -1559,7 +1559,7 @@ test("QA 16 Nov: background yang dihapus di versi Mobile tetap terhapus setelah 
 
 test("QA 15 (TC-330–345): editor — cover full, tanggal, slideshow, ornamen, kolom, Event", () => {
   // TC-330 — cover full layout desktop sebelum Buka Undangan, kolom sesudahnya.
-  assert.match(appTsx, /desktopCoverMode\?: "full" \| "column";/);
+  assert.match(appTsx, /desktopCoverMode\?: "full" \| "desktop" \| "column";/);
   assert.match(appTsx, /onCoverLockChange=\{coverFull \? setCoverLocked : undefined\}/);
   assert.match(appCss, /\.desktop-column-stage\.cover-phase>\.desktop-column\{width:100%!important/);
   // TC-331 — format tanggal.

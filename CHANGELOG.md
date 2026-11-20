@@ -1,3 +1,7 @@
+## 0.19.1 — 20 November 2026
+
+- Tata letak Kolom (Serein): cover layar penuh sebelumnya memakai desain **Desktop** cover. Pada template Kolom yang diedit hanya versi Mobile, desain Desktop kosong sehingga cover tampil polos (teks putih di atas latar krem). Kini cover layar penuh memakai desain cover **Mobile**, mengisi seluruh tinggi layar, dengan isi dibatasi 560 px di tengah. Opsi "Tampilan cover": Layar penuh (desain Mobile, bawaan) / Layar penuh (desain Desktop) / Langsung di dalam kolom.
+
 ## 0.19.0 — 17 November 2026 (QA 15: TC-330 s/d TC-363)
 
 Sumber: UPDATE_QA_IKRARKU.ID_15 (sheet Master Test Cases, Status Fail, kolom Update Web Dev kosong) dan Highlight Report QA 15 Nov 2026.
