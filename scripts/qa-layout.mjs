@@ -1586,7 +1586,11 @@ test("QA 15 (TC-330–345): editor — cover full, tanggal, slideshow, ornamen, 
   assert.match(appCss, /\.canvas-columns\.cols-v-bottom\{align-items:end\}/);
   assert.match(appTsx, /!feature\.freePosition && feature\.placementOffsetY/);
   // TC-341 — ornamen depan di atas isi fitur (kolom z-index 5).
-  assert.match(appCss, /\.section-decoration\.deco-front\{z-index:6\}/);
+  // 20 Nov — lapisan baru "top" (Paling depan); "front" lama tetap di
+  // belakang isi agar ornamen di template lama tidak menutupi tulisan.
+  assert.match(appCss, /\.section-decoration\.deco-top\{z-index:6\}/);
+  assert.doesNotMatch(appCss, /\.section-decoration\.deco-front\{z-index:6\}/);
+  assert.match(appTsx, /return \[\.\.\.list, \{ \.\.\.item, layer: "top" as const \}\];/);
   // TC-342 — ikon Event bisa dihapus.
   assert.match(appTsx, /<option value="none">Tanpa ikon \(hapus\)<\/option>/);
   assert.match(appTsx, /<EventIcon feature=\{feature\} \/>/);

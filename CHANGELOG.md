@@ -1,3 +1,17 @@
+## 0.19.4 — 20 November 2026
+
+- Tombol lagu: posisi horizontal kini pengaturan sendiri ("Sisi horizontal": Kiri/Tengah/Kanan di Posisi Player). Lagu dari fitur Credit dulu ikut perataan teks credit (sering tengah); kini bawaan **pojok kiri**, tepat di atas menu bawah. Pengaturan Posisi Player juga muncul di Credit yang berisi lagu.
+
+## 0.19.3 — 20 November 2026
+
+- Mobile: bila menu bawah (bottom navigation) aktif, tombol lagu di posisi bawah kini naik di atas menu dan tidak tertutup lagi.
+
+## 0.19.2 — 20 November 2026
+
+- Tata letak Kolom (Serein): cover kembali tampil **di dalam kolom** sebagai bawaan, seperti Serein. Cover layar penuh merentang desain Mobile selebar layar sehingga lengkung/ornamen berukuran ponsel tampak raksasa. Layar penuh tetap tersedia per template di "Tampilan cover" (desain Desktop atau desain Mobile). Juga memperbaiki pilihan "desain Desktop" yang sebelumnya tidak aktif.
+- Ornamen menutupi tulisan: perubahan TC-341 (0.19.0) membuat semua ornamen "Di depan isi" — lapisan bawaan — naik ke atas isi fitur. Kini lapisan lama kembali di belakang isi; lapisan baru **"Paling depan (menutupi isi)"** (juga tombol Urutan lapisan → Paling depan) dipakai bila ornamen memang harus di atas kartu fitur.
+- Preview template Mobile: bayangan di sekeliling bingkai ponsel dihapus.
+
 ## 0.19.1 — 20 November 2026
 
 - Tata letak Kolom (Serein): cover layar penuh sebelumnya memakai desain **Desktop** cover. Pada template Kolom yang diedit hanya versi Mobile, desain Desktop kosong sehingga cover tampil polos (teks putih di atas latar krem). Kini cover layar penuh memakai desain cover **Mobile**, mengisi seluruh tinggi layar, dengan isi dibatasi 560 px di tengah. Opsi "Tampilan cover": Layar penuh (desain Mobile, bawaan) / Layar penuh (desain Desktop) / Langsung di dalam kolom.
