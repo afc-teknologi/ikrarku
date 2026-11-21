@@ -1,3 +1,8 @@
+## 0.19.5 — 21 November 2026
+
+- "Kotak timbul" di undangan: fitur dengan posisi bebas (drag) membawa bayangan penanda editor ke undangan yang tayang. Bayangan kini hanya muncul di editor saat fitur dipilih.
+- Desktop (selain tata letak Kolom/Serein): tombol lagu kini **sejajar** dengan menu icon di pojok kiri. Di ponsel atau bila menu menutupi pojok, tombol tetap naik di atas menu. Berlaku juga di kotak preview (memperhitungkan zoom).
+
 ## 0.19.4 — 20 November 2026
 
 - Tombol lagu: posisi horizontal kini pengaturan sendiri ("Sisi horizontal": Kiri/Tengah/Kanan di Posisi Player). Lagu dari fitur Credit dulu ikut perataan teks credit (sering tengah); kini bawaan **pojok kiri**, tepat di atas menu bawah. Pengaturan Posisi Player juga muncul di Credit yang berisi lagu.

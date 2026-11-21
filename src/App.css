@@ -489,7 +489,9 @@ html,body,#root{min-width:0!important}
 
 /* TC-103: posisi bebas (drag & resize) */
 .canvas-column{position:relative}
-.feature-block.free-positioned{box-shadow:0 6px 22px rgba(16,47,39,.12)}
+/* 21 Nov — bayangan hanya penanda di editor (fitur terpilih); dulu ikut
+   tampil di undangan sehingga fitur posisi bebas terlihat seperti kotak timbul. */
+.feature-block.free-positioned.selected-feature{box-shadow:0 6px 22px rgba(16,47,39,.12)}
 .free-move-handle{position:absolute;top:-19px;left:0;background:#0f4a3b;color:#fff;border-radius:5px 5px 0 0;padding:3px 8px;font-size:7px;display:flex;align-items:center;gap:4px;cursor:grab;z-index:32;user-select:none}
 .free-resize-handle{position:absolute;right:-6px;bottom:-6px;width:14px;height:14px;border-radius:4px;background:#0f4a3b;border:2px solid #fff;cursor:nwse-resize;z-index:32}
 
@@ -2896,5 +2898,5 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
 .desktop-column-stage.cover-phase .wedding-site.invitation-locked>.canvas-section>.canvas-columns{width:min(560px,92%)!important;max-width:560px;margin-inline:auto!important}
 /* 20 Nov — tombol lagu tidak tertutup menu bawah (bottom navigation):
    bila menu bawah aktif, tombol lagu posisi bawah naik di atas menu. */
-.wedding-site.has-bottom-nav .fixed-sound-disc:not(.sound-vpos-top):not(.sound-vpos-center),
-.wedding-site.has-bottom-nav .sound-dock.dock-bottom>.fixed-sound-disc.is-contained{bottom:calc(var(--sound-offset-y,22px) + var(--bn-space,0px) + 84px)}
+.wedding-site.has-bottom-nav:not(.sound-beside-nav) .fixed-sound-disc:not(.sound-vpos-top):not(.sound-vpos-center),
+.wedding-site.has-bottom-nav:not(.sound-beside-nav) .sound-dock.dock-bottom>.fixed-sound-disc.is-contained{bottom:calc(var(--sound-offset-y,22px) + var(--bn-space,0px) + 84px)}

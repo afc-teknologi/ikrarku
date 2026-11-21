@@ -22404,6 +22404,48 @@ function WeddingCanvasBody({
       bottomNav.items.length &&
       (bottomNav.show === "all" || device === "mobile"),
   );
+  // 21 Nov — tombol lagu & menu bawah: bila menu tidak menutupi pojok
+  // (layar lebar), tombol lagu disejajarkan dengan menu; bila menutupi
+  // (ponsel), tombol naik di atas menu (lihat CSS .sound-above-nav).
+  useEffect(() => {
+    if (editable || thumbnail || !opened || !showBottomNav || !soundFeature)
+      return;
+    if ((soundFeature.soundVerticalAlign || "bottom") !== "bottom") return;
+    const root = revealRootRef.current;
+    if (!root) return;
+    let frame = 0;
+    const align = () => {
+      const disc = root.querySelector<HTMLElement>(".fixed-sound-disc");
+      const nav = root.querySelector<HTMLElement>(".bottom-nav");
+      if (!disc || !nav) return;
+      disc.style.removeProperty("bottom");
+      root.classList.remove("sound-beside-nav");
+      const d = disc.getBoundingClientRect();
+      const n = nav.getBoundingClientRect();
+      const overlaps = d.right + 8 > n.left && d.left - 8 < n.right;
+      if (overlaps) return; // CSS menaikkan tombol di atas menu
+      root.classList.add("sound-beside-nav");
+      const base = parseFloat(getComputedStyle(disc).bottom) || 0;
+      const after = disc.getBoundingClientRect();
+      // Di kotak preview kanvas di-zoom: ubah selisih layar ke px CSS.
+      const zoom = disc.offsetHeight ? after.height / disc.offsetHeight : 1;
+      const delta =
+        (after.top + after.height / 2 - (n.top + n.height / 2)) / (zoom || 1);
+      disc.style.setProperty("bottom", `${Math.round(base + delta)}px`, "important");
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(align);
+    };
+    const timer = window.setTimeout(schedule, 300);
+    window.addEventListener("resize", schedule);
+    return () => {
+      window.clearTimeout(timer);
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", schedule);
+    };
+  }, [editable, thumbnail, opened, showBottomNav, soundFeature, device]);
+
   useEffect(() => {
     if (editable || thumbnail || !opened) return;
     const root = revealRootRef.current;
