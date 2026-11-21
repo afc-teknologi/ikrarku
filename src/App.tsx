@@ -1869,6 +1869,13 @@ const DeviceContext = createContext<DeviceMode>("desktop");
 /** Layar "Buka Undangan" di preview/live dirender memakai canvas yang sama
  *  dengan editor; tombolnya membuka undangan lewat context ini. */
 const CoverOpenContext = createContext<(() => void) | null>(null);
+/** 21 Nov — tombol lagu di Credit/Sound mengendalikan pemutar utama
+ *  undangan (satu lagu, satu posisi), bukan membuat pemutar kedua. */
+const SoundControlContext = createContext<{
+  featureId: string;
+  playing: boolean;
+  toggle: () => void;
+} | null>(null);
 /** 16 Nov — nilai yang DIHAPUS di versi Mobile (mis. background image)
  *  disimpan sebagai null, karena `undefined` hilang saat JSON disimpan:
  *  setelah save + refresh, versi Mobile kembali mewarisi gambar Desktop
@@ -22330,21 +22337,43 @@ function WeddingCanvasBody({
   }, [editable, hasCover, coverFeatureId]);
 
   // QA TC-089: audio disimpan pada ref WeddingCanvas agar tidak mati saat cover dibuka / pindah section.
-  const soundRef = useRef<{ stop: () => void } | null>(null);
+  const soundRef = useRef<SoundPlayback | null>(null);
   const [soundPlaying, setSoundPlaying] = useState(false);
+  const soundPausedRef = useRef(false);
   const soundKey = soundFeature
     ? `${soundFeature.id}-${soundFeature.mediaUrl || soundFeature.soundPreset || ""}`
     : "";
   const startSound = useCallback(() => {
-    if (!soundFeature || soundRef.current) return;
+    if (!soundFeature) return;
+    if (soundRef.current) {
+      // Lanjutkan dari posisi jeda, bukan mengulang dari awal.
+      if (soundPausedRef.current) {
+        soundPausedRef.current = false;
+        soundRef.current.userResume();
+        setSoundPlaying(true);
+      }
+      return;
+    }
     soundRef.current = createSoundPlayback(soundFeature, true);
+    soundPausedRef.current = false;
     setSoundPlaying(true);
   }, [soundFeature]);
+  const pauseSound = useCallback(() => {
+    if (!soundRef.current) return;
+    soundRef.current.userPause();
+    soundPausedRef.current = true;
+    setSoundPlaying(false);
+  }, []);
   const stopSound = useCallback(() => {
     soundRef.current?.stop();
     soundRef.current = null;
+    soundPausedRef.current = false;
     setSoundPlaying(false);
   }, []);
+  const toggleSound = useCallback(
+    () => (soundPlaying ? pauseSound() : startSound()),
+    [soundPlaying, pauseSound, startSound],
+  );
   useEffect(
     () => () => {
       soundRef.current?.stop();
@@ -22378,7 +22407,7 @@ function WeddingCanvasBody({
     <ControlledSoundPlayer
       feature={soundFeature}
       playing={soundPlaying}
-      onToggle={() => (soundPlaying ? stopSound() : startSound())}
+      onToggle={toggleSound}
       contained={previewSurface}
     />
   ) : null;
@@ -22387,6 +22416,13 @@ function WeddingCanvasBody({
   // (dan di bawah layar cover). Kini ditaruh di "dock" setinggi 0 px: tetap
   // menempel di layar, tanpa menambah tinggi halaman.
   const soundVpos = soundFeature?.soundVerticalAlign || "bottom";
+  const soundControl = useMemo(
+    () =>
+      soundFeature && !editable
+        ? { featureId: soundFeature.id, playing: soundPlaying, toggle: toggleSound }
+        : null,
+    [soundFeature, editable, soundPlaying, toggleSound],
+  );
   const soundNode =
     soundPlayer && previewSurface ? (
       <div className={`sound-dock dock-${soundVpos}`}>{soundPlayer}</div>
@@ -22787,6 +22823,7 @@ function WeddingCanvasBody({
       }
     >
       <CoverOpenContext value={lockedCover ? openCover : null}>
+      <SoundControlContext value={soundControl}>
       {soundVpos !== "bottom" && soundNode}
       {!lockedCover && (
       <nav ref={siteNavRef}>
@@ -23297,6 +23334,7 @@ function WeddingCanvasBody({
         <BottomNavBar config={bottomNav} rootRef={revealRootRef} />
       )}
       {soundVpos === "bottom" && soundNode}
+      </SoundControlContext>
       </CoverOpenContext>
     </div>
   );
@@ -24476,19 +24514,12 @@ function CreditFeature({
   // QA TC-165: pemutar backsound kini menyatu dengan watermark, bukan feature
   // Sound terpisah, sehingga judul lagu hanya muncul di satu tempat.
   const hasAudio = Boolean(feature.mediaUrl || feature.soundPreset);
-  const playerRef = useRef<{ stop: () => void } | null>(null);
-  const [playing, setPlaying] = useState(false);
-  useEffect(() => () => playerRef.current?.stop(), []);
-  const toggleAudio = () => {
-    if (playing) {
-      playerRef.current?.stop();
-      playerRef.current = null;
-      setPlaying(false);
-      return;
-    }
-    playerRef.current = createSoundPlayback(feature, true);
-    setPlaying(true);
-  };
+  const control = useContext(SoundControlContext);
+  const local = useLocalSoundToggle(feature);
+  // Bila Credit ini sumber lagu undangan, pakai pemutar utama.
+  const shared = control && control.featureId === feature.id ? control : null;
+  const playing = shared ? shared.playing : local.playing;
+  const toggleAudio = shared ? shared.toggle : local.toggle;
   return (
     <div className="credit-feature">
       {editableText("title", "editable-title")}
@@ -24526,7 +24557,7 @@ function CreditFeature({
             type="button"
             className="credit-audio-toggle"
             onClick={toggleAudio}
-            title={playing ? "Hentikan backsound" : "Putar backsound"}
+            title={playing ? "Jeda lagu" : "Putar / lanjutkan lagu"}
             style={
               {
                 ...(feature.creditMusicColor
@@ -30445,6 +30476,12 @@ function createAudioPreset(feature: Feature, loop = false) {
 }
 
 type SoundHandle = { stop: () => void; pause: () => void; resume: () => void };
+/** 21 Nov — pemutar yang bisa dijeda tamu lalu dilanjutkan dari posisi
+ *  terakhir (dulu tombol pause menghentikan & memulai lagu dari awal). */
+type SoundPlayback = SoundHandle & {
+  userPause: () => void;
+  userResume: () => void;
+};
 
 /**
  * A4 (MoM 13 Okt) & QA — musik tetap berbunyi saat tamu pindah ke tab lain.
@@ -30478,7 +30515,7 @@ if (typeof document !== "undefined") {
   window.addEventListener("pageshow", resumeAll);
 }
 
-function createSoundPlayback(feature: Feature, loop = true) {
+function createSoundPlayback(feature: Feature, loop = true): SoundPlayback {
   let inner: SoundHandle;
   if (feature.mediaUrl) {
     const audio = new Audio(assetUrl(feature.mediaUrl));
@@ -30496,7 +30533,7 @@ function createSoundPlayback(feature: Feature, loop = true) {
       resume: () => void audio.play().catch(() => undefined),
     };
   } else inner = createAudioPreset(feature, loop);
-  const handle: SoundHandle = {
+  const handle: SoundPlayback = {
     stop: () => {
       activeSounds.delete(handle);
       pausedByVisibility.delete(handle);
@@ -30504,6 +30541,21 @@ function createSoundPlayback(feature: Feature, loop = true) {
     },
     pause: () => inner.pause(),
     resume: () => inner.resume(),
+    // Jeda oleh tamu: keluar dari daftar aktif agar tidak dihidupkan lagi
+    // oleh visibilitychange, posisi lagu dipertahankan.
+    userPause: () => {
+      activeSounds.delete(handle);
+      pausedByVisibility.delete(handle);
+      inner.pause();
+    },
+    userResume: () => {
+      activeSounds.add(handle);
+      if (typeof document !== "undefined" && document.hidden) {
+        pausedByVisibility.add(handle);
+        return;
+      }
+      inner.resume();
+    },
   };
   activeSounds.add(handle);
   if (typeof document !== "undefined" && document.hidden) {
@@ -30513,20 +30565,39 @@ function createSoundPlayback(feature: Feature, loop = true) {
   return handle;
 }
 
-function SoundFeature({ feature }: { feature: Feature }) {
-  const playerRef = useRef<{ stop: () => void } | null>(null);
+/** Pemutar lokal (editor / fitur yang bukan sumber lagu undangan) dengan
+ *  jeda & lanjut dari posisi terakhir. */
+function useLocalSoundToggle(feature: Feature) {
+  const playerRef = useRef<SoundPlayback | null>(null);
   const [playing, setPlaying] = useState(false);
-  const toggle = () => {
-    if (playing) {
+  const key = `${feature.mediaUrl || ""}|${feature.soundPreset || ""}`;
+  useEffect(
+    () => () => {
       playerRef.current?.stop();
       playerRef.current = null;
       setPlaying(false);
+    },
+    [key],
+  );
+  const toggle = () => {
+    if (playing) {
+      playerRef.current?.userPause();
+      setPlaying(false);
       return;
     }
-    playerRef.current = createSoundPlayback(feature, true);
+    if (playerRef.current) playerRef.current.userResume();
+    else playerRef.current = createSoundPlayback(feature, true);
     setPlaying(true);
   };
-  useEffect(() => () => playerRef.current?.stop(), []);
+  return { playing, toggle };
+}
+
+function SoundFeature({ feature }: { feature: Feature }) {
+  const control = useContext(SoundControlContext);
+  const local = useLocalSoundToggle(feature);
+  const shared = control && control.featureId === feature.id ? control : null;
+  const playing = shared ? shared.playing : local.playing;
+  const toggle = shared ? shared.toggle : local.toggle;
   // QA TC-165: kartu Sound yang besar dihapus. Judul lagu sekarang hanya tampil
   // pada Credit / Watermark, jadi feature sound pada template lama tinggal
   // menyisakan kontrol pemutar ringkas agar tidak ada tampilan ganda.
@@ -30535,7 +30606,7 @@ function SoundFeature({ feature }: { feature: Feature }) {
       <button type="button" onClick={toggle}>
         {playing ? <VolumeX size={16} /> : <Volume2 size={16} />}
         <Disc3 size={16} className={playing ? "spinning" : ""} />
-        <span>{playing ? "Hentikan backsound" : "Putar backsound"}</span>
+        <span>{playing ? "Jeda backsound" : "Putar backsound"}</span>
       </button>
     </div>
   );
@@ -32137,7 +32208,7 @@ function ControlledSoundPlayer({
       }
       onClick={onToggle}
       title={
-        playing ? "Matikan backsound" : `Putar ${feature.title || feature.body}`
+        playing ? "Jeda lagu" : `Putar ${feature.title || feature.body}`
       }
     >
       <SoundButtonIcon icon={feature.soundIcon} playing={playing} />

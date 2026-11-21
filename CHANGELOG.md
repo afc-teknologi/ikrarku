@@ -1,3 +1,9 @@
+## 0.19.6 — 21 November 2026
+
+- Lagu undangan: jeda lalu putar lagi kini **melanjutkan** dari posisi terakhir (dulu tombol jeda menghentikan lagu sehingga diputar ulang dari awal). Berlaku untuk tombol lagu melayang, tombol lagu di Credit, dan fitur Sound.
+- Tombol lagu di Credit kini mengendalikan pemutar utama undangan (satu lagu yang sama), tidak lagi membuat pemutar kedua yang bisa berbunyi bersamaan.
+- Lagu yang dijeda tamu tidak ikut hidup lagi saat tamu kembali dari tab lain.
+
 ## 0.19.5 — 21 November 2026
 
 - "Kotak timbul" di undangan: fitur dengan posisi bebas (drag) membawa bayangan penanda editor ke undangan yang tayang. Bayangan kini hanya muncul di editor saat fitur dipilih.
