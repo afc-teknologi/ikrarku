@@ -1618,3 +1618,10 @@ test("QA 15 (TC-346–363): bahasa situs, halaman publik, dashboard customer", (
   assert.match(serverMjs, /function publicContact\(\)/);
   assert.match(appCss, /\.stats-grid>\*\{min-width:0\}/);
 });
+
+test("21 Nov: jeda lagu lalu putar lagi melanjutkan, bukan mengulang", () => {
+  assert.match(appTsx, /userPause: \(\) => \{/);
+  assert.match(appTsx, /if \(soundPausedRef\.current\) \{\n\s*soundPausedRef\.current = false;\n\s*soundRef\.current\.userResume\(\);/);
+  assert.match(appTsx, /onToggle=\{toggleSound\}/);
+  assert.match(appTsx, /const shared = control && control\.featureId === feature\.id \? control : null;/);
+});
