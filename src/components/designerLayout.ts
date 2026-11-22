@@ -53,15 +53,28 @@ export function designerStyle(feature: DesignerLayout): CSSProperties {
   const vars: Record<string, string | number> = {
     "--designer-layer": clamp(feature.layer, 4, 0, 99),
     "--designer-opacity": clamp(feature.opacity, 100, 0, 100) / 100,
-    "--motion-duration": `${clamp(feature.motionDuration, 700, 100, 5000)}ms`,
-    "--motion-delay": `${clamp(feature.motionDelay, 0, 0, 5000)}ms`,
-    "--motion-easing": feature.motionEasing || "ease-out",
-    "--motion-repeat": clamp(feature.motionRepeat, 1, 1, 10),
   };
+  // 22 Nov — timing hanya dikirim bila diisi (lihat .motion-custom).
+  if (feature.motionDuration !== undefined)
+    vars["--motion-duration"] = `${clamp(feature.motionDuration, 700, 100, 5000)}ms`;
+  if (feature.motionDelay !== undefined)
+    vars["--motion-delay"] = `${clamp(feature.motionDelay, 0, 0, 5000)}ms`;
+  if (feature.motionEasing) vars["--motion-easing"] = feature.motionEasing;
+  if (feature.motionRepeat !== undefined)
+    vars["--motion-repeat"] = clamp(feature.motionRepeat, 1, 1, 10);
   if (feature.freePosition)
     for (const key of Object.keys(desktop) as (keyof typeof desktop)[]) {
       vars[`--d-${key}`] = desktop[key];
       vars[`--m-${key}`] = mobile[key];
     }
   return vars as CSSProperties;
+}
+
+/** 22 Nov — Web Designer mengisi timing animasi sendiri. */
+export function hasCustomMotion(feature: DesignerLayout) {
+  return (
+    feature.motionDuration !== undefined ||
+    Boolean(feature.motionEasing) ||
+    feature.motionRepeat !== undefined
+  );
 }

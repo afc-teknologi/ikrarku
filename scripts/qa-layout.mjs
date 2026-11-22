@@ -937,7 +937,7 @@ test("MoM A7/A6/A9: UI harga admin, buat akun customer, banner tim membantu", ()
   assert.match(appTsx, /useState\(canSetPrice \? 499000 : 0\)/);
   assert.match(appTsx, /<input value="Ditetapkan Administrator" disabled readOnly \/>/);
   assert.match(appTsx, /<TemplatePriceControl\n\s*price=\{template\.price \|\| 0\}/);
-  assert.match(apiTs, /setTemplatePrice: \(id: string, price: number(, originalPrice\?: number)?\) =>/);
+  assert.match(apiTs, /setTemplatePrice: \(\s*id: string,\s*price: number,?(\s*originalPrice\?: number,?)?(\s*isFree\?: boolean,?)?\s*\) =>/);
   // A6 — tombol di Orders untuk order lunas tanpa akun.
   assert.match(appTsx, /row\.payment_status === "Paid" &&\n\s*!row\.user_id &&/);
   assert.match(apiTs, /createOrderCustomerAccount: \(id: string\) =>/);
@@ -1624,4 +1624,29 @@ test("21 Nov: jeda lagu lalu putar lagi melanjutkan, bukan mengulang", () => {
   assert.match(appTsx, /if \(soundPausedRef\.current\) \{\n\s*soundPausedRef\.current = false;\n\s*soundRef\.current\.userResume\(\);/);
   assert.match(appTsx, /onToggle=\{toggleSound\}/);
   assert.match(appTsx, /const shared = control && control\.featureId === feature\.id \? control : null;/);
+});
+
+test("22 Nov: Entrance Effect terlihat, loop sesudahnya, Transition & Kecepatan berfungsi", () => {
+  const designerCss = readFileSync(new URL("../src/components/Designer.css", import.meta.url), "utf8");
+  // Timing tidak lagi dipaksakan ke semua animasi fitur.
+  assert.doesNotMatch(designerCss, /animation-duration: var\(--motion-duration, 700ms\) !important/);
+  assert.match(designerCss, /\.feature-block\.motion-custom:not\(\.entrance-done\)/);
+  // Efek masuk menang atas loop sampai selesai.
+  assert.match(appCss, /\.feature-block\.fx-bounce-in:not\(\.entrance-done\),\.animation-preview-object\.fx-bounce-in\{animation:bounceIn var\(--motion-dur,\.9s\)/);
+  assert.match(appTsx, /event\.currentTarget\.classList\.add\("entrance-done"\)/);
+  // Transition menganimasikan isi fitur.
+  assert.match(appCss, /\.trans-reveal-left>:not\(\.feature-effect-layer\)/);
+  assert.match(appCss, /\.motion-slow\{--motion-dur:1\.6s\}/);
+  assert.match(appTsx, /motionSpeed\?: "slow" \| "medium" \| "fast";/);
+});
+
+test("22 Nov QC: template gratis, lewati canvas setelah cover, footer, pesan upload", () => {
+  assert.match(serverMjs, /ensureColumn\("templates", "is_free"/);
+  assert.match(serverMjs, /fulfillPaidOrder\(order, "FREE"\)/);
+  assert.match(appTsx, /t\("Aktifkan Template Gratis", "Activate Free Template"\)/);
+  assert.match(appTsx, /coverSkipSections\?: number;/);
+  assert.match(appTsx, /data-section-id=\{section\.id\}/);
+  assert.doesNotMatch(appTsx, /t\("Masuk ke dashboard", "Sign in to dashboard"\)/);
+  assert.match(apiTs, /Upload file tidak selesai dalam 2 menit/);
+  assert.match(appCss, /\.group-heading \.hint-chip\{/);
 });

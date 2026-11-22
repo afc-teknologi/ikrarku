@@ -335,6 +335,9 @@ function initDb() {
   ensureColumn("sessions", "last_seen_at", "TEXT");
   ensureColumn("templates", "sample_image_url", "TEXT");
   ensureColumn("templates", "header_image_url", "TEXT");
+  // 22 Nov — template gratis (Rp0) yang memang disengaja, dibedakan dari
+  // harga 0 = "belum ditetapkan" pada pengajuan Web Designer.
+  ensureColumn("templates", "is_free", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn("templates", "unpublished_at", "TEXT");
   // QA TC-151: penanda "Recommended" pada katalog desain. Dikurasi Administrator,
   // bukan bagian dari konten template, jadi tidak ikut alur approval.
@@ -1593,6 +1596,7 @@ function mapTemplate(row) {
     bg: row.background,
     premium: Boolean(row.premium),
     recommended: Boolean(row.recommended),
+    isFree: Boolean(row.is_free),
     // QA 14 TC-318 — label "New" (template berumur ≤ NEW_TEMPLATE_DAYS hari)
     // dan "Diskon" (harga coret lebih tinggi dari harga jual).
     originalPrice:
@@ -2305,7 +2309,11 @@ app.patch("/api/templates/:id/price", auth, (req, res) => {
     .prepare("SELECT * FROM templates WHERE id=?")
     .get(req.params.id);
   if (!row) return res.status(404).json({ error: "Template tidak ditemukan" });
-  const price = Number(req.body?.price);
+  // 22 Nov — "Template gratis": harga 0 yang disengaja, bisa dipesan
+  // tanpa payment gateway.
+  const isFree =
+    req.body?.isFree === undefined ? Boolean(row.is_free) : Boolean(req.body.isFree);
+  const price = isFree ? 0 : Number(req.body?.price);
   if (!Number.isFinite(price) || price < 0 || price > 100_000_000)
     return res
       .status(400)
@@ -2323,8 +2331,8 @@ app.patch("/api/templates/:id/price", auth, (req, res) => {
     original = value || null;
   }
   db.prepare(
-    "UPDATE templates SET price=?,premium=?,original_price=?,updated_at=? WHERE id=?",
-  ).run(next, next > 0 ? 1 : 0, original, now(), row.id);
+    "UPDATE templates SET price=?,premium=?,original_price=?,is_free=?,updated_at=? WHERE id=?",
+  ).run(next, next > 0 ? 1 : 0, isFree ? original : original, isFree ? 1 : 0, now(), row.id);
   // Revisi yang menunggu approval tidak boleh mengembalikan harga lama.
   const pending = db
     .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
@@ -2339,6 +2347,7 @@ app.patch("/api/templates/:id/price", auth, (req, res) => {
   auditLog(req.user.id, "template.price", "template", row.id, {
     from: row.price,
     to: next,
+    isFree,
   });
   res.json(
     mapTemplate(db.prepare("SELECT * FROM templates WHERE id=?").get(row.id)),
@@ -4980,11 +4989,6 @@ app.post(
         expired: true,
       });
     }
-    const method = db
-      .prepare("SELECT * FROM payment_methods WHERE code=? AND enabled=1")
-      .get(req.body.paymentMethod);
-    if (!method)
-      return res.status(400).json({ error: "Metode pembayaran tidak aktif" });
     const viewer = optionalUser(req);
     if (
       !(
@@ -4999,6 +5003,29 @@ app.post(
       order.fulfillment_status === "Complete"
     )
       return res.status(409).json({ error: "Order sudah dibayar" });
+    // 22 Nov — template gratis: tidak lewat payment gateway (Mayar menolak
+    // nominal 0). Order langsung dianggap lunas dengan metode "FREE".
+    {
+      const template = db
+        .prepare("SELECT is_free FROM templates WHERE id=?")
+        .get(order.template_id);
+      if (template?.is_free && !(Number(order.amount) > 0)) {
+        try {
+          const result = await fulfillPaidOrder(order, "FREE");
+          auditLog(viewer?.id || null, "order.paid.free", "order", order.id, {});
+          return res.json({ ok: true, status: "Paid", free: true, ...result });
+        } catch (error) {
+          return res
+            .status(error.status || 500)
+            .json({ error: error.message || "Gagal memproses template gratis." });
+        }
+      }
+    }
+    const method = db
+      .prepare("SELECT * FROM payment_methods WHERE code=? AND enabled=1")
+      .get(req.body.paymentMethod);
+    if (!method)
+      return res.status(400).json({ error: "Metode pembayaran tidak aktif" });
     const mode =
       process.env.PAYMENT_MODE ||
       (NODE_ENV === "production" ? "gateway" : "simulation");

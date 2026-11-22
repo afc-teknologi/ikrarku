@@ -236,8 +236,9 @@ export default function DesignerControls({
       <div className="designer-motion">
         <strong>Timing animasi</strong>
         <p className="layout-help">
-          Pilih efek pada tab Advanced, lalu atur timing di sini. Reduced motion
-          mengikuti preferensi perangkat tamu.
+          Pilih efek & Kecepatan pada tab Advanced. Isi di sini hanya untuk
+          timing khusus (mengalahkan Kecepatan); kosongkan dengan Reset.
+          Reduced motion mengikuti preferensi perangkat tamu.
         </p>
         <div className="designer-grid">
           {(
@@ -281,6 +282,20 @@ export default function DesignerControls({
             </select>
           </label>
         </div>
+        <button
+          type="button"
+          className="text-button"
+          onClick={() =>
+            update({
+              motionDuration: undefined,
+              motionEasing: undefined,
+              motionRepeat: undefined,
+              motionDelay: undefined,
+            })
+          }
+        >
+          Reset timing (ikuti Kecepatan)
+        </button>
       </div>
     </div>
   );

@@ -30,10 +30,22 @@
   z-index: var(--designer-layer, 4) !important;
   margin: 0 !important;
 }
+/* 22 Nov — dulu durasi 700ms, easing ease-out & pengulangan 1 dipaksakan ke
+   SEMUA animasi fitur (!important). Akibatnya setiap Entrance Effect terasa
+   sama (kurva khas Bounce/Elastic hilang) dan animasi berulang (loop) hanya
+   jalan sekali. Kini timing khusus hanya berlaku bila Web Designer mengisinya
+   (kelas .motion-custom) dan hanya untuk efek masuk; selain itu tiap efek
+   memakai timing bawaannya + pilihan Kecepatan (Slow/Medium/Fast). */
 .feature-block {
   opacity: var(--designer-opacity, 1);
-  animation-duration: var(--motion-duration, 700ms) !important;
-  animation-delay: var(--motion-delay, 0ms) !important;
+}
+.feature-block:not(.entrance-done) {
+  animation-delay: var(--motion-delay, 0ms);
+}
+.feature-block.motion-custom {
+  --motion-dur: var(--motion-duration, 700ms);
+}
+.feature-block.motion-custom:not(.entrance-done) {
   animation-timing-function: var(--motion-easing, ease-out) !important;
   animation-iteration-count: var(--motion-repeat, 1) !important;
 }
