@@ -760,7 +760,7 @@ export default function LandingPage({
                   </div>
                   <span className="ikr-template-price">
                     {t.originalPrice ? <s>{rupiah(t.originalPrice)}</s> : null}
-                    {rupiah(t.price)}
+                    {t.isFree ? (lang === "en" ? "Free" : "Gratis") : rupiah(t.price)}
                   </span>
                 </div>
               </article>

@@ -1,3 +1,21 @@
+## 0.21.0 — 22 November 2026 (QC WhatsApp)
+
+- **Template gratis (Rp0).** Admin → Templates & Approval → Ubah harga → centang "Gratis (tanpa pembayaran)". Customer memesan seperti biasa; di langkah 2 cukup klik **Aktifkan Template Gratis** — order langsung aktif (status Paid, metode FREE), CS & Web Designer dialokasikan, tanpa payment gateway. Harga 0 tanpa centang tetap berarti "belum ditetapkan". Katalog & ringkasan menampilkan "Gratis".
+- **Buka Undangan → langsung ke canvas yang diinginkan.** Opsi baru di fitur Cover: "Setelah dibuka, mulai dari" (canvas setelah cover / lewati 1 / lewati 2 canvas) untuk template yang canvas pembukanya mirip cover.
+- Footer: tautan "Masuk ke dashboard" dihapus; akun sosial menampilkan handle (mis. @ikrarkuid).
+- Checkout: catatan "Dipakai untuk hitung mundur…" diberi jarak dari kolom tanggal/jam.
+- Editor: petunjuk "Enter = baris baru" dibuat kecil (chip).
+- Ornamen: tombol upload diberi nama "Upload gambar ornamen" (PNG transparan didukung).
+- Upload gagal kini memberi pesan yang tepat: timeout 2 menit, koneksi terputus, file terlalu besar (413), atau server sibuk (502/504). Dulu memakai pesan autosave "disimpan sementara di perangkat" padahal file tidak tersimpan.
+
+## 0.20.0 — 22 November 2026
+
+- **Entrance Effect kini benar-benar berbeda satu sama lain.** Aturan timing editor memaksakan durasi 700 ms dan easing ease-out (`!important`) ke semua animasi fitur, sehingga Bounce, Elastic, Slide Spring, dsb. terasa sama. Timing khusus (Style → Timing animasi) kini hanya berlaku bila diisi, dan ada tombol "Reset timing".
+- **Animasi berulang (Looping) tidak lagi menelan efek masuk.** Dulu loop menimpa Entrance Effect sejak awal (efek masuk tak terlihat) dan loop sendiri hanya jalan sekali. Kini efek masuk jalan dulu, loop menyusul dan berulang terus.
+- **Transition berfungsi.** Dulu sebagian hanya CSS transition yang tidak pernah terpicu, sebagian saling menimpa dengan Entrance. Kini Transition menganimasikan isi fitur bersamaan dengan Entrance (20 pilihan).
+- **Kecepatan animasi: Slow / Medium / Fast** (tab Advanced) untuk Entrance Effect dan Transition. Live Motion Preview ikut diputar ulang.
+- Fitur yang sangat tinggi tetap muncul saat digulir (sebelumnya bisa tidak pernah mencapai ambang 16% terlihat).
+
 ## 0.19.6 — 21 November 2026
 
 - Lagu undangan: jeda lalu putar lagi kini **melanjutkan** dari posisi terakhir (dulu tombol jeda menghentikan lagu sehingga diputar ulang dari awal). Berlaku untuk tombol lagu melayang, tombol lagu di Credit, dan fitur Sound.

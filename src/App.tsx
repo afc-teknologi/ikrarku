@@ -157,6 +157,7 @@ import LandingPageView, { JournalCard } from "./components/LandingPage";
 import DesignerControls from "./components/DesignerControls";
 import {
   designerStyle,
+  hasCustomMotion,
   type DesignerLayout,
 } from "./components/designerLayout";
 import "./components/Designer.css";
@@ -601,6 +602,8 @@ type Feature = DesignerLayout & {
   margin: number;
   entranceEffect: string;
   transition: string;
+  /** 22 Nov — kecepatan Entrance Effect & Transition. */
+  motionSpeed?: "slow" | "medium" | "fast";
   mediaUrl?: string;
   mediaKey?: string;
   mediaName?: string;
@@ -682,6 +685,9 @@ type Feature = DesignerLayout & {
   coverVerticalAlign?: "top" | "center" | "bottom";
   coverExitEffect?: CoverExitEffect;
   coverExitDuration?: number;
+  /** 22 Nov (QC) — setelah Buka Undangan, lewati N canvas setelah cover
+   *  (mis. canvas pembuka yang desainnya sama dengan cover). */
+  coverSkipSections?: number;
   coverExitEasing?: "ease" | "ease-in" | "ease-out" | "ease-in-out" | "linear";
   // ---- QA remediation batch (Canvas Editor) ----
   extraTexts?: ExtraText[]; // TC-078/079/082/083/084/085/086/087/088/089/095
@@ -1311,6 +1317,8 @@ export type Template = {
   premium: boolean;
   // QA TC-151 — ditandai Administrator sebagai pilihan rekomendasi.
   recommended?: boolean;
+  /** 22 Nov — template gratis (Rp0) tanpa payment gateway. */
+  isFree?: boolean;
   /** QA 14 TC-318 — harga coret (sebelum diskon) & label New. */
   originalPrice?: number | null;
   isNew?: boolean;
@@ -1401,6 +1409,15 @@ type ManagedUser = {
 
 const uid = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+/** 22 Nov — label harga: "Gratis" untuk template gratis. */
+function templatePriceLabel(template: { price?: number; isFree?: boolean }) {
+  return template.isFree
+    ? getSiteLang() === "en"
+      ? "Free"
+      : "Gratis"
+    : formatRupiah(template.price || 0);
+}
+
 const formatRupiah = (value: number) =>
   new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -5493,9 +5510,10 @@ function App() {
     templateId: string,
     price: number,
     originalPrice?: number,
+    isFree?: boolean,
   ) => {
     try {
-      const updated = await api.setTemplatePrice(templateId, price, originalPrice);
+      const updated = await api.setTemplatePrice(templateId, price, originalPrice, isFree);
       const patch = (item: Template) =>
         item.id === templateId
           ? {
@@ -5503,11 +5521,16 @@ function App() {
               price: updated.price,
               premium: updated.premium,
               originalPrice: updated.originalPrice,
+              isFree: updated.isFree,
             }
           : item;
       setTemplateCatalog((previous) => previous.map(patch));
       setPublicTemplates((previous) => previous.map(patch));
-      flash(`Harga diperbarui: ${formatRupiah(updated.price || 0)}.`);
+      flash(
+        updated.isFree
+          ? "Template ditandai Gratis — bisa dipesan tanpa pembayaran."
+          : `Harga diperbarui: ${formatRupiah(updated.price || 0)}.`,
+      );
     } catch (error) {
       flash(error instanceof Error ? error.message : "Gagal mengubah harga.");
       throw error;
@@ -7123,7 +7146,7 @@ function AllDesignsPage({
                   {template.originalPrice ? (
                     <s>{formatRupiah(template.originalPrice)}</s>
                   ) : null}
-                  {formatRupiah(template.price || 0)}
+                  {templatePriceLabel(template)}
                 </span>
               </div>
             </article>
@@ -8062,7 +8085,7 @@ function TemplateJourneyPage({
               {t("PAKET SEKALI BAYAR", "ONE-TIME PACKAGE")} ·{" "}
               {template.premium ? "PREMIUM" : "STANDARD"}
             </small>
-            <strong>{formatRupiah(template.price || 0)}</strong>
+            <strong>{templatePriceLabel(template)}</strong>
             <span>
               {t(
                 "Sudah termasuk onboarding dan penugasan tim.",
@@ -8289,7 +8312,9 @@ function CheckoutPage({
           </span>
           <h1>
             {order
-              ? t("Pilih metode pembayaran", "Choose a payment method")
+              ? template.isFree
+                ? t("Aktifkan template gratis", "Activate your free template")
+                : t("Pilih metode pembayaran", "Choose a payment method")
               : t("Data pemesan", "Your details")}
           </h1>
           {!order ? (
@@ -8473,11 +8498,31 @@ function CheckoutPage({
             <>
               <p>
                 {t("Order", "Order")} <strong>{order.orderNo}</strong>{" "}
-                {t(
-                  "sudah dibuat. Pilih kanal pembayaran.",
-                  "has been created. Choose a payment channel.",
-                )}
+                {template.isFree
+                  ? t(
+                      "sudah dibuat. Template ini gratis — tidak perlu pembayaran.",
+                      "has been created. This template is free — no payment needed.",
+                    )
+                  : t(
+                      "sudah dibuat. Pilih kanal pembayaran.",
+                      "has been created. Choose a payment channel.",
+                    )}
               </p>
+              {template.isFree ? (
+                <div className="local-payment-note free-template-note">
+                  <Gift size={18} />
+                  <p>
+                    <strong>{t("Template gratis", "Free template")}</strong>
+                    <span>
+                      {t(
+                        "Klik tombol di bawah untuk mengaktifkan order. Tim kami akan langsung menyiapkan undangan Anda.",
+                        "Click the button below to activate the order. Our team will start preparing your invitation right away.",
+                      )}
+                    </span>
+                  </p>
+                </div>
+              ) : (
+              <>
               <div className="payment-method-grid">
                 {paymentMethods.map((item) => (
                   <button
@@ -8509,13 +8554,15 @@ function CheckoutPage({
                   </span>
                 </p>
               </div>
+              </>
+              )}
               <button
                 className="primary-btn checkout-next"
-                disabled={!method || working}
+                disabled={(!method && !template.isFree) || working}
                 onClick={async () => {
                   setWorking(true);
                   setPayError("");
-                  const ok = await payOrder(method);
+                  const ok = await payOrder(method || "FREE");
                   if (!ok)
                     setPayError(
                       lastPaymentError ||
@@ -8528,8 +8575,10 @@ function CheckoutPage({
                 }}
               >
                 {working
-                  ? t("Memproses pembayaran...", "Processing payment...")
-                  : t("Lanjutkan Pembayaran", "Continue payment")}
+                  ? t("Memproses...", "Processing...")
+                  : template.isFree
+                    ? t("Aktifkan Template Gratis", "Activate Free Template")
+                    : t("Lanjutkan Pembayaran", "Continue payment")}
                 <CheckCircle size={16} />
               </button>
               {/* Revisi 29 Okt — alasan gagal bayar dari gateway tampil tetap,
@@ -8559,7 +8608,7 @@ function CheckoutPage({
           <h3>{t("Ringkasan order", "Order summary")}</h3>
           <div>
             <span>{t("Paket template", "Template package")}</span>
-            <strong>{formatRupiah(template.price || 0)}</strong>
+            <strong>{template.isFree ? t("Gratis", "Free") : formatRupiah(template.price || 0)}</strong>
           </div>
           <div>
             <span>{t("Onboarding CS", "CS onboarding")}</span>
@@ -8572,7 +8621,7 @@ function CheckoutPage({
           <hr />
           <div className="checkout-total">
             <span>Total</span>
-            <strong>{formatRupiah(template.price || 0)}</strong>
+            <strong>{template.isFree ? t("Gratis", "Free") : formatRupiah(template.price || 0)}</strong>
           </div>
         </aside>
       </main>
@@ -8677,17 +8726,19 @@ function PaymentSuccessPage({
   template: Template | null;
   onHome: () => void;
 }) {
+  const free = Boolean(template?.isFree) || !(Number(order.amount) > 0);
   return (
     <div className="payment-success-page">
       <div className="success-rings">
         <CheckCircle size={46} />
       </div>
-      <span>PAYMENT RECEIVED</span>
+      <span>{free ? "TEMPLATE GRATIS AKTIF" : "PAYMENT RECEIVED"}</span>
       <h1>Terima kasih. Project Anda sudah masuk ke tim kami.</h1>
       <p>
-        Order <strong>{order.orderNo}</strong> telah dibayar. Satu Customer
-        Service dan satu Web Designer sudah dialokasikan melalui workload
-        assignment.
+        Order <strong>{order.orderNo}</strong>{" "}
+        {free ? "sudah aktif (template gratis)." : "telah dibayar."} Satu
+        Customer Service dan satu Web Designer sudah dialokasikan melalui
+        workload assignment.
       </p>
       <div className="success-summary">
         <div>
@@ -8696,11 +8747,11 @@ function PaymentSuccessPage({
         </div>
         <div>
           <small>Total</small>
-          <strong>{formatRupiah(order.amount)}</strong>
+          <strong>{free ? "Gratis" : formatRupiah(order.amount)}</strong>
         </div>
         <div>
           <small>Status</small>
-          <strong>Paid · Onboarding</strong>
+          <strong>{free ? "Aktif · Onboarding" : "Paid · Onboarding"}</strong>
         </div>
       </div>
       <div className="success-steps">
@@ -9161,7 +9212,7 @@ function TasksPage({
                 <h2>{previewTemplate.name}</h2>
                 <small>
                   {previewTemplate.category} ·{" "}
-                  {formatRupiah(previewTemplate.price || 0)} ·{" "}
+                  {templatePriceLabel(previewTemplate)} ·{" "}
                   {previewTemplate.status}
                 </small>
               </div>
@@ -9443,6 +9494,15 @@ export function waLink(phone: string) {
   const digits = phone.replace(/\D/g, "").replace(/^0/, "62");
   return `https://wa.me/${digits}`;
 }
+/** 22 Nov (QC) — tampilkan handle (mis. @ikrarkuid) di footer. */
+function socialHandle(value: string) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  if (raw.startsWith("@")) return raw;
+  const match = raw.match(/^https?:\/\/[^/]+\/@?([^/?#]+)/i);
+  return match ? `@${match[1]}` : `@${raw}`;
+}
+
 export function socialLink(kind: "instagram" | "tiktok" | "facebook", value: string) {
   if (/^https?:\/\//i.test(value)) return value;
   const handle = value.replace(/^@/, "");
@@ -9650,6 +9710,9 @@ export function SiteFooter({
                 aria-label={label}
               >
                 {label}
+                {socialHandle(value as string) && (
+                  <span className="site-footer-handle">{socialHandle(value as string)}</span>
+                )}
               </a>
             ))}
           </div>
@@ -9688,9 +9751,6 @@ export function SiteFooter({
           </a>
         )}
         {contact.email && <a href={`mailto:${contact.email}`}>{contact.email}</a>}
-        <a href="/login" onClick={(event) => { event.preventDefault(); setView("login"); }}>
-          {t("Masuk ke dashboard", "Sign in to dashboard")}
-        </a>
       </nav>
       <nav aria-label="Legal">
         <strong>Legal</strong>
@@ -11703,7 +11763,7 @@ function TemplateCoverArt({
   template,
   compact = false,
 }: {
-  template: Pick<Template, "name" | "category" | "accent" | "price">;
+  template: Pick<Template, "name" | "category" | "accent" | "price" | "isFree">;
   compact?: boolean;
 }) {
   return (
@@ -11716,7 +11776,7 @@ function TemplateCoverArt({
       <small>{(template.category || "Wedding").toUpperCase()}</small>
       <strong>{template.name}</strong>
       <em>
-        {template.price ? formatRupiah(template.price) : "Harga menyusul"}
+        {template.isFree ? "Gratis" : template.price ? formatRupiah(template.price) : "Harga menyusul"}
       </em>
     </div>
   );
@@ -12150,6 +12210,7 @@ function Templates({
     templateId: string,
     price: number,
     originalPrice?: number,
+    isFree?: boolean,
   ) => Promise<void>;
   onReviewRevision?: (
     templateId: string,
@@ -12632,7 +12693,7 @@ function Templates({
               <div>
                 <strong>{template.name}</strong>
                 <span>
-                  {template.category} · {formatRupiah(template.price || 0)}
+                  {template.category} · {templatePriceLabel(template)}
                 </span>
                 <small
                   className={`approval-status ${(template.status || "Published").toLowerCase()}`}
@@ -12675,7 +12736,7 @@ function Templates({
                 <h2>{previewTemplate.name}</h2>
                 <small>
                   {previewTemplate.category} ·{" "}
-                  {formatRupiah(previewTemplate.price || 0)}
+                  {templatePriceLabel(previewTemplate)}
                 </small>
               </div>
               <div className="preview-header-actions">
@@ -15306,6 +15367,7 @@ function FeatureInspector({
   replay: () => void;
   soundCatalog: SoundCatalogItem[];
 }) {
+  const [previewNonce, setPreviewNonce] = useState(0);
   const textTypes: FeatureType[] = [
     "text",
     "quote",
@@ -17250,6 +17312,21 @@ function FeatureInspector({
             <span>Viewer interaction</span>
           </div>
           <label>
+            Setelah dibuka, mulai dari
+            <select
+              value={feature.coverSkipSections || 0}
+              onChange={(event) =>
+                update({
+                  coverSkipSections: Number(event.target.value) || undefined,
+                })
+              }
+            >
+              <option value={0}>Canvas setelah cover (bawaan)</option>
+              <option value={1}>Lewati 1 canvas setelah cover</option>
+              <option value={2}>Lewati 2 canvas setelah cover</option>
+            </select>
+          </label>
+          <label>
             Opening effect
             <select
               value={feature.coverExitEffect || "fade"}
@@ -17316,6 +17393,7 @@ function FeatureInspector({
           value={feature.entranceEffect}
           onChange={(event) => {
             update({ entranceEffect: event.target.value });
+            setPreviewNonce((n) => n + 1);
             window.setTimeout(replay, 0);
           }}
         >
@@ -17332,6 +17410,7 @@ function FeatureInspector({
           value={feature.transition}
           onChange={(event) => {
             update({ transition: event.target.value });
+            setPreviewNonce((n) => n + 1);
             window.setTimeout(replay, 0);
           }}
         >
@@ -17341,6 +17420,39 @@ function FeatureInspector({
             </option>
           ))}
         </select>
+      </label>
+      {/* 22 Nov — kecepatan Entrance Effect & Transition. */}
+      <label>
+        Kecepatan animasi
+        <div className="toolbar-row alignment placement-row">
+          {(
+            [
+              ["slow", "Slow"],
+              ["medium", "Medium"],
+              ["fast", "Fast"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              className={(feature.motionSpeed || "medium") === value ? "active" : ""}
+              onClick={() => {
+                // Kecepatan menggantikan durasi khusus di Timing animasi.
+                update({
+                  motionSpeed: value === "medium" ? undefined : value,
+                  motionDuration: undefined,
+                });
+                setPreviewNonce((n) => n + 1);
+                window.setTimeout(replay, 0);
+              }}
+            >
+              <small>{label}</small>
+            </button>
+          ))}
+        </div>
+        <span className="layout-help">
+          Berlaku untuk Entrance Effect dan Transition (Slow ±1,6 dtk, Fast ±0,4 dtk).
+        </span>
       </label>
       <label>
         Visual Effect
@@ -17372,7 +17484,8 @@ function FeatureInspector({
       </label>
       <div className="animation-preview-card">
         <div
-          className={`animation-preview-object fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"}`}
+          key={`${feature.entranceEffect}-${feature.transition}-${feature.motionSpeed || "medium"}-${previewNonce}`}
+          className={`animation-preview-object fx-${feature.entranceEffect} trans-${feature.transition} motion-${feature.motionSpeed || "medium"} effect-${feature.visualEffect || "none"}`}
           style={
             {
               "--effect-intensity": `${(feature.effectIntensity ?? 55) / 100}`,
@@ -17414,7 +17527,13 @@ function FeatureInspector({
           <i />
         </button>
       </div>
-      <button className="replay-btn" onClick={replay}>
+      <button
+        className="replay-btn"
+        onClick={() => {
+          setPreviewNonce((n) => n + 1);
+          replay();
+        }}
+      >
         <Play size={15} /> Replay animation
       </button>
     </div>
@@ -18898,6 +19017,7 @@ function SectionDecorationEditor({
             // tidak pernah muncul walau gambarnya sudah terunggah.
             layer={{ id: item.id, url: item.imageUrl || "" } as BackgroundLayer}
             uploadLayerImage={uploadLayerImage}
+            label="Upload gambar ornamen"
             onUploaded={(saved) =>
               patch(item.id, { imageUrl: saved.url, imageKey: saved.key })
             }
@@ -19406,12 +19526,14 @@ function LayerImageUpload({
   layer,
   onUploaded,
   uploadLayerImage,
+  label = "Upload gambar layer",
 }: {
   layer: BackgroundLayer;
   onUploaded: (saved: { url: string; key: string }) => void;
   uploadLayerImage: (
     file: File | undefined,
   ) => Promise<{ url: string; key: string } | null>;
+  label?: string;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -19439,8 +19561,8 @@ function LayerImageUpload({
       >
         <Upload size={16} />
         <span>
-          <strong>{busy ? "Mengunggah..." : "Upload gambar layer"}</strong>
-          <small>Ambil dari komputer, maksimal 2 MB.</small>
+          <strong>{busy ? "Mengunggah..." : label}</strong>
+          <small>Ambil dari komputer (PNG transparan didukung), maksimal 2 MB.</small>
         </span>
       </button>
       {layer.url && (
@@ -22492,20 +22614,26 @@ function WeddingCanvasBody({
     ) as HTMLElement[];
     const targets = nodes.filter(
       (node) =>
-        !node.classList.contains("fx-none") &&
+        (!node.classList.contains("fx-none") ||
+          Array.from(node.classList).some(
+            (name) => name.startsWith("trans-") && name !== "trans-smooth",
+          )) &&
         !node.classList.contains("no-scroll-reveal"),
     );
     targets.forEach((node) => node.classList.add("await-reveal"));
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
-          if (entry.isIntersecting) {
+          // Fitur sangat tinggi tidak pernah 16% terlihat → tetap dibuka.
+          const tall =
+            entry.boundingClientRect.height > window.innerHeight * 0.9;
+          if (entry.isIntersecting && (entry.intersectionRatio >= 0.16 || tall)) {
             entry.target.classList.add("revealed");
             observer.unobserve(entry.target);
           }
         });
       },
-      { threshold: 0.16, rootMargin: "0px 0px -6% 0px" },
+      { threshold: [0, 0.16], rootMargin: "0px 0px -6% 0px" },
     );
     targets.forEach((node) => observer.observe(node));
     return () => observer.disconnect();
@@ -22697,6 +22825,37 @@ function WeddingCanvasBody({
         }
         if (scroller && scroller !== document.body) scroller.scrollTop = 0;
         else window.scrollTo({ top: 0 });
+        // 22 Nov (QC) — setelah Buka Undangan langsung ke canvas setelah
+        // cover, bukan kembali ke canvas cover.
+        const coverId = coverEntry?.section.id;
+        const skip = Math.max(0, Number(coverEntry?.feature.coverSkipSections) || 0);
+        const index = sections.findIndex((item) => item.id === coverId);
+        if (!skip) return; // canvas setelah cover sudah di paling atas
+        const nextId = index >= 0 ? sections[index + 1 + skip]?.id : undefined;
+        if (!nextId || !root) return;
+        const jump = (tries: number) => {
+          const target = root.querySelector<HTMLElement>(
+            `[data-section-id="${CSS.escape(nextId)}"]`,
+          );
+          if (!target) {
+            if (tries > 0) requestAnimationFrame(() => jump(tries - 1));
+            return;
+          }
+          if (scroller && scroller !== document.body) {
+            const offset =
+              target.getBoundingClientRect().top -
+              scroller.getBoundingClientRect().top +
+              scroller.scrollTop;
+            scroller.scrollTop = offset;
+          } else {
+            window.scrollTo({
+              top: target.getBoundingClientRect().top + window.scrollY,
+            });
+          }
+        };
+        requestAnimationFrame(() => jump(10));
+        // Tata letak bisa bergeser sedikit saat gambar selesai dimuat.
+        window.setTimeout(() => jump(0), 450);
       },
       Math.max(150, coverExit?.coverExitDuration ?? 700),
     );
@@ -22918,6 +23077,7 @@ function WeddingCanvasBody({
         return (
           <section
             key={section.id}
+            data-section-id={section.id}
             className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect ? " follow-aspect" : ""}${decorationSectionClasses(section.decorations)}`}
             onDragOver={(event) => {
               if (
@@ -23736,8 +23896,16 @@ function FeatureBlock({
         feature.freePosition && feature.boxHeight ? "true" : undefined
       }
 data-feature-id={feature.id}
-            className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.frameShape && (feature.type === "image" || feature.type === "gallery") ? `has-frame frame-${feature.frameShape}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
+            className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} ${feature.motionSpeed && feature.motionSpeed !== "medium" ? `motion-${feature.motionSpeed}` : ""} ${hasCustomMotion(feature) ? "motion-custom" : ""} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.frameShape && (feature.type === "image" || feature.type === "gallery") ? `has-frame frame-${feature.frameShape}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
       style={style}
+      onAnimationEnd={(event) => {
+        // Efek masuk selesai → animasi berulang (loop) boleh mulai.
+        if (
+          event.target === event.currentTarget &&
+          !/^loop/i.test(event.animationName)
+        )
+          event.currentTarget.classList.add("entrance-done");
+      }}
     >
       <FeatureEffect effect={feature.visualEffect || "none"} />
       {editable && (
@@ -28228,7 +28396,7 @@ function AdminDashboard({
               <div>
                 <strong>{template.name}</strong>
                 <span>
-                  {formatRupiah(template.price || 0)} · {template.category}
+                  {templatePriceLabel(template)} · {template.category}
                 </span>
               </div>
               <button onClick={() => setView("tasks")}>Review</button>
@@ -32255,7 +32423,7 @@ function HeadingBodyEditor({
     <div className="heading-body-editor">
       <div className="group-heading">
         <strong>Heading & Supporting Text</strong>
-        <span>Enter = baris baru</span>
+        <span className="hint-chip">Enter = baris baru</span>
       </div>
       <div className="setting-row compact">
         <div>
@@ -35212,13 +35380,16 @@ function CommissionPanel({
 function TemplatePriceControl({
   price,
   originalPrice = 0,
+  isFree = false,
   onSave,
 }: {
   price: number;
   originalPrice?: number;
-  onSave: (price: number, originalPrice: number) => Promise<void>;
+  isFree?: boolean;
+  onSave: (price: number, originalPrice: number, isFree: boolean) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
+  const [free, setFree] = useState(isFree);
   const [value, setValue] = useState(String(price));
   const [original, setOriginal] = useState(originalPrice ? String(originalPrice) : "");
   const [busy, setBusy] = useState(false);
@@ -35229,16 +35400,17 @@ function TemplatePriceControl({
         onClick={() => {
           setValue(String(price));
           setOriginal(originalPrice ? String(originalPrice) : "");
+          setFree(isFree);
           setEditing(true);
         }}
       >
-        <PenLine size={12} /> {price ? "Ubah harga" : "Tetapkan harga"}
+        <PenLine size={12} /> {price || isFree ? "Ubah harga" : "Tetapkan harga"}
       </button>
     );
   const save = async () => {
     setBusy(true);
     try {
-      await onSave(Number(value) || 0, Number(original) || 0);
+      await onSave(free ? 0 : Number(value) || 0, Number(original) || 0, free);
       setEditing(false);
     } catch {
       /* pesan sudah ditampilkan */
@@ -35260,7 +35432,8 @@ function TemplatePriceControl({
         step={1000}
         autoFocus
         aria-label="Harga template (IDR)"
-        value={value}
+        value={free ? "0" : value}
+        disabled={free}
         onChange={(event) => setValue(event.target.value)}
       />
       <input
@@ -35273,6 +35446,14 @@ function TemplatePriceControl({
         value={original}
         onChange={(event) => setOriginal(event.target.value)}
       />
+      <label className="template-free-toggle" title="Template Rp0 yang bisa dipesan tanpa pembayaran (tidak lewat payment gateway).">
+        <input
+          type="checkbox"
+          checked={free}
+          onChange={(event) => setFree(event.target.checked)}
+        />
+        Gratis (tanpa pembayaran)
+      </label>
       <button type="submit" disabled={busy}>
         Simpan
       </button>
@@ -35313,6 +35494,7 @@ function TemplateApprovalManager({
     templateId: string,
     price: number,
     originalPrice?: number,
+    isFree?: boolean,
   ) => Promise<void>;
   onReviewRevision?: (
     templateId: string,
@@ -35473,9 +35655,11 @@ function TemplateApprovalManager({
                 <strong>{template.name}</strong>
                 <span>
                   {template.category} ·{" "}
-                  {template.price
-                    ? formatRupiah(template.price)
-                    : "Harga belum ditetapkan"}
+                  {template.isFree
+                    ? "Gratis"
+                    : template.price
+                      ? formatRupiah(template.price)
+                      : "Harga belum ditetapkan"}
                   {template.originalPrice ? (
                     <s className="template-price-was">
                       {" "}
@@ -35488,8 +35672,9 @@ function TemplateApprovalManager({
                   <TemplatePriceControl
                     price={template.price || 0}
                     originalPrice={template.originalPrice || 0}
-                    onSave={(price, original) =>
-                      onSetPrice(template.id, price, original)
+                    isFree={template.isFree}
+                    onSave={(price, original, isFree) =>
+                      onSetPrice(template.id, price, original, isFree)
                     }
                   />
                 )}

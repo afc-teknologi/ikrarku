@@ -37,12 +37,27 @@ export const REQUEST_TIMEOUT_MS = 20_000;
 const UPLOAD_TIMEOUT_MS = 120_000;
 
 export class RequestTimeoutError extends Error {
-  constructor(path: string) {
+  constructor(path: string, upload = false) {
+    // 22 Nov (QC) — upload yang macet dulu memakai pesan autosave
+    // ("disimpan sementara di perangkat"), padahal file TIDAK tersimpan.
     super(
-      `Koneksi ke server timeout saat memproses ${path}. Perubahan terakhir disimpan sementara di perangkat ini.`,
+      upload
+        ? "Upload file tidak selesai dalam 2 menit, jadi dibatalkan dan file belum tersimpan. Biasanya karena koneksi lambat/terputus atau file terlalu besar. Coba lagi dengan koneksi yang stabil atau perkecil ukuran file."
+        : `Koneksi ke server timeout saat memproses ${path}. Perubahan terakhir disimpan sementara di perangkat ini.`,
     );
     this.name = "RequestTimeoutError";
   }
+}
+
+/** Pesan yang bisa dipahami untuk status HTTP tanpa isi JSON (mis. dari Nginx). */
+function httpErrorMessage(status: number, upload: boolean) {
+  if (status === 413)
+    return "Ukuran file terlalu besar untuk server. Perkecil file lalu coba lagi.";
+  if (status === 502 || status === 503 || status === 504)
+    return upload
+      ? "Server sedang sibuk/tidak menjawab saat menerima file. File belum tersimpan — coba lagi beberapa saat."
+      : "Server sedang sibuk/tidak menjawab. Coba lagi beberapa saat.";
+  return `HTTP ${status}`;
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -66,7 +81,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       );
   }
   const timer = window.setTimeout(
-    () => controller.abort(new RequestTimeoutError(path)),
+    () => controller.abort(new RequestTimeoutError(path, isUpload)),
     isUpload ? UPLOAD_TIMEOUT_MS : REQUEST_TIMEOUT_MS,
   );
   let response: Response;
@@ -82,6 +97,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       controller.signal.reason instanceof RequestTimeoutError
     )
       throw controller.signal.reason;
+    if (isUpload && error instanceof TypeError)
+      throw new Error(
+        "Koneksi terputus saat mengunggah file, jadi file belum tersimpan. Periksa internet lalu coba lagi.",
+      );
     throw error;
   } finally {
     window.clearTimeout(timer);
@@ -100,7 +119,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       /* storage tidak tersedia */
     }
   }
-  if (!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+  if (!response.ok)
+    throw new Error(data.error || httpErrorMessage(response.status, isUpload));
   return data as T;
 }
 
@@ -233,12 +253,19 @@ export const api = {
   republishTemplate: (id: string) =>
     request<any>(`/templates/${id}/republish`, { method: "POST" }),
   // MoM A7 — harga ditetapkan Administrator.
-  setTemplatePrice: (id: string, price: number, originalPrice?: number) =>
+  setTemplatePrice: (
+    id: string,
+    price: number,
+    originalPrice?: number,
+    isFree?: boolean,
+  ) =>
     request<any>(`/templates/${id}/price`, {
       method: "PATCH",
-      body: JSON.stringify(
-        originalPrice === undefined ? { price } : { price, originalPrice },
-      ),
+      body: JSON.stringify({
+        price,
+        ...(originalPrice === undefined ? {} : { originalPrice }),
+        ...(isFree === undefined ? {} : { isFree }),
+      }),
     }),
   // QA TC-151 — kurasi badge "Recommended" pada katalog publik.
   setTemplateRecommended: (id: string, recommended: boolean) =>
