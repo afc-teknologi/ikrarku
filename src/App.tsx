@@ -5454,9 +5454,13 @@ function App() {
       return;
     }
     // QA 14 TC-313 — gambar besar dikompres otomatis, bukan ditolak.
-    file = await shrinkImageToLimit(file, 2 * 1024 * 1024);
-    if (file.size > 2 * 1024 * 1024) {
-      flash(`${label} maksimal 2 MB.`);
+    // 22 Nov (QC) — batas 2 MB membuat gambar HD sering dikompres keras
+    // (PNG → WebP kualitas rendah, resolusi turun) sehingga tampak pecah.
+    // Kini sampai 6 MB diunggah apa adanya (format & resolusi asli).
+    const TEMPLATE_IMAGE_LIMIT = 6 * 1024 * 1024;
+    file = await shrinkImageToLimit(file, TEMPLATE_IMAGE_LIMIT, 2560);
+    if (file.size > TEMPLATE_IMAGE_LIMIT) {
+      flash(`${label} maksimal 6 MB.`);
       return;
     }
     try {
@@ -31133,22 +31137,32 @@ async function shrinkImageToLimit(
     const bitmap = await createImageBitmap(file);
     const keepAlpha = file.type === "image/png" || file.type === "image/webp";
     const outType = keepAlpha ? "image/webp" : "image/jpeg";
+    // 22 Nov (QC) — gambar dulu cepat "pecah": kualitas turun sampai 0,55
+    // sekaligus resolusi dikecilkan di setiap percobaan. Kini kualitas tinggi
+    // (0,92 → 0,78) dicoba dulu pada resolusi penuh; resolusi baru diturunkan
+    // bila memang tetap terlalu besar.
     let side = maxSide;
-    for (let attempt = 0; attempt < 6; attempt++) {
+    for (let round = 0; round < 4; round++) {
       const scale = Math.min(1, side / Math.max(bitmap.width, bitmap.height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(bitmap.width * scale));
       canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-      canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      const quality = Math.max(0.55, 0.86 - attempt * 0.08);
-      const blob = await new Promise<Blob | null>((resolve) =>
-        canvas.toBlob(resolve, outType, quality),
-      );
-      if (blob && blob.size <= maxBytes) {
-        const name = file.name.replace(/\.[^.]+$/, "") + (keepAlpha ? ".webp" : ".jpg");
-        return new File([blob], name, { type: outType });
+      const context = canvas.getContext("2d");
+      if (context) {
+        context.imageSmoothingEnabled = true;
+        context.imageSmoothingQuality = "high";
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
       }
-      side = Math.round(side * 0.8);
+      for (const quality of [0.92, 0.85, 0.78]) {
+        const blob = await new Promise<Blob | null>((resolve) =>
+          canvas.toBlob(resolve, outType, quality),
+        );
+        if (blob && blob.size <= maxBytes) {
+          const name = file.name.replace(/\.[^.]+$/, "") + (keepAlpha ? ".webp" : ".jpg");
+          return new File([blob], name, { type: outType });
+        }
+      }
+      side = Math.round(side * 0.85);
     }
   } catch {
     /* format tidak bisa dibaca browser: biarkan validasi lama menolak */
@@ -35734,7 +35748,7 @@ function TemplateApprovalManager({
                   setUploadKind("sample");
                   fileRef.current?.click();
                 }}
-                title="Visual besar pada heading halaman detail template. Rasio lanskap 16:9, rekomendasi 1920 x 1080 px, maksimal 2 MB."
+                title="Visual besar pada heading halaman detail template. Rasio lanskap 16:9, rekomendasi 1920 x 1080 px, maksimal 6 MB (lebih besar dikompres otomatis)."
               >
                 <Upload size={14} /> Gambar sample
               </button>
@@ -35746,7 +35760,7 @@ function TemplateApprovalManager({
                   setUploadKind("thumbnail");
                   fileRef.current?.click();
                 }}
-                title="Cover kartu template pada halaman /template. Rasio potret 4:5, rekomendasi 800 x 1000 px, maksimal 2 MB."
+                title="Cover kartu template pada halaman /template. Rasio potret 4:5, rekomendasi 800 x 1000 px, maksimal 6 MB (lebih besar dikompres otomatis)."
               >
                 <ImageIcon size={14} /> Thumbnail
               </button>
@@ -35855,7 +35869,7 @@ function TemplateApprovalManager({
               <span>
                 <strong>Gambar sample</strong> lanskap 16:9 — 1920 x 1080 px ·{" "}
                 <strong>Thumbnail</strong> potret 4:5 — 800 x 1000 px · JPG/PNG,
-                maksimal 2 MB
+                maksimal 6 MB (format & resolusi asli dipertahankan)
               </span>
             </p>
           </article>

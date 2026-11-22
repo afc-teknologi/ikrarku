@@ -2984,3 +2984,7 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
 .template-price-form{flex-wrap:wrap!important;row-gap:6px}
 .template-price-form>input{flex:1 1 110px;min-width:0}
 .template-price-form>.template-free-toggle{flex:1 1 100%;font-size:11px}
+/* 22 Nov (QC) — semua keterangan di kanan judul grup editor (mis.
+   "Eyebrow · Label · Nama", "Editable", "Viewer interaction") memakai gaya
+   chip kecil yang sama dengan "Enter = baris baru". */
+.group-heading>span,.group-heading>small{font-size:10.5px!important;font-weight:600!important;line-height:1!important;padding:4px 8px;border-radius:999px;background:#eef4f1;color:#4b675d!important;white-space:nowrap;letter-spacing:0!important;font-family:inherit}
