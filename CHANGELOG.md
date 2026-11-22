@@ -1,3 +1,8 @@
+## 0.21.1 — 22 November 2026 (QC)
+
+- Editor: semua keterangan di kanan judul grup ("Eyebrow · Label · Nama", "Editable", "Viewer interaction", dll.) memakai gaya chip kecil yang sama dengan "Enter = baris baru".
+- Thumbnail & Gambar sample template tidak lagi "pecah": dulu file di atas 2 MB dikompres keras di browser (PNG diubah ke WebP lossy kualitas sampai 0,55 dan resolusinya diturunkan). Kini sampai 6 MB diunggah apa adanya (format & resolusi asli); di atas 6 MB baru dikompres dengan kualitas tinggi (0,92 → 0,78) pada resolusi penuh dulu, maksimal sisi 2560 px. Kompresi gambar lain (background, galeri, ornamen) ikut memakai urutan kualitas baru ini.
+
 ## 0.21.0 — 22 November 2026 (QC WhatsApp)
 
 - **Template gratis (Rp0).** Admin → Templates & Approval → Ubah harga → centang "Gratis (tanpa pembayaran)". Customer memesan seperti biasa; di langkah 2 cukup klik **Aktifkan Template Gratis** — order langsung aktif (status Paid, metode FREE), CS & Web Designer dialokasikan, tanpa payment gateway. Harga 0 tanpa centang tetap berarti "belum ditetapkan". Katalog & ringkasan menampilkan "Gratis".
