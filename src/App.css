@@ -1245,7 +1245,8 @@ label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8p
    Manage Canvas — pemilih order customer (item 3 & 9)
    ------------------------------------------------------------------ */
 .manage-canvas-picker{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
-.manage-canvas-picker label{display:flex;flex-direction:column;gap:5px;min-width:260px;flex:1}
+.manage-canvas-picker label{display:flex;flex-direction:column;gap:5px;min-width:260px;flex:0 1 420px;max-width:420px}
+.manage-canvas-picker select{width:100%}
 .manage-canvas-legend{font-size:8px;letter-spacing:.4px;color:#5c6f68;font-weight:600}
 .manage-canvas-picker select{height:38px;border:1px solid rgba(22,77,62,.2);border-radius:9px;padding:0 10px;background:#fff;font-size:9px;color:#23453c;max-width:420px}
 .manage-canvas-picker select:disabled{background:#f2f5f3;color:#9aa8a2}
@@ -2223,7 +2224,7 @@ body:has(.dialog-overlay) .chat-widget.open .chat-launcher{width:50px}
 .canvas-section.pad-x-0 .canvas-columns{column-gap:0}
 .canvas-section.pad-y-0 .canvas-column{min-height:0}
 /* TC-262 — fitur ditempel atas-bawah tanpa jarak. */
-.canvas-section.stack-features .canvas-column>.feature-block{margin-top:0!important;margin-bottom:0!important}
+.canvas-section.stack-features .canvas-column>.feature-block:not(.stack-detach){margin-top:0!important;margin-bottom:0!important}
 /* TC-260 — ubah nama template dari editor. */
 .doc-title-row{display:flex;align-items:center;gap:6px}
 .doc-rename-btn{border:1px solid var(--line);background:#fff;border-radius:6px;width:22px;height:22px;display:grid;place-items:center;color:#285e4f;padding:0}
@@ -2988,3 +2989,226 @@ input.color-hex-input:focus{outline:2px solid #cfe3da;border-color:#8fb8a6!impor
    "Eyebrow · Label · Nama", "Editable", "Viewer interaction") memakai gaya
    chip kecil yang sama dengan "Enter = baris baru". */
 .group-heading>span,.group-heading>small{font-size:10.5px!important;font-weight:600!important;line-height:1!important;padding:4px 8px;border-radius:999px;background:#eef4f1;color:#4b675d!important;white-space:nowrap;letter-spacing:0!important;font-family:inherit}
+.required-mark{color:#b4412f;font-style:normal;margin-left:2px}
+/* QA16 TC-373 — toast error terlihat jelas */
+.toast.toast-error{background:#7a2318;border-color:rgba(255,220,210,.35);max-width:min(420px,calc(100vw - 32px));line-height:1.45}
+/* QA16 TC-395/402/403 — dashboard staff di mobile & tombol Live Chat */
+.main-content .page{padding-bottom:110px}
+@media(max-width:720px){
+  .main-content .page{padding:22px 16px 110px}
+  .page-heading{flex-direction:column;align-items:stretch;gap:14px}
+  .page-heading h1{font-size:28px;word-break:normal;overflow-wrap:anywhere}
+  .page-heading .heading-actions,.page-heading>div:last-child:not(:first-child){display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-start}
+  .page-heading .manage-canvas-picker label{min-width:0;flex:1 1 100%;max-width:none}
+  .task-board{grid-template-columns:1fr!important}
+  .task-board article{min-width:0}
+  .task-filter{flex-wrap:wrap}
+  .filter-tabs{overflow-x:auto;max-width:100%}
+  .chat-launcher{width:48px;height:48px;padding:0!important;justify-content:center;border-radius:50%}
+  .chat-launcher span{display:none}
+  .chat-widget{right:14px;bottom:14px}
+  .chat-window{width:calc(100vw - 28px);max-width:345px}
+  .main-content{overflow-x:hidden}
+}
+/* QA16 TC-400/401 — Komisi Saya */
+.commission-row.ledger{grid-template-columns:minmax(84px,.9fr) 1.3fr 1fr .9fr .6fr .9fr minmax(120px,1.25fr)}
+.commission-row.ledger.with-creator{grid-template-columns:minmax(84px,.85fr) 1.2fr 1fr 1fr .9fr .6fr .85fr minmax(120px,1.2fr)}
+.commission-row.head>span{white-space:normal;overflow:visible;text-overflow:clip}
+.commission-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.commission-tools select{height:38px;border:1px solid var(--line);border-radius:9px;padding:0 10px;font-size:11px;background:#fff}
+.commission-withdraw{margin-bottom:18px}
+.commission-note{margin:10px 0;padding:9px 12px;border-radius:9px;background:#f2f7f4;color:#23574a;font-size:11px}
+.payout-account{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px;padding:14px;border:1px solid #e3e8e5;border-radius:12px;background:#fff}
+.payout-account>div{flex:1;min-width:200px;display:flex;flex-direction:column;gap:3px}
+.payout-account small{font-size:9px;color:#6f817b;text-transform:uppercase;letter-spacing:1px}
+.payout-form{display:flex;flex-wrap:wrap;gap:8px;width:100%}
+.payout-form input{flex:1 1 160px;height:38px;border:1px solid var(--line);border-radius:9px;padding:0 10px;font-size:11px}
+.withdraw-list{margin-top:12px;border:1px solid #e3e8e5;border-radius:12px;overflow:hidden;background:#fff}
+.withdraw-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-bottom:1px solid #eef2f0;font-size:10px}
+.withdraw-row:last-child{border-bottom:0}
+.withdraw-actions{display:flex;gap:6px;margin-left:auto}
+@media(max-width:1100px){.commission-row.ledger,.commission-row.ledger.with-creator{grid-template-columns:1fr 1fr}}
+/* QA16 TC-403/404 — Support Inbox */
+.conversation>div:nth-child(2){min-width:0}
+.conversation>small{flex:0 0 auto;align-self:flex-start;padding:3px 7px;border-radius:999px;background:#eef3f0;font-size:7px;white-space:nowrap}
+.conversation>div:nth-child(2) span{max-width:100%}
+.customer-profile{padding-bottom:90px;overflow:auto}
+.cs-layout .customer-profile label strong{overflow-wrap:anywhere}
+.cs-chat>form>div{align-items:center;flex-wrap:wrap}
+.cs-chat>form>div>span{flex:1;min-width:160px;font-size:9px;color:#82908a}
+.attach-btn{padding:8px 11px!important;font-size:11px!important}
+.reply-attachment{display:flex;align-items:center;gap:7px;margin-top:6px;padding:6px 9px;border-radius:8px;background:#f2f7f4;font-size:10px}
+.reply-attachment.error{background:#fbeeec;color:#8c2f24}
+.reply-attachment a{color:#155946;text-decoration:underline;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.reply-attachment button{border:0;background:none;display:grid;place-items:center;color:#5c6d67}
+.chat-text a{color:inherit;text-decoration:underline;word-break:break-all}
+@media(max-width:900px){
+  .cs-layout{grid-template-columns:1fr!important;height:auto!important}
+  .cs-layout .conversation-list{max-height:320px;border-right:0;border-bottom:1px solid var(--line)}
+  .cs-layout .cs-chat{min-height:420px}
+  .cs-layout .customer-profile{border-left:0;border-top:1px solid var(--line)}
+  .cs-filter-bar{overflow-x:auto;flex-wrap:nowrap}
+}
+.journey-content aside li.excluded{color:#9aa6a1;text-decoration:line-through;text-decoration-color:rgba(0,0,0,.18)}
+
+/* QA16 TC-365/366 */
+.nudge-buttons{display:flex;gap:6px;flex-wrap:wrap;margin:-2px 0 8px}
+.nudge-buttons button{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 9px;font-size:10px}
+.check-row{display:flex!important;flex-direction:row!important;align-items:center;gap:7px;font-size:10px}
+/* QA16 TC-365 — "Tempel antar fitur" dulu mengalahkan posisi Tengah/Bawah
+   (margin auto) sehingga fitur terasa terkunci. */
+.canvas-section.stack-features .canvas-column>.feature-block.place-center{margin-top:auto!important;margin-bottom:auto!important}
+.canvas-section.stack-features .canvas-column>.feature-block.place-bottom{margin-top:auto!important}
+.canvas-section.stack-features .canvas-column>.feature-block[style*="top:"]{z-index:2}
+/* Page Structure: label "Column 1" kembali kecil (span ke-3 setelah grip). */
+.column-node>span:not(.column-number){font-size:9px;font-weight:600;flex:1}
+.column-node>.column-number{flex:0 0 18px}
+/* QA16 TC-372 — inspector kanan tidak boleh melebar: grid 2 kolom & input
+   warna menyusut, sisa kontrol turun ke baris berikutnya. */
+.editor-right .inspector-scroll{overflow-x:hidden}
+.editor-right :is(.two-cols,.two-inputs)>*{min-width:0}
+.editor-right label{min-width:0}
+.editor-right .color-input{min-width:0;max-width:100%;flex-wrap:wrap}
+.editor-right .color-recent-wrap{min-width:0;flex-wrap:wrap}
+.editor-right select,.editor-right input:not([type=checkbox]):not([type=radio]):not([type=color]){max-width:100%}
+/* QA16 TC-375 — bingkai Pintu/Arch proporsional di lebar berapa pun:
+   rasio 3:4 sehingga lengkung atas selalu setengah lingkaran. */
+.feature-block.frame-arch .image-feature img,.feature-block.frame-arch-full .image-feature img{aspect-ratio:3/4;height:auto!important;object-fit:cover;width:100%}
+.feature-block.frame-arch :is(.image-feature,[class*="gallery"]) img{border-radius:50% 50% 0 0 / 37.5% 37.5% 0 0!important}
+.feature-block.frame-arch-full :is(.image-feature,[class*="gallery"]) img{border-radius:50% / 37.5%!important}
+.feature-block.frame-oval .image-feature img{aspect-ratio:3/4;height:auto!important;object-fit:cover}
+/* QA16 TC-377 — ornamen bisa di-drag/resize di editor; seleksi teks biru
+   tidak ikut tersapu saat menggeser slider inspector atau ornamen. */
+.section-decoration.deco-editable{pointer-events:auto;cursor:move}
+.section-decoration.deco-editable:hover{outline:1px dashed rgba(29,107,85,.7);outline-offset:2px}
+.section-decoration .deco-resize-handle{display:none;position:absolute;right:-5px;bottom:-5px;width:12px;height:12px;border-radius:3px;background:#1d6b55;border:2px solid #fff;cursor:nwse-resize;box-shadow:0 1px 4px rgba(0,0,0,.3)}
+.section-decoration.deco-editable:hover .deco-resize-handle{display:block}
+body.deco-dragging,body.deco-dragging *,body.slider-dragging .canvas-frame,body.slider-dragging .canvas-frame *{user-select:none!important;-webkit-user-select:none!important}
+.editor-shell .canvas-frame ::selection{background:transparent}
+.editor-shell .canvas-frame [contenteditable="true"]::selection,.editor-shell .canvas-frame [contenteditable="true"] ::selection,.editor-shell .canvas-frame input::selection,.editor-shell .canvas-frame textarea::selection{background:rgba(41,132,103,.28)}
+/* QA16 TC-382/390/391/392 — sisi visual 70%: posisi & ukuran teks ikut area */
+.desktop-side-area{container-type:size}
+.desktop-side-area>.desktop-side-text{position:absolute!important;transform:translate(-50%,-50%);max-width:86%;width:max-content}
+.desktop-side-extra{position:absolute;z-index:2;transform:translate(-50%,-50%);max-width:86%;text-align:center;white-space:pre-wrap;line-height:1.2;color:#fff}
+.desktop-side-text.on-media~.desktop-side-extra{text-shadow:0 2px 18px rgba(0,0,0,.45)}
+.text-style-toggles{display:flex;align-items:center;gap:5px;margin:2px 0 6px}
+.text-style-toggles>span{font-size:9px;color:#5d6d67;margin-right:auto}
+.text-style-toggles button{width:30px;height:28px;border:1px solid var(--line);background:#fff;border-radius:7px;display:grid;place-items:center;color:#5e6d67}
+.text-style-toggles button.active{background:#e5f0eb;border-color:#8db5a6;color:#125946}
+/* QA16 TC-369 — italic & underline header terpisah dari teks */
+.feature-block :is([class*="editable-title"],.greetings-heading strong,.love-story-item strong,.location-feature h3,.countdown-feature h3,.cover-feature-editor h1,.cover-content h1,.canvas-form>h3){font-style:var(--title-style,inherit);text-decoration:var(--title-decoration,none)}
+.feature-block :is([class*="editable-body"],.extra-text,.canvas-form>p,.quote-feature p,.text-feature p){text-decoration:var(--body-decoration,none)}
+.layer-head-actions{display:flex;gap:4px}
+/* QA16 TC-371 — loop tambahan */
+@keyframes loopKenburns{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes loopSpin{to{transform:rotate(360deg)}}
+@keyframes loopBounce{0%,100%{transform:translateY(0)}30%{transform:translateY(-14px)}50%{transform:translateY(0)}65%{transform:translateY(-6px)}80%{transform:translateY(0)}}
+@keyframes loopSwing{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}
+@keyframes loopGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(255,236,190,0))}50%{filter:drop-shadow(0 0 14px rgba(255,236,190,.85))}}
+@keyframes loopHeartbeat{0%,40%,100%{transform:scale(1)}10%,30%{transform:scale(1.06)}20%{transform:scale(.98)}}
+:is(.loop-kenburns,.feature-block.revealed.loop-kenburns){animation:loopKenburns var(--loop-speed,12s) ease-in-out infinite}
+:is(.loop-spin,.feature-block.revealed.loop-spin){animation:loopSpin var(--loop-speed,20s) linear infinite}
+:is(.loop-bounce,.feature-block.revealed.loop-bounce){animation:loopBounce var(--loop-speed,3s) ease-in-out infinite}
+:is(.loop-swing,.feature-block.revealed.loop-swing){animation:loopSwing var(--loop-speed,5s) ease-in-out infinite;transform-origin:50% 0}
+:is(.loop-glow,.feature-block.revealed.loop-glow){animation:loopGlow var(--loop-speed,4s) ease-in-out infinite}
+:is(.loop-heartbeat,.feature-block.revealed.loop-heartbeat){animation:loopHeartbeat var(--loop-speed,2.4s) ease-in-out infinite}
+.feature-block.await-reveal:is(.loop-kenburns,.loop-spin,.loop-bounce,.loop-swing,.loop-glow,.loop-heartbeat){animation:none}
+@keyframes layerLoopKenburns{0%,100%{transform:scale(var(--layer-scale,1))}50%{transform:scale(calc(var(--layer-scale,1)*1.08))}}
+.background-extra-layer.loop-kenburns{animation:layerLoopKenburns var(--loop-speed,12s) ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){:is(.loop-kenburns,.loop-spin,.loop-bounce,.loop-swing,.loop-glow,.loop-heartbeat){animation:none!important}}
+/* QA16 TC-371 — animasi masuk canvas */
+@keyframes secFade{from{opacity:0}to{opacity:1}}
+@keyframes secFadeUp{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:none}}
+@keyframes secFadeDown{from{opacity:0;transform:translateY(-48px)}to{opacity:1;transform:none}}
+@keyframes secSlideLeft{from{opacity:0;transform:translateX(80px)}to{opacity:1;transform:none}}
+@keyframes secSlideRight{from{opacity:0;transform:translateX(-80px)}to{opacity:1;transform:none}}
+@keyframes secZoomIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+@keyframes secZoomOut{from{opacity:0;transform:scale(1.1)}to{opacity:1;transform:none}}
+@keyframes secBlurIn{from{opacity:0;filter:blur(14px)}to{opacity:1;filter:none}}
+@keyframes secFlipUp{from{opacity:0;transform:perspective(900px) rotateX(18deg) translateY(30px)}to{opacity:1;transform:none}}
+@keyframes secCurtain{from{clip-path:inset(0 50% 0 50%)}to{clip-path:inset(0 0 0 0)}}
+.canvas-section.sec-in.sec-await:not(.sec-revealed){opacity:0}
+.canvas-section.sec-in:is(.sec-revealed,.sec-replay){animation-duration:var(--sec-dur,900ms);animation-delay:var(--sec-delay,0ms);animation-timing-function:var(--sec-ease,ease-out);animation-fill-mode:both}
+.canvas-section.sec-in-fade:is(.sec-revealed,.sec-replay){animation-name:secFade}
+.canvas-section.sec-in-fade-up:is(.sec-revealed,.sec-replay){animation-name:secFadeUp}
+.canvas-section.sec-in-fade-down:is(.sec-revealed,.sec-replay){animation-name:secFadeDown}
+.canvas-section.sec-in-slide-left:is(.sec-revealed,.sec-replay){animation-name:secSlideLeft}
+.canvas-section.sec-in-slide-right:is(.sec-revealed,.sec-replay){animation-name:secSlideRight}
+.canvas-section.sec-in-zoom-in:is(.sec-revealed,.sec-replay){animation-name:secZoomIn}
+.canvas-section.sec-in-zoom-out:is(.sec-revealed,.sec-replay){animation-name:secZoomOut}
+.canvas-section.sec-in-blur-in:is(.sec-revealed,.sec-replay){animation-name:secBlurIn}
+.canvas-section.sec-in-flip-up:is(.sec-revealed,.sec-replay){animation-name:secFlipUp}
+.canvas-section.sec-in-curtain:is(.sec-revealed,.sec-replay){animation-name:secCurtain}
+@media (prefers-reduced-motion:reduce){.canvas-section.sec-in{animation:none!important;opacity:1!important}}
+/* QA16 TC-374 — slot background Desktop 16:9 & Mobile 9:16 */
+.bg-device-slots{display:grid;grid-template-columns:1.6fr 1fr;gap:10px;margin:-4px 0 12px;align-items:end}
+.bg-device-slot{display:flex;flex-direction:column;gap:2px;min-width:0}
+.bg-device-thumb{border:1px dashed #9ab6aa;border-radius:8px;background:#f7faf8 center/cover no-repeat;display:grid;place-items:center;color:#315e51;width:100%}
+.slot-desktop .bg-device-thumb{aspect-ratio:16/9}
+.slot-mobile .bg-device-thumb{aspect-ratio:9/16;max-height:150px}
+.bg-device-slot strong{font-size:9px}
+.bg-device-slot small{font-size:8px;color:#83918b}
+.bg-device-state{font-style:italic}
+.bg-device-clear{border:0;background:none;color:#9e554f;font-size:8px;display:flex;align-items:center;gap:4px;padding:2px 0}
+/* QA16 TC-379 — navbar undangan & kolom per canvas */
+.wedding-site>nav.site-nav a{color:var(--site-nav-color,#567067);cursor:pointer}
+.wedding-site>nav.site-nav.nav-transparent{background:transparent!important;border-bottom:0;position:absolute;left:0;right:0;top:0}
+@container (min-width:900px){.canvas-section.sec-desktop-column>.canvas-columns{width:min(var(--sec-col-w,480px),88%)}}
+@media (min-width:900px){.canvas-frame.desktop .canvas-section.sec-desktop-column>.canvas-columns,.wedding-site:not(.device-mobile) .canvas-section.sec-desktop-column>.canvas-columns{width:min(var(--sec-col-w,480px),88%)}}
+/* QA16 TC-380 */
+.column-connector{position:absolute;top:50%;transform:translate(-50%,-50%);z-index:6;font-family:'Great Vibes','Playfair Display',serif;color:#c9a45c;line-height:1;pointer-events:none;text-shadow:0 2px 10px rgba(0,0,0,.12)}
+.event-item-icon{display:block;margin:0 auto 8px;object-fit:contain}
+.event-icon-upload{display:flex;align-items:center;gap:8px;margin:-4px 0 10px}
+.event-icon-upload img,.event-icon-placeholder{width:30px;height:30px;border-radius:7px;object-fit:contain;background:#f3f6f4;display:grid;place-items:center;color:#83918b}
+.event-icon-btn{padding:7px 10px!important;font-size:10px!important;cursor:pointer;flex-direction:row!important;margin:0!important}
+.event-icon-upload>button{border:0;background:none;color:#9e554f}
+/* QA16 TC-384 — rotasi foto Image & Gallery */
+.feature-block[style*="--media-rotate"] :is(.image-feature,[class*="gallery"]) img{rotate:var(--media-rotate)}
+/* QA16 TC-398 — ikon RSVP tidak menimpa header */
+.system-page-heading>svg{display:block;margin:0 auto 10px}
+.system-page-heading small{display:block}
+.rsvp-system-page textarea{border:1px solid rgba(22,77,62,.2);border-radius:7px;padding:8px 10px;font:inherit;font-size:11px}
+/* QA16 TC-399 — editor di layar sempit: laci Page Structure / Inspector */
+.editor-mobile-toggle{display:none!important}
+@media (max-width:900px){
+  .editor-shell{min-width:0!important}
+  .editor-mobile-toggle{display:grid!important}
+  .editor-topbar{overflow-x:auto;gap:8px}
+  .editor-body{grid-template-columns:minmax(0,1fr)!important;position:relative}
+  .editor-left,.editor-right{position:fixed;top:70px;bottom:0;z-index:80;width:min(330px,88vw);box-shadow:0 20px 60px rgba(7,24,19,.28);transition:transform .22s ease}
+  .editor-left{left:0;transform:translateX(-105%)}
+  .editor-right{right:0;transform:translateX(105%)}
+  .editor-shell.mobile-panel-structure .editor-left{transform:none}
+  .editor-shell.mobile-panel-inspector .editor-right{transform:none}
+  .canvas-workspace{min-width:0}
+  .canvas-frame.desktop{width:calc(100% - 16px)}
+}
+body:has(.cs-layout) .chat-widget{display:none}
+.account-settings-dialog label{font-size:10px;font-weight:600;color:#52635d}
+@media (max-width:900px){
+  .editor-topbar{justify-content:flex-start;padding:0 10px}
+  .editor-topbar>*{flex:0 0 auto}
+  .editor-topbar .brand,.editor-topbar .doc-name,.editor-topbar .autosave-indicator{display:none!important}
+  .editor-top-left{gap:6px}
+}
+.canvas-frame select,.canvas-frame input{max-width:100%}
+/* Ornamen bisa di-drag saat canvas-nya dipilih (bukan fitur/kolom): ornamen
+   naik di atas isi agar bisa diraih. */
+.canvas-section.deco-edit .section-decoration.deco-editable{z-index:7}
+.canvas-section:not(.deco-edit) .section-decoration.deco-editable{pointer-events:none}
+/* QA16 — rapikan form harga/paket & panel navbar */
+.template-price-form>.template-free-toggle{display:flex;align-items:center;gap:6px;font-size:10px!important;font-weight:600;color:#2f4b42}
+.template-price-form>.template-free-toggle input{width:auto;flex:0 0 auto}
+.template-price-form>select{flex:1 1 100%;height:28px;border:1px solid #cfdad5;border-radius:6px;padding:0 6px;font-size:9.5px;background:#fff}
+.desktop-layout-panel .desktop-side-style label{font-size:9px;font-weight:600;color:#52635d;display:flex;flex-direction:column;gap:5px}
+.desktop-layout-panel .desktop-side-style input:not([type=checkbox]){border:1px solid var(--line);border-radius:7px;padding:7px 8px;font-size:10px}
+.desktop-layout-panel .desktop-side-style .check-row{flex-direction:row!important;align-items:center}
+.desktop-layout-panel .segmented-control{flex-wrap:wrap}
+.desktop-layout-panel .two-inputs>label{min-width:0}
+/* QA16 TC-380 — saat kolom bertumpuk (mobile / kolom ala serein), simbol
+   penghubung tampil di antara kolom 1 dan 2, bukan menimpa teks. */
+:is(.canvas-frame.mobile,.preview-full-stage.mobile,.template-dialog-actual-preview.live.device-mobile,.wedding-site.is-mobile) .canvas-columns.columns-2>.column-connector{position:static;transform:none;display:block;text-align:center;order:1;margin:-4px 0}
+:is(.canvas-frame.mobile,.preview-full-stage.mobile,.template-dialog-actual-preview.live.device-mobile,.wedding-site.is-mobile) .canvas-columns.columns-2>.canvas-column:last-of-type{order:2}
+@media (max-width:700px){.canvas-columns.columns-2>.column-connector{position:static;transform:none;display:block;text-align:center;order:1;margin:-4px 0}.canvas-columns.columns-2>.canvas-column:last-of-type{order:2}}
+@container (max-width:560px){.canvas-columns.columns-2>.column-connector{position:static;transform:none;display:block;text-align:center;order:1;margin:-4px 0}.canvas-columns.columns-2>.canvas-column:last-of-type{order:2}}
+.free-position-controls button:not(.toggle){border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 10px;font-size:10px;color:#315e51}

@@ -937,7 +937,7 @@ test("MoM A7/A6/A9: UI harga admin, buat akun customer, banner tim membantu", ()
   assert.match(appTsx, /useState\(canSetPrice \? 499000 : 0\)/);
   assert.match(appTsx, /<input value="Ditetapkan Administrator" disabled readOnly \/>/);
   assert.match(appTsx, /<TemplatePriceControl\n\s*price=\{template\.price \|\| 0\}/);
-  assert.match(apiTs, /setTemplatePrice: \(\s*id: string,\s*price: number,?(\s*originalPrice\?: number,?)?(\s*isFree\?: boolean,?)?\s*\) =>/);
+  assert.match(apiTs, /setTemplatePrice: \(\s*id: string,\s*price: number,?(\s*originalPrice\?: number,?)?(\s*isFree\?: boolean,?)?(\s*pkg\?: string,?)?\s*\) =>/);
   // A6 — tombol di Orders untuk order lunas tanpa akun.
   assert.match(appTsx, /row\.payment_status === "Paid" &&\n\s*!row\.user_id &&/);
   assert.match(apiTs, /createOrderCustomerAccount: \(id: string\) =>/);
@@ -973,7 +973,8 @@ test("QA 17 Okt TC-218/219: upload tidak macet; undo dari state terbaru, batas j
       `input file tanpa reset: ${block.slice(0, 80)}`,
     );
   assert.match(appTsx, /async function shrinkImageToLimit\(\s*file: File,\s*maxBytes: number/);
-  assert.match(appTsx, /if \(type === "image"\) file = await shrinkImageToLimit\(file, limit\);/);
+  // QA16 TC-373 — kompres lewat prepareImageUpload (pesan selalu tampil).
+  assert.match(appTsx, /const ready = await prepareImageUpload\(\s*file,\s*UPLOAD_LIMITS\.featureImage,/);
   // Undo: snapshot dari ref state terbaru, batas 30 dan jumlahnya tampil.
   assert.match(appTsx, /const HISTORY_LIMIT = 30;/);
   assert.match(appTsx, /const previous = sectionsRef\.current;/);
@@ -1227,7 +1228,7 @@ test("TC-256/268: padding, margin, dan transparansi dalam bingkai layer", () => 
 test("TC-257/258/262: padding 0 sampai pojok & tempel antar fitur", () => {
   assert.match(appTsx, /\(section\.paddingX \?\? 32\) === 0 \? " pad-x-0" : ""/);
   assert.match(appCss, /\.canvas-section\.pad-y-0 \.canvas-column>\.feature-block:not\(\.feature-block~\.feature-block\)\{margin-top:0!important\}/);
-  assert.match(appCss, /\.canvas-section\.stack-features \.canvas-column>\.feature-block\{margin-top:0!important;margin-bottom:0!important\}/);
+  assert.match(appCss, /\.canvas-section\.stack-features \.canvas-column>\.feature-block:not\(\.stack-detach\)\{margin-top:0!important;margin-bottom:0!important\}/);
 });
 test("TC-259: header kecil Save The Date bisa dihapus/custom", () => {
   assert.match(appTsx, /\{feature\.countdownEyebrow \?\? "SAVE THE DATE"\}/);
@@ -1649,4 +1650,57 @@ test("22 Nov QC: template gratis, lewati canvas setelah cover, footer, pesan upl
   assert.doesNotMatch(appTsx, /t\("Masuk ke dashboard", "Sign in to dashboard"\)/);
   assert.match(apiTs, /Upload file tidak selesai dalam 2 menit/);
   assert.match(appCss, /\.group-heading \.hint-chip\{/);
+});
+
+test("QA16 TC-365..407: editor, dashboard WD, keamanan, paket & notifikasi", () => {
+  // Editor
+  assert.match(appCss, /\.canvas-section\.stack-features \.canvas-column>\.feature-block\.place-center\{margin-top:auto!important/); // 365
+  assert.match(appTsx, /boxBorderStyle\?: "solid" \| "dashed" \| "dotted" \| "double";/); // 366
+  assert.match(appTsx, /title="Duplikat layer"/); // 367
+  assert.match(appTsx, /aria-label="Urutan layer"/); // 368
+  assert.match(appTsx, /titleItalic\?: boolean;\n\s*bodyItalic\?: boolean;/); // 369
+  assert.match(appTsx, /function SectionEntranceControls\(/); // 371
+  assert.match(appCss, /\.canvas-section\.sec-in\.sec-await:not\(\.sec-revealed\)\{opacity:0\}/);
+  assert.match(appCss, /\.editor-right \.inspector-scroll\{overflow-x:hidden\}/); // 372
+  assert.match(appTsx, /async function prepareImageUpload\(/); // 373
+  assert.match(appTsx, /function isErrorToast\(message: string\)/);
+  assert.match(appTsx, /const uploadBackgroundSlot = async \(/); // 374
+  assert.match(appTsx, /function effectiveFrameShape\(/); // 375
+  assert.match(appTsx, /if \(!enabled\) return fallback \|\| undefined;/); // 376
+  assert.match(appTsx, /function startDecorationDrag\(/); // 377
+  assert.match(appCss, /body\.slider-dragging \.canvas-frame/);
+  assert.match(appTsx, /`var\(--auto-text, \$\{defaultFeatureStyle\.textColor\}\)`/); // 378
+  assert.match(appTsx, /siteNavMode\?: "show" \| "hide" \| "transparent";/); // 379
+  assert.match(appTsx, /sectionDesktopLayout\?: "inherit" \| "column";/);
+  assert.match(appTsx, /className="column-connector"/); // 380
+  assert.match(appTsx, /className="event-item-icon"/);
+  assert.match(serverMjs, /return res\.json\(\{ incoming: 0, replies: 0, active: 0, resolved: 0 \}\);/); // 381
+  assert.match(appTsx, /const sideFont = \(px\?: number\) =>/); // 382
+  assert.match(appTsx, /mediaRotation\?: number;/); // 384
+  assert.match(landingCss, /QA16 TC-385/); // 385
+  assert.match(serverMjs, /whatsapp: "081322065391"/); // 386
+  assert.match(serverMjs, /!Number\(row\.is_free\) &&/); // 389
+  assert.match(appTsx, /desktopSideOverlayPosition\?: "center" \| "top" \| "bottom" \| "custom";/); // 390
+  assert.match(appTsx, /function DesktopSideExtrasEditor\(/); // 391
+  assert.match(appTsx, /desktopSideTitleItalic\?: boolean;/); // 392
+  // Dashboard / WD
+  assert.match(appTsx, /const orderCustomerIds = new Set\(/); // 393 / 396
+  assert.match(appTsx, /const TEMPLATE_CATEGORIES = \[/); // 394
+  assert.match(appCss, /\.task-board\{grid-template-columns:1fr!important\}/); // 395 / 402
+  assert.match(appTsx, /function SitePageInspector\(/); // 397 / 398
+  assert.match(appTsx, /maxPax\?: number;/);
+  assert.match(appTsx, /mobile-panel-\$\{mobilePanel\}/); // 399
+  assert.match(appCss, /\.commission-row\.head>span\{white-space:normal/); // 400
+  assert.match(serverMjs, /app\.post\("\/api\/commissions\/withdrawals", auth,/); // 401
+  assert.match(appTsx, /function LinkifiedText\(/); // 403 / 404
+  assert.match(serverMjs, /req\.body\?\.category === "chat-attachment"/);
+  assert.match(appTsx, /maksimal 2 MB; background fitur & gambar layer 4 MB|Batas setelah kompres/); // 405
+  assert.match(appTsx, /\["security", t\("Keamanan akun", "Account security"\)\]/); // 406
+  assert.match(appTsx, /Password saat ini \{sensitive && <em className="required-mark">\*<\/em>\}/); // 407
+  // Paket & notifikasi
+  assert.match(serverMjs, /const DESIGNER_PACKAGES = \["Premium", "Custom"\];/);
+  assert.match(serverMjs, /"Paid - Mandiri"/);
+  assert.match(serverMjs, /function notifyCustomerChat\(conversationId, body\)/);
+  assert.match(serverMjs, /process\.env\.OPS_NOTIFY_EMAIL \|\| "hello@afarcoteknologi\.com"/);
+  assert.match(serverMjs, /const SITE_BASIC_AUTH = String\(process\.env\.SITE_BASIC_AUTH/);
 });

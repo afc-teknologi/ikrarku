@@ -531,7 +531,14 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       150000,
     );
     // Kembalikan nominal fixture & bersihkan draft revisi uji ini.
-    await call("PATCH", `/templates/${template.id}/price`, { price: 100000 }, admin.token);
+    // TnC Paket v1.3 — fixture memakai paket Premium (didampingi Web
+    // Designer) supaya alur penugasan WD tetap teruji.
+    await call(
+      "PATCH",
+      `/templates/${template.id}/price`,
+      { price: 100000, package: "Premium" },
+      admin.token,
+    );
     await call("POST", `/templates/${template.id}/review`, { decision: "rejected" }, admin.token);
   });
   await t.test(

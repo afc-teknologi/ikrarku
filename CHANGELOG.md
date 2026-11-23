@@ -1,3 +1,45 @@
+## 0.22.0 — 23 November 2026 (QA 16 · TC-365–TC-407 · Paket v1.3)
+
+**Paket layanan (TnC Paket / Panduan Internal Tim v1.3)**
+- Paket per template: Free · Basic · Advanced (isi & edit mandiri, panduan CS lewat Live Chat) dan Premium · Custom (didampingi Web Designer). Admin memilih paket di Templates & Approval → "Ubah harga & paket". Template lama tanpa paket ditebak dari harga (≤ Rp79rb Basic, ≤ Rp150rb Advanced, lebih dari itu Premium).
+- Order Free/Basic/Advanced: tidak ada penugasan Web Designer (status "Paid - Mandiri"), CS tetap ditugaskan untuk panduan; halaman sukses, email receipt, tahapan di My Order dan rincian paket di halaman template mengikuti paket.
+- Notifikasi email operasional ke OPS_NOTIFY_EMAIL (bawaan hello@afarcoteknologi.com) + CS yang di-assign: order baru, order lunas, dan chat customer (maks. 1 email per percakapan per 15 menit).
+- Opsional: SITE_BASIC_AUTH=user:password mengunci seluruh situs (untuk dev.ikrarku.id) dengan login browser; webhook pembayaran tetap terbuka.
+- Kontak footer/invoice: WhatsApp 081322065391, hello@afarcoteknologi.com, @ikrarkuid sebagai bawaan bila .env kosong atau masih berisi contoh.
+
+**Canvas Editor**
+- TC-365 "Tempel antar fitur" tidak lagi mengunci posisi Tengah/Bawah; opsi "Lepas dari Tempel antar fitur" per fitur.
+- TC-366 Garis tepi kotak fitur: tebal, warna, gaya (penuh/putus-putus/titik/ganda), ikut border radius.
+- TC-367/368 Tambah Layer: tombol Duplikat dan urutan Paling depan/Maju/Mundur/Paling belakang.
+- TC-369 Italic & Underline terpisah untuk Header dan Teks.
+- TC-371 Animasi Masuk Canvas (10 efek, scroll-trigger atau saat dibuka, durasi, delay, easing, putar ulang) + 6 loop baru (Ken Burns, berputar, memantul, berayun, bercahaya, detak jantung).
+- TC-372 Inspector kanan tidak melebar (input warna & grid 2 kolom menyusut).
+- TC-373 Upload gambar: kompres otomatis dengan batas jelas (foto 2 MB, background fitur/layer 4 MB, background canvas 8 MB, file asli ≤ 25 MB) dan toast merah yang tidak hilang sebelum terbaca.
+- TC-374 Slot background terpisah Desktop 16:9 dan Mobile 9:16.
+- TC-375 Bentuk bingkai satu sumber untuk tab Content & Style; Pintu/Arch proporsional (3:4) di lebar 100%.
+- TC-376 Reset warna tidak pernah menghasilkan isi/gradien kosong.
+- TC-377 Ornamen bisa di-drag & di-resize langsung di canvas (pilih canvas-nya); seleksi teks biru tidak ikut tersapu saat menggeser slider.
+- TC-378 Teks tanpa warna pilihan otomatis terang di canvas gelap.
+- TC-379 Navbar undangan: tampil/transparan/sembunyikan, menu, warna, logo; tata letak desktop per canvas (Kolom).
+- TC-380 Ikon custom per acara (Event) dan simbol penghubung antar 2 kolom (&, ♥, +, ×, dan).
+- TC-382/390/391/392 Sisi visual 70%: ukuran & posisi teks ikut lebar area (sama di semua layar), posisi X/Y teks, posisi kustom layer 2, header/teks tambahan, italic/underline/bold.
+- TC-384 Rotasi foto Image & Gallery (kiri/kanan 90° + sudut halus).
+- TC-397/398 Site Pages: panel kanan mengikuti halaman; RSVP Confirmation bisa diatur (judul, field WhatsApp/pesan, batas jumlah tamu, tombol); ikon tidak menimpa judul.
+- TC-399 Editor di layar sempit: Page Structure & Inspector menjadi laci yang tertutup otomatis.
+
+**Dashboard, Web Designer, Admin**
+- TC-381 Web Designer tidak lagi mendapat 403 berulang dari /api/cs/metrics.
+- TC-385 Kartu katalog mobile rata kiri & sejajar; label paket.
+- TC-389 Admin bisa approve template gratis / Rp0.
+- TC-393/396 Kartu ringkasan, daftar "Customer saya" dan dropdown Canvas Editor memakai sumber yang sama (order yang ditugaskan); label Bahasa Indonesia; jarak dropdown–tombol Buka Canvas.
+- TC-394 Kategori "Romantic" di modal Create Template (satu daftar kategori).
+- TC-395/402/403 Mobile: tanpa scroll horizontal, kartu Tasks 1 kolom, header Support Inbox tidak bertabrakan, tombol Live Chat ringkas & disembunyikan di Support Inbox.
+- TC-400/401 Komisi Saya: kolom tidak terpotong, label tidak duplikat, filter status/bulan, ekspor CSV, rekening penerima (konfirmasi password) dan pengajuan penarikan yang diproses Admin.
+- TC-404 Lampiran gambar/PDF (≤ 10 MB) pada balasan Support Inbox; tautan di chat bisa diklik.
+- TC-405 Artikel bantuan batas upload diperbarui; istilah "Canvas Editor".
+- TC-406 Settings untuk staff hanya menampilkan Umum, Notifikasi, Keamanan akun.
+- TC-407 Field "Password saat ini" selalu tampil di Pengaturan Akun (wajib saat email/password berubah).
+
 ## 0.21.1 — 22 November 2026 (QC)
 
 - Editor: semua keterangan di kanan judul grup ("Eyebrow · Label · Nama", "Editable", "Viewer interaction", dll.) memakai gaya chip kecil yang sama dengan "Enter = baris baru".
