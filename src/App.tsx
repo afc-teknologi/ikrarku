@@ -30128,7 +30128,7 @@ function AdminDashboard({
           <div>
             <strong>Customer Service</strong>
             <span>
-              {metrics.incoming} inbound · {metrics.replies} replies
+              {metrics.incoming} pesan masuk · {metrics.replies} balasan
             </span>
           </div>
           <ArrowRight size={17} />
@@ -30549,9 +30549,9 @@ function CustomerServiceDashboard({
       <div className="cs-metric-grid">
         <button onClick={() => setView("customer-service")}>
           <MessageCircle size={20} />
-          <span>Incoming chats</span>
+          <span>Pesan masuk</span>
           <strong>{metrics.incoming}</strong>
-          <small>Pesan customer masuk</small>
+          <small>Total pesan customer di semua percakapan yang dapat diakses</small>
         </button>
         <button onClick={() => setView("customer-service")}>
           <Send size={20} />
@@ -30665,12 +30665,7 @@ function CustomerServiceDatabase({
     return queryOk && filterOk;
   });
   const selected =
-    conversations.find((item) => item.id === selectedId) ||
-    filtered[0] ||
-    conversations[0];
-  useEffect(() => {
-    if (!selectedId && conversations[0]) setSelectedId(conversations[0].id);
-  }, [conversations, selectedId]);
+    filtered.find((item) => item.id === selectedId) || filtered[0];
   useEffect(() => {
     if (!targetUserId && users[0]) setTargetUserId(users[0].id);
   }, [users, targetUserId]);
@@ -38306,6 +38301,7 @@ function UserEditModal({
     account.emailVerified !== false,
   );
   const wantsPassword = password.length > 0;
+  const loginBlocked = account.active === false || !emailVerified;
   const match = password === passwordConfirm;
   const submit = async () => {
     if (busy) return;
@@ -38394,6 +38390,12 @@ function UserEditModal({
             Isi hanya bila user lupa password. Semua sesi login user akan
             dicabut dan notifikasi dikirim ke emailnya.
           </p>
+          {wantsPassword && loginBlocked && (
+            <p role="status">
+              Password baru bisa disimpan. Untuk bisa login, akun harus aktif
+              dan emailnya harus terverifikasi.
+            </p>
+          )}
           <label>
             Password baru
             <div className="password-field">
