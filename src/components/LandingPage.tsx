@@ -755,7 +755,10 @@ export default function LandingPage({
                 </button>
                 <div className="ikr-template-info">
                   <div>
-                    <small>{t.category}</small>
+                    <small>
+                      {t.category}
+                      {t.package ? ` · ${t.package}` : ""}
+                    </small>
                     <h3>{t.name}</h3>
                   </div>
                   <span className="ikr-template-price">

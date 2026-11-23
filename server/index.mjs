@@ -338,6 +338,9 @@ function initDb() {
   // 22 Nov — template gratis (Rp0) yang memang disengaja, dibedakan dari
   // harga 0 = "belum ditetapkan" pada pengajuan Web Designer.
   ensureColumn("templates", "is_free", "INTEGER NOT NULL DEFAULT 0");
+  // TnC Paket v1.3 (23 Nov) — paket per template & order.
+  ensureColumn("templates", "package", "TEXT");
+  ensureColumn("orders", "package", "TEXT");
   ensureColumn("templates", "unpublished_at", "TEXT");
   // QA TC-151: penanda "Recommended" pada katalog desain. Dikurasi Administrator,
   // bukan bagian dari konten template, jadi tidak ikut alur approval.
@@ -407,6 +410,25 @@ function initDb() {
       paid_at TEXT
     )
   `);
+  // QA16 TC-401 — rekening penerima & pengajuan penarikan komisi.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS commission_withdrawals (
+      id TEXT PRIMARY KEY,
+      creator_id TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      commission_ids TEXT NOT NULL DEFAULT '[]',
+      bank_name TEXT,
+      account_no TEXT,
+      account_name TEXT,
+      status TEXT NOT NULL DEFAULT 'Requested',
+      note TEXT,
+      created_at TEXT NOT NULL,
+      processed_at TEXT
+    )
+  `);
+  ensureColumn("users", "payout_bank", "TEXT");
+  ensureColumn("users", "payout_account_no", "TEXT");
+  ensureColumn("users", "payout_account_name", "TEXT");
   try {
     db.exec(
       "CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_slug_unique ON sites(slug) WHERE slug <> ''",
@@ -705,6 +727,45 @@ const policy = createPolicies(db);
 const app = express();
 app.disable("x-powered-by");
 app.set("trust proxy", 1);
+// Amrul 23 Nov — dev.ikrarku.id tidak publik. Bila SITE_BASIC_AUTH diisi
+// (format user:password), seluruh situs minta login browser dulu (seperti
+// WordPress maintenance). Setelah lolos, cookie penanda dipasang supaya
+// request API (yang memakai header Bearer) tidak diminta ulang. Webhook
+// pembayaran & health check tetap terbuka. Production: biarkan kosong.
+const SITE_BASIC_AUTH = String(process.env.SITE_BASIC_AUTH || "").trim();
+if (SITE_BASIC_AUTH.includes(":")) {
+  const gateToken = crypto
+    .createHmac("sha256", SITE_BASIC_AUTH)
+    .update("ikrarku-site-gate")
+    .digest("hex")
+    .slice(0, 40);
+  const expected = Buffer.from(SITE_BASIC_AUTH);
+  app.use((req, res, next) => {
+    if (req.path.startsWith("/api/webhooks/") || req.path === "/api/health")
+      return next();
+    const cookies = String(req.headers.cookie || "");
+    if (cookies.split(/;\s*/).includes(`ikr_gate=${gateToken}`)) return next();
+    const header = String(req.headers.authorization || "");
+    if (header.startsWith("Basic ")) {
+      const given = Buffer.from(
+        Buffer.from(header.slice(6), "base64").toString("utf8"),
+      );
+      if (
+        given.length === expected.length &&
+        crypto.timingSafeEqual(given, expected)
+      ) {
+        res.setHeader(
+          "Set-Cookie",
+          `ikr_gate=${gateToken}; Path=/; Max-Age=${7 * 86400}; HttpOnly; SameSite=Lax${req.secure ? "; Secure" : ""}`,
+        );
+        return next();
+      }
+    }
+    res.setHeader("WWW-Authenticate", 'Basic realm="ikrarku staging", charset="UTF-8"');
+    res.setHeader("X-Robots-Tag", "noindex, nofollow");
+    return res.status(401).send("Akses dev.ikrarku.id memerlukan login.");
+  });
+}
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
 app.use(express.json({ limit: "25mb" }));
 app.use("/uploads", express.static(UPLOAD_DIR));
@@ -974,12 +1035,26 @@ app.get("/api/health", (_req, res) =>
 /** Kontak publik (footer landing, halaman FAQ/legal). Diisi lewat .env:
  *  CS_WHATSAPP, SUPPORT_EMAIL (fallback SMTP_REPLY_TO), SOCIAL_INSTAGRAM,
  *  SOCIAL_TIKTOK, SOCIAL_FACEBOOK. Kosong = tidak ditampilkan. */
+// QA16 TC-386 — kontak resmi bawaan bila .env kosong atau masih berisi
+// contoh (08xxxxxxxxxx). Nilai .env tetap diutamakan.
+const DEFAULT_CONTACT = {
+  whatsapp: "081322065391",
+  email: "hello@afarcoteknologi.com",
+  instagram: "ikrarkuid",
+};
 function publicContact() {
-  const clean = (value) => String(value || "").trim() || null;
+  const clean = (value) => {
+    const text = String(value || "").trim();
+    // Placeholder seperti 08xxxxxxxxxx atau ISI_... dianggap kosong.
+    if (!text || /x{3,}/i.test(text) || /^ISI_/i.test(text)) return null;
+    return text;
+  };
   return {
-    whatsapp: clean(process.env.CS_WHATSAPP),
-    email: clean(process.env.SUPPORT_EMAIL || process.env.SMTP_REPLY_TO),
-    instagram: clean(process.env.SOCIAL_INSTAGRAM),
+    whatsapp: clean(process.env.CS_WHATSAPP) || DEFAULT_CONTACT.whatsapp,
+    email:
+      clean(process.env.SUPPORT_EMAIL || process.env.SMTP_REPLY_TO) ||
+      DEFAULT_CONTACT.email,
+    instagram: clean(process.env.SOCIAL_INSTAGRAM) || DEFAULT_CONTACT.instagram,
     tiktok: clean(process.env.SOCIAL_TIKTOK),
     facebook: clean(process.env.SOCIAL_FACEBOOK),
   };
@@ -1112,6 +1187,7 @@ app.post(
       now(),
       conversation.id,
     );
+    notifyCustomerChat(conversation.id, body);
     res.status(201).json({
       conversationId: conversation.id,
       conversationToken: conversation.public_token,
@@ -1577,6 +1653,73 @@ function creatorLabel(userId) {
   return `${row.first_name || ""} ${row.last_name || ""}`.trim() || null;
 }
 const NEW_TEMPLATE_DAYS = Math.max(1, Number(process.env.NEW_TEMPLATE_DAYS || 14));
+// ---------------------------------------------------------------------------
+// Paket layanan (TnC Paket / Panduan Internal Tim v1.3, 23 Nov 2026)
+// Free · Basic · Advanced → isi & edit mandiri, panduan CS lewat Live Chat.
+// Premium · Custom → didampingi Web Designer (1x input awal + 3x penyesuaian
+// untuk Premium; Custom sesuai penawaran).
+// ---------------------------------------------------------------------------
+const PACKAGES = ["Free", "Basic", "Advanced", "Premium", "Custom"];
+const DESIGNER_PACKAGES = ["Premium", "Custom"];
+function templatePackage(row) {
+  if (row?.package && PACKAGES.includes(row.package)) return row.package;
+  const price = Number(row?.price || 0);
+  if (Number(row?.is_free) || price <= 0) return "Free";
+  // Template lama tanpa paket: tebakan dari harga acuan katalog.
+  if (price <= 79_000) return "Basic";
+  if (price <= 150_000) return "Advanced";
+  return "Premium";
+}
+const packageHasDesigner = (pkg) => DESIGNER_PACKAGES.includes(pkg);
+
+// Notifikasi operasional (Amrul, 23 Nov): setiap order & chat customer
+// dikirim ke OPS_NOTIFY_EMAIL (bawaan hello@afarcoteknologi.com) dan ke CS
+// yang di-assign bila ada.
+function opsNotifyEmails() {
+  return String(process.env.OPS_NOTIFY_EMAIL || "hello@afarcoteknologi.com")
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(item));
+}
+function notifyOpsEmail(subject, html, extra = []) {
+  const targets = new Set([
+    ...opsNotifyEmails(),
+    ...extra.filter(Boolean).map((item) => String(item).toLowerCase()),
+  ]);
+  targets.forEach((target) => {
+    try {
+      queueEmail(target, subject, html);
+    } catch (error) {
+      console.error("[ops-email]", error.message);
+    }
+  });
+}
+// Satu email per percakapan per 15 menit, supaya chat beruntun tidak
+// membanjiri inbox.
+const CHAT_EMAIL_THROTTLE_MS = 15 * 60_000;
+const lastChatEmailAt = new Map();
+function notifyCustomerChat(conversationId, body) {
+  try {
+    const conv = db
+      .prepare(
+        "SELECT c.*,u.email cs_email,o.order_no FROM conversations c LEFT JOIN users u ON u.id=c.assigned_cs_id LEFT JOIN orders o ON o.id=c.order_id WHERE c.id=?",
+      )
+      .get(conversationId);
+    if (!conv) return;
+    const last = lastChatEmailAt.get(conversationId) || 0;
+    if (Date.now() - last < CHAT_EMAIL_THROTTLE_MS) return;
+    lastChatEmailAt.set(conversationId, Date.now());
+    const base = CLIENT_ORIGIN.replace(/\/$/, "");
+    notifyOpsEmail(
+      `Chat baru dari ${conv.customer_name || conv.customer_email || "customer"}${conv.order_no ? ` (${conv.order_no})` : ""}`,
+      `<h2>Chat baru di Live Chat ikrarku</h2><p><strong>${escapeHtml(conv.customer_name || "-")}</strong> · ${escapeHtml(conv.customer_email || "-")}${conv.order_no ? ` · ${escapeHtml(conv.order_no)}` : ""}</p><blockquote style="white-space:pre-wrap;border-left:3px solid #155946;margin:12px 0;padding:8px 12px;background:#f4f8f6">${escapeHtml(String(body || "").slice(0, 1200))}</blockquote><p><a href="${base}/login">Balas lewat Support Inbox</a>. Email berikutnya untuk percakapan ini paling cepat 15 menit lagi.</p>`,
+      [conv.cs_email],
+    );
+  } catch (error) {
+    console.error("[chat-email]", error.message);
+  }
+}
+
 function mapTemplate(row) {
   return {
     createdByName: creatorLabel(row.created_by),
@@ -1597,6 +1740,8 @@ function mapTemplate(row) {
     premium: Boolean(row.premium),
     recommended: Boolean(row.recommended),
     isFree: Boolean(row.is_free),
+    package: templatePackage(row),
+    withDesigner: packageHasDesigner(templatePackage(row)),
     // QA 14 TC-318 — label "New" (template berumur ≤ NEW_TEMPLATE_DAYS hari)
     // dan "Diskon" (harga coret lebih tinggi dari harga jual).
     originalPrice:
@@ -2330,9 +2475,26 @@ app.patch("/api/templates/:id/price", auth, (req, res) => {
       });
     original = value || null;
   }
+  const rawPackage = req.body?.package;
+  if (rawPackage !== undefined && rawPackage !== null && !PACKAGES.includes(rawPackage))
+    return res.status(400).json({ error: "Paket tidak dikenal" });
+  const nextPackage =
+    isFree || next === 0
+      ? "Free"
+      : rawPackage === "Free"
+        ? null
+        : (rawPackage ?? row.package ?? null);
   db.prepare(
-    "UPDATE templates SET price=?,premium=?,original_price=?,is_free=?,updated_at=? WHERE id=?",
-  ).run(next, next > 0 ? 1 : 0, isFree ? original : original, isFree ? 1 : 0, now(), row.id);
+    "UPDATE templates SET price=?,premium=?,original_price=?,is_free=?,package=?,updated_at=? WHERE id=?",
+  ).run(
+    next,
+    next > 0 ? 1 : 0,
+    original,
+    isFree || next === 0 ? 1 : 0,
+    nextPackage,
+    now(),
+    row.id,
+  );
   // Revisi yang menunggu approval tidak boleh mengembalikan harga lama.
   const pending = db
     .prepare("SELECT changes_json FROM template_drafts WHERE template_id=?")
@@ -2432,10 +2594,12 @@ app.post("/api/templates/:id/review", auth, (req, res) => {
   if (
     status === "Published" &&
     !(Number(row.price) > 0) &&
+    !Number(row.is_free) &&
     !policy.templateAuthorIsAdmin(row)
   )
     return res.status(400).json({
-      error: "Tetapkan harga template sebelum approve.",
+      error:
+        "Tetapkan harga template (atau centang Gratis) sebelum approve.",
     });
   const feedback = String(req.body.feedback || "");
   const pending = db
@@ -3299,6 +3463,7 @@ app.post("/api/conversations/inbound", auth, (req, res) => {
     now(),
     conversation.id,
   );
+  notifyCustomerChat(conversation.id, body);
   res.status(201).json({ conversationId: conversation.id, messageId });
 });
 app.post(
@@ -3341,7 +3506,11 @@ app.post(
 
 app.post("/api/media", auth, upload.single("file"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "File wajib diunggah" });
-  const allowedPrefixes = ["image/", "video/", "audio/"];
+  // QA16 TC-404 — lampiran balasan Support Inbox boleh PDF juga.
+  const allowedPrefixes =
+    req.body?.category === "chat-attachment"
+      ? ["image/", "video/", "audio/", "application/pdf"]
+      : ["image/", "video/", "audio/"];
   if (
     !allowedPrefixes.some((prefix) =>
       String(req.file.mimetype || "").startsWith(prefix),
@@ -3898,7 +4067,7 @@ async function createReceipt(order, template) {
   const paid = receiptDateParts(order.paid_at);
   const issued = receiptDateParts(order.paid_at || order.created_at);
   const amount = formatIdr(order.amount, order.currency);
-  const whatsapp = String(process.env.CS_WHATSAPP || "").trim();
+  const whatsapp = publicContact().whatsapp || "";
   const C = {
     green: "#173f33",
     ink: "#1f3a31",
@@ -4200,8 +4369,18 @@ app.post("/api/orders", rateLimit("orders", 20, 60_000), (req, res) => {
     viewer?.id || null,
   );
   db.prepare(
-    "UPDATE orders SET guest_token=?,wedding_date=?,wedding_time=? WHERE id=?",
-  ).run(guestToken, weddingDate || null, weddingTime || null, orderId);
+    "UPDATE orders SET guest_token=?,wedding_date=?,wedding_time=?,package=? WHERE id=?",
+  ).run(
+    guestToken,
+    weddingDate || null,
+    weddingTime || null,
+    templatePackage(template),
+    orderId,
+  );
+  notifyOpsEmail(
+    `Order baru ${orderNo} — ${template.name} (${templatePackage(template)})`,
+    `<h2>Order baru</h2><p><strong>${escapeHtml(customerName)}</strong> · ${escapeHtml(email)} · ${escapeHtml(phone)}</p><p>Template: ${escapeHtml(template.name)} · Paket ${templatePackage(template)} · ${Number(template.price) > 0 ? formatIdr(template.price, template.currency) : "Gratis"}</p><p>Status: menunggu pembayaran. Email berikutnya dikirim saat order lunas.</p>`,
+  );
   res.status(201).json({
     id: orderId,
     orderNo,
@@ -4380,8 +4559,14 @@ async function fulfillPaidOrder(order, methodCode) {
     // MoM A8 — bergiliran, maksimal 5 order aktif per Web Designer. Dulu
     // pembuat template selalu didahulukan sehingga satu orang bisa menumpuk
     // order; null = semua penuh, order menunggu di antrean.
-    const editorId =
-      fresh.assigned_editor_id || chooseOrderEditor(existingSiteEditor(fresh));
+    // TnC Paket v1.3 — Web Designer hanya untuk Premium & Custom. Free,
+    // Basic dan Advanced diisi mandiri oleh customer; CS tetap ditugaskan
+    // untuk panduan lewat Live Chat.
+    const orderPackage = fresh.package || templatePackage(template);
+    const withDesigner = packageHasDesigner(orderPackage);
+    const editorId = withDesigner
+      ? fresh.assigned_editor_id || chooseOrderEditor(existingSiteEditor(fresh))
+      : null;
     // Record confirmed payment separately; fulfillment can be safely retried after any failure.
     db.prepare(
       "UPDATE orders SET payment_status='Paid',payment_method=?,paid_at=COALESCE(paid_at,?),fulfillment_status='Pending' WHERE id=?",
@@ -4407,18 +4592,28 @@ async function fulfillPaidOrder(order, methodCode) {
           editorId,
           receipt.receiptNo,
           receipt.filepath,
-          editorId ? "Paid - Onboarding" : "Paid - Antre Web Designer",
+          !withDesigner
+            ? "Paid - Mandiri"
+            : editorId
+              ? "Paid - Onboarding"
+              : "Paid - Antre Web Designer",
           fresh.id,
         );
       recordTemplateCommission(fresh, template);
         const taskInsert = db.prepare(
           `INSERT INTO tasks(id,order_id,title,description,status,priority,assigned_user_id,assigned_role_id,created_at,updated_at,assigned_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
         );
+        db.prepare("UPDATE orders SET package=? WHERE id=?").run(
+          orderPackage,
+          fresh.id,
+        );
         taskInsert.run(
           id("task"),
           fresh.id,
           `Onboarding order ${fresh.order_no}`,
-          `Hubungi ${fresh.customer_name}.`,
+          withDesigner
+            ? `Hubungi ${fresh.customer_name}.`
+            : `Paket ${orderPackage} (mandiri): sambut ${fresh.customer_name} dan pandu cara mengisi undangan lewat Live Chat. Tidak ada pengerjaan Web Designer.`,
           "Open",
           "High",
           csId,
@@ -4427,19 +4622,20 @@ async function fulfillPaidOrder(order, methodCode) {
           now(),
           now(),
         );
-        taskInsert.run(
-          id("task"),
-          fresh.id,
-          `Build website ${template.name}`,
-          `Siapkan canvas untuk ${fresh.customer_name}.`,
-          "Open",
-          "Normal",
-          editorId,
-          "role_editor",
-          now(),
-          now(),
-          editorId ? now() : null,
-        );
+        if (withDesigner)
+          taskInsert.run(
+            id("task"),
+            fresh.id,
+            `Build website ${template.name}`,
+            `Paket ${orderPackage}: siapkan canvas untuk ${fresh.customer_name} (1x input awal + 3x penyesuaian untuk Premium; Custom sesuai penawaran).`,
+            "Open",
+            "Normal",
+            editorId,
+            "role_editor",
+            now(),
+            now(),
+            editorId ? now() : null,
+          );
         db.prepare(
           `INSERT INTO conversations(id,order_id,customer_name,customer_email,customer_phone,status,assigned_cs_id,channel,created_at,updated_at,public_token) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
         ).run(
@@ -4485,13 +4681,19 @@ async function fulfillPaidOrder(order, methodCode) {
           outboxId,
           fresh.email,
           `Receipt ${fresh.order_no}`,
-          `<p>Pembayaran untuk ${escapeHtml(template.name)} diterima. Tim kami akan menghubungi Anda.</p>`,
+          withDesigner
+            ? `<p>Pembayaran untuk ${escapeHtml(template.name)} diterima. Tim kami akan menghubungi Anda.</p>`
+            : `<p>Pembayaran untuk ${escapeHtml(template.name)} (paket ${orderPackage}) diterima. Undangan sudah bisa Anda isi dan edit sendiri dari dashboard. Bila bingung, tim CS siap memandu lewat Live Chat.</p>`,
           process.env.SMTP_HOST ? "Queued" : "Ready for SMTP",
           receipt.filepath,
           now(),
         );
       });
       void deliverEmail(outboxId);
+      notifyOpsEmail(
+        `Order lunas ${fresh.order_no} — ${template.name} (${orderPackage})`,
+        `<h2>Order lunas</h2><p><strong>${escapeHtml(fresh.customer_name || "-")}</strong> · ${escapeHtml(fresh.email || "-")} · ${escapeHtml(fresh.phone || "-")}</p><p>Template: ${escapeHtml(template.name)} · Paket ${orderPackage} · ${Number(fresh.amount) > 0 ? formatIdr(fresh.amount, fresh.currency) : "Gratis"} · ${escapeHtml(String(methodCode || ""))}</p><p>${withDesigner ? "Didampingi Web Designer." : "Paket mandiri: customer mengisi sendiri, CS memandu lewat Live Chat."}</p>`,
+      );
       // MoM 2 Nov IKR-08 — CS dan Web Designer yang ditugaskan diberi tahu
       // lewat email, tidak hanya muncul di halaman Tasks.
       if (!fresh.assigned_cs_id) notifyOrderAssignment(fresh.id, csId, "Customer Service");
@@ -5382,8 +5584,9 @@ app.get("/api/me/orders", auth, (req, res) => {
           )
           .get(o.id) || null,
       receiptUrl: receiptUrl(o),
+      package: o.package || templatePackage({ price: o.amount }),
       // QA 14 TC-325 — kontak WhatsApp CS untuk kartu "Tim Anda".
-      support_whatsapp: String(process.env.CS_WHATSAPP || "").trim() || null,
+      support_whatsapp: publicContact().whatsapp,
     })),
   );
 });
@@ -6038,13 +6241,19 @@ app.patch(
   },
 );
 app.get("/api/cs/metrics", auth, (req, res) => {
+  // QA16 TC-381 — Web Designer punya conversations.view sehingga dashboard
+  // ikut polling metrics. Dulu dibalas 403 tiap interval; sekarang role tanpa
+  // dashboard.cs mendapat metrik kosong (200) tanpa membaca data CS lain.
   if (
     !(
       req.user.permissions.includes("*") ||
       req.user.permissions.includes("dashboard.cs")
     )
-  )
-    return res.status(403).json({ error: "Permission denied" });
+  ) {
+    if (!req.user.permissions.includes("conversations.view"))
+      return res.status(403).json({ error: "Permission denied" });
+    return res.json({ incoming: 0, replies: 0, active: 0, resolved: 0 });
+  }
   const scope = req.user.permissions.includes("*")
     ? ""
     : " WHERE assigned_cs_id=@id";
@@ -6248,6 +6457,160 @@ app.post(
     auditLog(req.user.id, "commission.settle", "commission", row.id, {
       amount: row.amount,
     });
+    res.json({ ok: true });
+  },
+);
+// QA16 TC-401 — rekening penerima komisi milik Web Designer sendiri.
+app.get("/api/commissions/payout-account", auth, (req, res) => {
+  const row = db
+    .prepare(
+      "SELECT payout_bank,payout_account_no,payout_account_name FROM users WHERE id=?",
+    )
+    .get(req.user.id);
+  res.json({
+    bankName: row?.payout_bank || "",
+    accountNo: row?.payout_account_no || "",
+    accountName: row?.payout_account_name || "",
+  });
+});
+app.put("/api/commissions/payout-account", auth, (req, res) => {
+  const bankName = String(req.body?.bankName || "").trim().slice(0, 60);
+  const accountNo = String(req.body?.accountNo || "").replace(/[^0-9]/g, "");
+  const accountName = String(req.body?.accountName || "").trim().slice(0, 80);
+  if (!bankName || accountNo.length < 6 || accountNo.length > 20 || !accountName)
+    return res.status(400).json({
+      error: "Lengkapi nama bank, nomor rekening (6–20 digit) dan nama pemilik.",
+    });
+  // Ganti rekening wajib konfirmasi password (TC-407: data sensitif).
+  const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id);
+  if (!bcrypt.compareSync(String(req.body?.currentPassword || ""), user.password_hash))
+    return res.status(400).json({ error: "Password saat ini salah." });
+  db.prepare(
+    "UPDATE users SET payout_bank=?,payout_account_no=?,payout_account_name=?,updated_at=? WHERE id=?",
+  ).run(bankName, accountNo, accountName, now(), req.user.id);
+  auditLog(req.user.id, "commission.payout_account", "user", req.user.id, {
+    bankName,
+    last4: accountNo.slice(-4),
+  });
+  res.json({ ok: true, bankName, accountNo, accountName });
+});
+const maskAccount = (value) =>
+  value ? `${"•".repeat(Math.max(0, String(value).length - 4))}${String(value).slice(-4)}` : "";
+app.get("/api/commissions/withdrawals", auth, (req, res) => {
+  const isAdmin = req.user.permissions.includes("*");
+  const rows = db
+    .prepare(
+      `SELECT w.*,u.first_name||' '||u.last_name creator_name,u.email creator_email FROM commission_withdrawals w LEFT JOIN users u ON u.id=w.creator_id ${isAdmin ? "" : "WHERE w.creator_id=?"} ORDER BY w.created_at DESC`,
+    )
+    .all(...(isAdmin ? [] : [req.user.id]));
+  res.json(
+    rows.map((row) => ({
+      id: row.id,
+      creatorId: row.creator_id,
+      creatorName: row.creator_name,
+      amount: row.amount,
+      count: parseJson(row.commission_ids, []).length,
+      bankName: row.bank_name,
+      // Administrator perlu nomor lengkap untuk transfer; pemilik melihat masked.
+      accountNo: isAdmin ? row.account_no : maskAccount(row.account_no),
+      accountName: row.account_name,
+      status: row.status,
+      note: row.note || "",
+      createdAt: row.created_at,
+      processedAt: row.processed_at,
+    })),
+  );
+});
+app.post("/api/commissions/withdrawals", auth, (req, res) => {
+  const user = db.prepare("SELECT * FROM users WHERE id=?").get(req.user.id);
+  if (!user?.payout_account_no)
+    return res
+      .status(400)
+      .json({ error: "Isi rekening penerima terlebih dahulu." });
+  const open = db
+    .prepare(
+      "SELECT id FROM commission_withdrawals WHERE creator_id=? AND status='Requested'",
+    )
+    .get(req.user.id);
+  if (open)
+    return res.status(409).json({
+      error: "Masih ada pengajuan penarikan yang sedang diproses.",
+    });
+  const rows = db
+    .prepare(
+      "SELECT id,amount FROM template_commissions WHERE creator_id=? AND status<>'Paid'",
+    )
+    .all(req.user.id);
+  const amount = rows.reduce((sum, row) => sum + Number(row.amount || 0), 0);
+  if (!rows.length || amount <= 0)
+    return res
+      .status(400)
+      .json({ error: "Tidak ada komisi yang bisa ditarik." });
+  const id = `wd_${Date.now()}_${crypto.randomBytes(3).toString("hex")}`;
+  db.prepare(
+    "INSERT INTO commission_withdrawals (id,creator_id,amount,commission_ids,bank_name,account_no,account_name,status,created_at) VALUES (?,?,?,?,?,?,?,'Requested',?)",
+  ).run(
+    id,
+    user.id,
+    amount,
+    JSON.stringify(rows.map((row) => row.id)),
+    user.payout_bank,
+    user.payout_account_no,
+    user.payout_account_name,
+    now(),
+  );
+  auditLog(user.id, "commission.withdraw.request", "withdrawal", id, { amount });
+  notifyOpsEmail(
+    `Pengajuan penarikan komisi ${formatIdr(amount)} — ${user.first_name} ${user.last_name}`.trim(),
+    `<h2>Pengajuan penarikan komisi</h2><p>${escapeHtml(`${user.first_name} ${user.last_name}`.trim())} mengajukan penarikan ${formatIdr(amount)} (${rows.length} komisi).</p><p>Rekening: ${escapeHtml(user.payout_bank || "")} · ${maskAccount(user.payout_account_no)} a.n. ${escapeHtml(user.payout_account_name || "")}</p><p>Proses di menu Komisi &amp; Share Fee.</p>`,
+  );
+  res.status(201).json({ ok: true, id, amount, count: rows.length });
+});
+app.post(
+  "/api/commissions/withdrawals/:id/complete",
+  auth,
+  (req, res) => {
+    if (!req.user.permissions.includes("*"))
+      return res
+        .status(403)
+        .json({ error: "Hanya Administrator dapat memproses penarikan" });
+    const row = db
+      .prepare("SELECT * FROM commission_withdrawals WHERE id=?")
+      .get(req.params.id);
+    if (!row) return res.status(404).json({ error: "Pengajuan tidak ditemukan" });
+    if (row.status !== "Requested")
+      return res.status(400).json({ error: "Pengajuan sudah diproses" });
+    const reject = req.body?.decision === "reject";
+    const stamp = now();
+    if (!reject) {
+      const ids = parseJson(row.commission_ids, []);
+      const update = db.prepare(
+        "UPDATE template_commissions SET status='Paid',paid_at=? WHERE id=? AND creator_id=?",
+      );
+      ids.forEach((commissionId) => update.run(stamp, commissionId, row.creator_id));
+    }
+    db.prepare(
+      "UPDATE commission_withdrawals SET status=?,note=?,processed_at=? WHERE id=?",
+    ).run(
+      reject ? "Rejected" : "Paid",
+      String(req.body?.note || "").slice(0, 300),
+      stamp,
+      row.id,
+    );
+    auditLog(req.user.id, "commission.withdraw.complete", "withdrawal", row.id, {
+      decision: reject ? "reject" : "paid",
+    });
+    const creator = db.prepare("SELECT email FROM users WHERE id=?").get(row.creator_id);
+    if (creator?.email)
+      queueEmail(
+        creator.email,
+        reject
+          ? "Pengajuan penarikan komisi ditolak"
+          : "Penarikan komisi ikrarku sudah ditransfer",
+        reject
+          ? `<h2>Pengajuan ditolak</h2><p>${escapeHtml(String(req.body?.note || "Hubungi Administrator untuk detail."))}</p>`
+          : `<h2>Komisi ditransfer</h2><p>Penarikan ${formatIdr(row.amount)} sudah ditransfer ke rekening ${escapeHtml(row.bank_name || "")} ${maskAccount(row.account_no)}.</p>`,
+      );
     res.json({ ok: true });
   },
 );

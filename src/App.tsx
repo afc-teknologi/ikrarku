@@ -26,6 +26,7 @@ import {
   BadgeCheck,
   Radio,
   Wallet,
+  Paperclip,
   Anchor,
   ArrowUp,
   Share2,
@@ -67,6 +68,7 @@ import {
   Palette,
   PanelLeftClose,
   PanelLeftOpen,
+  SlidersHorizontal,
   Play,
   Plus,
   Repeat2,
@@ -79,6 +81,7 @@ import {
   Star,
   Ban,
   RotateCcw,
+  RotateCw,
   House,
   Gift,
   Camera,
@@ -349,6 +352,36 @@ const FRAME_SHAPES: [FrameShape, string][] = [
   ["heart", "Hati"],
   ["scallop", "Bergerigi (scallop)"],
 ];
+/** QA16 TC-375 — satu sumber bentuk bingkai untuk tab Content & Style.
+ *  `imageFrame` lama (arch/circle/leaf/diamond) dipetakan ke `frameShape`. */
+const LEGACY_FRAME_TO_SHAPE: Partial<Record<string, FrameShape>> = {
+  arch: "arch",
+  circle: "circle",
+  leaf: "leaf",
+  diamond: "diamond",
+};
+function effectiveFrameShape(feature: {
+  frameShape?: FrameShape;
+  imageFrame?: string;
+}): FrameShape {
+  return (
+    feature.frameShape ||
+    LEGACY_FRAME_TO_SHAPE[feature.imageFrame || ""] ||
+    "rect"
+  );
+}
+/** Patch saat bentuk dipilih dari tab mana pun: bentuk lama dibersihkan
+ *  supaya tidak dobel (dulu Content & Style bisa berbeda). */
+function frameShapePatch(
+  value: FrameShape,
+  imageFrame?: string,
+): { frameShape?: FrameShape; imageFrame?: any } {
+  const legacyIsShape = Boolean(LEGACY_FRAME_TO_SHAPE[imageFrame || ""]);
+  return {
+    frameShape: value === "rect" ? undefined : value,
+    ...(legacyIsShape ? { imageFrame: "none" } : {}),
+  };
+}
 type InviteDateFormat =
   | "none"
   | "long"
@@ -360,6 +393,9 @@ type InviteDateFormat =
 type EventItem = {
   id: string;
   name: string;
+  /** QA16 TC-380 — ikon custom (gambar) per acara. */
+  iconUrl?: string;
+  iconKey?: string;
   dateText?: string;
   timeText?: string;
   venue?: string;
@@ -408,6 +444,17 @@ type BackdropAdjust = {
   marginTop?: number;
   marginBottom?: number;
 };
+// QA16 TC-394 — satu sumber kategori untuk filter katalog & modal Create Template.
+const TEMPLATE_CATEGORIES = [
+  "Editorial",
+  "Cinematic",
+  "Fairytale",
+  "Elegant",
+  "Romantic",
+  "Traditional",
+  "Modern",
+];
+
 function backdropAdjustStyle(adjust?: BackdropAdjust): React.CSSProperties {
   if (!adjust) return {};
   const style: React.CSSProperties = {
@@ -481,7 +528,40 @@ type LoopEffect =
   | "sway"
   | "pulse"
   | "shimmer"
-  | "drift";
+  | "drift"
+  // QA16 TC-371 — pilihan loop tambahan.
+  | "kenburns"
+  | "spin"
+  | "bounce"
+  | "swing"
+  | "glow"
+  | "heartbeat";
+/** QA16 TC-371 — animasi masuk per canvas/section. */
+type SectionEntrance =
+  | "none"
+  | "fade"
+  | "fade-up"
+  | "fade-down"
+  | "slide-left"
+  | "slide-right"
+  | "zoom-in"
+  | "zoom-out"
+  | "blur-in"
+  | "flip-up"
+  | "curtain";
+const SECTION_ENTRANCES: [SectionEntrance, string][] = [
+  ["none", "Tanpa animasi masuk"],
+  ["fade", "Fade"],
+  ["fade-up", "Fade naik"],
+  ["fade-down", "Fade turun"],
+  ["slide-left", "Geser dari kanan"],
+  ["slide-right", "Geser dari kiri"],
+  ["zoom-in", "Zoom masuk"],
+  ["zoom-out", "Zoom keluar"],
+  ["blur-in", "Blur ke tajam"],
+  ["flip-up", "Flip ke atas"],
+  ["curtain", "Tirai terbuka"],
+];
 type DecorGlyph =
   | "leaf"
   | "branch"
@@ -750,6 +830,14 @@ type Feature = DesignerLayout & {
   iconTextBold?: boolean;
   animateOnScroll?: boolean; // TC-091
   freePosition?: boolean; // TC-103
+  /** QA16 TC-365 — lepas fitur ini dari "Tempel antar fitur" (margin sendiri). */
+  stackDetach?: boolean;
+  /** QA16 TC-384 — rotasi foto Image & Gallery (derajat). */
+  mediaRotation?: number;
+  /** QA16 TC-366 — garis tepi kotak fitur (ikut border radius). */
+  boxBorderWidth?: number;
+  boxBorderColor?: string;
+  boxBorderStyle?: "solid" | "dashed" | "dotted" | "double";
   posX?: number; // TC-103 (persen dari lebar column)
   posY?: number; // TC-103 (px dari atas column)
   boxWidth?: number; // TC-103 (persen)
@@ -777,6 +865,11 @@ type Feature = DesignerLayout & {
    *  berarti mengikuti `bold` lama (berlaku untuk keduanya). */
   titleBold?: boolean;
   bodyBold?: boolean;
+  /** QA16 TC-369 — italic/underline terpisah header vs teks. */
+  titleItalic?: boolean;
+  bodyItalic?: boolean;
+  titleUnderline?: boolean;
+  bodyUnderline?: boolean;
   /** TC-265..267 — kolom ucapan Greetings: font, ukuran teks, latar. */
   greetingsFont?: string;
   greetingsFontSize?: number;
@@ -1082,7 +1175,7 @@ type CanvasSection = {
   desktopSideOverlayUrl?: string;
   desktopSideOverlayKey?: string;
   desktopSideOverlaySize?: number;
-  desktopSideOverlayPosition?: "center" | "top" | "bottom";
+  desktopSideOverlayPosition?: "center" | "top" | "bottom" | "custom";
   desktopSideTextColor?: string;
   /** TC-249 — gaya header & supporting text sisi visual 70/30. */
   desktopSideTitleFont?: string;
@@ -1092,6 +1185,22 @@ type CanvasSection = {
   desktopSideBodyFont?: string;
   desktopSideBodySize?: number;
   desktopSideBodyColor?: string;
+  /** QA16 TC-392 — italic & underline header / supporting text sisi visual. */
+  desktopSideTitleItalic?: boolean;
+  desktopSideTitleUnderline?: boolean;
+  desktopSideBodyBold?: boolean;
+  desktopSideBodyItalic?: boolean;
+  desktopSideBodyUnderline?: boolean;
+  /** QA16 TC-382 — posisi blok teks (persen area 70%). Ukuran teks kini
+   *  ikut lebar area (acuan 1000 px) sehingga posisi & proporsinya sama di
+   *  layar mana pun. */
+  desktopSideTextX?: number;
+  desktopSideTextY?: number;
+  /** QA16 TC-390 — posisi kustom gambar layer 2 (persen). */
+  desktopSideOverlayX?: number;
+  desktopSideOverlayY?: number;
+  /** QA16 TC-391 — header/teks tambahan bebas di sisi visual. */
+  desktopSideExtras?: DesktopSideExtra[];
   desktopSideSlides?: { url: string; key?: string }[];
   /** QA 15 TC-345 — ornamen di sisi 70% tata letak 70:30. */
   desktopSideDecorations?: SectionDecoration[];
@@ -1107,7 +1216,58 @@ type CanvasSection = {
   backgroundLoopEffect?: LoopEffect; // Efek berulang khusus layer background
   backgroundLoopSpeed?: number;
   decorations?: SectionDecoration[]; // Ornamen pojok
+  /** QA16 TC-398 — halaman RSVP Confirmation (disimpan di Canvas 1). */
+  rsvpPage?: RsvpPageConfig;
+  /** QA16 TC-380 — simbol penghubung antar 2 kolom (mis. "&" mempelai). */
+  columnConnector?: string;
+  columnConnectorSize?: number;
+  columnConnectorColor?: string;
+  columnConnectorFont?: string;
+  /** QA16 TC-379 — navbar bawaan undangan (disimpan di Canvas 1). */
+  siteNavMode?: "show" | "hide" | "transparent";
+  siteNavBackground?: string;
+  siteNavTextColor?: string;
+  siteNavLinks?: string;
+  siteNavShowBrand?: boolean;
+  /** QA16 TC-379 — tata letak desktop per canvas saat global "Penuh":
+   *  "column" = canvas ini tampil sempit di tengah seperti ala serein. */
+  sectionDesktopLayout?: "inherit" | "column";
+  sectionDesktopWidth?: number;
+  /** QA16 TC-371 — animasi masuk canvas: efek, durasi, delay, pemicu. */
+  sectionEntrance?: SectionEntrance;
+  sectionEntranceDuration?: number;
+  sectionEntranceDelay?: number;
+  sectionEntranceTrigger?: "scroll" | "load";
+  sectionEntranceEasing?: "ease" | "ease-out" | "ease-in-out" | "linear" | "spring";
 };
+
+type RsvpPageConfig = {
+  eyebrow?: string;
+  title?: string;
+  subtitle?: string;
+  buttonLabel?: string;
+  /** Batas jumlah tamu per konfirmasi. */
+  maxPax?: number;
+  askPhone?: boolean;
+  askMessage?: boolean;
+  showSummary?: boolean;
+};
+type DesktopSideExtra = {
+  id: string;
+  kind: "heading" | "text";
+  text: string;
+  x: number;
+  y: number;
+  size?: number;
+  font?: string;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+};
+/** Ukuran px (acuan area 1000 px) → ikut lebar area sisi visual. */
+const sideFont = (px?: number) =>
+  px ? `calc(${px} * min(0.1cqw, 0.16cqh))` : undefined;
 
 type Guest = {
   initials: string;
@@ -1319,6 +1479,9 @@ export type Template = {
   recommended?: boolean;
   /** 22 Nov — template gratis (Rp0) tanpa payment gateway. */
   isFree?: boolean;
+  /** TnC Paket v1.3 — Free/Basic/Advanced (mandiri) · Premium/Custom (+WD). */
+  package?: string;
+  withDesigner?: boolean;
   /** QA 14 TC-318 — harga coret (sebelum diskon) & label New. */
   originalPrice?: number | null;
   isNew?: boolean;
@@ -1745,16 +1908,46 @@ function withAlpha(color: string | undefined, alpha: number | undefined) {
   return color;
 }
 
+/** QA16 TC-378 — warna latar gelap? (hex / rgb / rgba). */
+function isDarkPaint(color?: string) {
+  if (!color || color === "transparent") return false;
+  let r = 0,
+    g = 0,
+    b = 0,
+    a = 1;
+  const hex = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})([0-9a-f]{2})?$/i);
+  if (hex) {
+    const raw =
+      hex[1].length === 3 ? hex[1].replace(/./g, "$&$&") : hex[1];
+    r = parseInt(raw.slice(0, 2), 16);
+    g = parseInt(raw.slice(2, 4), 16);
+    b = parseInt(raw.slice(4, 6), 16);
+    if (hex[2]) a = parseInt(hex[2], 16) / 255;
+  } else {
+    const rgb = color.match(/rgba?\(([^)]+)\)/i);
+    if (!rgb) return false;
+    const parts = rgb[1].split(/[ ,/]+/).filter(Boolean).map(Number);
+    [r, g, b] = parts;
+    if (parts.length > 3) a = parts[3];
+  }
+  if (a < 0.5) return false;
+  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  return lum < 0.42;
+}
+
 function getGradientBackground(
   enabled: boolean | undefined,
   from: string | undefined,
   to: string | undefined,
   angle: number | undefined,
-  fallback: string,
+  fallback: string | undefined,
 ) {
-  return enabled
-    ? `linear-gradient(${angle ?? 135}deg, ${from || fallback}, ${to || "#d7b66f"})`
-    : fallback;
+  // QA16 TC-376 — setelah Reset warna nilai bisa kosong; jangan pernah
+  // menghasilkan gradien/isi yang tidak valid atau warna bawaan solid.
+  if (!enabled) return fallback || undefined;
+  const start = from || fallback;
+  if (!start) return undefined;
+  return `linear-gradient(${angle ?? 135}deg, ${start}, ${to || "#d7b66f"})`;
 }
 
 function getBackgroundMotionClass(motion?: BackgroundMotion) {
@@ -2675,7 +2868,7 @@ const faqItems = [
   {
     category: "Web Designer",
     q: "Bagaimana menambahkan feature ke column?",
-    a: "Buka Site Editor, pilih column pada canvas, lalu klik atau drag feature dari panel kanan ke column tersebut.",
+    a: "Buka Canvas Editor, pilih column pada canvas, lalu klik atau drag feature dari panel kanan ke column tersebut.",
     qEn: "How do I add a feature to a column?",
     aEn: "Open the editor, select a column on the canvas, then click or drag a feature from the right panel into that column.",
   },
@@ -2689,9 +2882,9 @@ const faqItems = [
   {
     category: "Media",
     q: "Berapa batas ukuran upload image?",
-    a: "Feature Image maksimal 1 MB. Background dan setiap gambar Gallery maksimal 2 MB. Video maksimal 5 MB.",
+    a: "Gambar di atas batas dikompres otomatis di browser (file asli maks. 25 MB). Batas setelah kompres: foto fitur Image & tiap foto Gallery 2 MB; background fitur & gambar layer 4 MB; background canvas (Layer 1) 8 MB; GIF tidak dikompres. Video fitur 5 MB, video background 10 MB. Bila tetap gagal, notifikasi merah menjelaskan alasannya.",
     qEn: "What is the image upload size limit?",
-    aEn: "Image features up to 1 MB. Backgrounds and each Gallery image up to 2 MB. Videos up to 5 MB.",
+    aEn: "Images above the limit are compressed automatically in the browser (original file up to 25 MB). Limits after compression: Image feature & each Gallery photo 2 MB; feature background & layer images 4 MB; canvas background (Layer 1) 8 MB; GIFs are not compressed. Feature video 5 MB, background video 10 MB. If it still fails, a red notification explains why.",
   },
   {
     category: "Media",
@@ -4669,9 +4862,37 @@ function App() {
     void refreshPublicCatalog();
   }, [view, refreshPublicCatalog]);
 
+  // QA16 TC-373 — timer toast sebelumnya dulu ikut menghapus toast baru
+  // (pesan gagal upload hilang dalam sekejap). Kini satu timer saja, dan
+  // pesan error tampil lebih lama.
+  // QA16 TC-377 — menggeser slider inspector dulu ikut menyapu seleksi teks
+  // (biru) di canvas & ornamen. Selama slider ditarik, seleksi dimatikan.
+  useEffect(() => {
+    const down = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches?.('input[type="range"]')) {
+        window.getSelection()?.removeAllRanges();
+        document.body.classList.add("slider-dragging");
+      }
+    };
+    const up = () => document.body.classList.remove("slider-dragging");
+    window.addEventListener("pointerdown", down, true);
+    window.addEventListener("pointerup", up, true);
+    window.addEventListener("pointercancel", up, true);
+    return () => {
+      window.removeEventListener("pointerdown", down, true);
+      window.removeEventListener("pointerup", up, true);
+      window.removeEventListener("pointercancel", up, true);
+    };
+  }, []);
+  const toastTimer = useRef<number | undefined>(undefined);
   const flash = (message: string) => {
     setToast(message);
-    window.setTimeout(() => setToast(""), 2300);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(
+      () => setToast(""),
+      isErrorToast(message) ? 6000 : message.endsWith("...") ? 30000 : 2600,
+    );
   };
 
   // ---- Manage Canvas: order customer sebagai sumber canvas (item 3 & 9) ----
@@ -5515,9 +5736,16 @@ function App() {
     price: number,
     originalPrice?: number,
     isFree?: boolean,
+    pkg?: string,
   ) => {
     try {
-      const updated = await api.setTemplatePrice(templateId, price, originalPrice, isFree);
+      const updated = await api.setTemplatePrice(
+        templateId,
+        price,
+        originalPrice,
+        isFree,
+        pkg,
+      );
       const patch = (item: Template) =>
         item.id === templateId
           ? {
@@ -5526,6 +5754,8 @@ function App() {
               premium: updated.premium,
               originalPrice: updated.originalPrice,
               isFree: updated.isFree,
+              package: updated.package,
+              withDesigner: updated.withDesigner,
             }
           : item;
       setTemplateCatalog((previous) => previous.map(patch));
@@ -5533,7 +5763,7 @@ function App() {
       flash(
         updated.isFree
           ? "Template ditandai Gratis — bisa dipesan tanpa pembayaran."
-          : `Harga diperbarui: ${formatRupiah(updated.price || 0)}.`,
+          : `Harga diperbarui: ${formatRupiah(updated.price || 0)} · paket ${updated.package || "-"}.`,
       );
     } catch (error) {
       flash(error instanceof Error ? error.message : "Gagal mengubah harga.");
@@ -6364,6 +6594,7 @@ function App() {
         {view === "dashboard" && hasPermission("dashboard.editor") && (
           <EditorDashboard
             users={managedUsers}
+            orderOptions={canvasOrderOptions}
             setView={setView}
             manageUserCanvas={manageUserCanvas}
             adminView={hasPermission("users.manage")}
@@ -6510,6 +6741,9 @@ function App() {
             flash={flash}
             notificationMuted={notificationMuted}
             onNotificationMuted={updateNotificationSetting}
+            staff={role !== "User"}
+            roleLabel={displayRole(role)}
+            onAccountSettings={() => setAccountSettingsOpen(true)}
           />
         )}
         {view === "my-orders" && (
@@ -7143,7 +7377,10 @@ function AllDesignsPage({
               </button>
               <div className="ikr-template-info">
                 <div>
-                  <small>{template.category}</small>
+                  <small>
+                    {template.category}
+                    {template.package ? ` · Paket ${template.package}` : ""}
+                  </small>
                   <h3>{template.name}</h3>
                 </div>
                 <span className="ikr-template-price">
@@ -8085,47 +8322,44 @@ function TemplateJourneyPage({
             </div>
           </div>
           <aside>
+            {/* TnC Paket v1.3 — isi paket mengikuti dokumen paket. */}
             <small>
-              {t("PAKET SEKALI BAYAR", "ONE-TIME PACKAGE")} ·{" "}
-              {template.premium ? "PREMIUM" : "STANDARD"}
+              {t("PAKET", "PACKAGE")} {(template.package || "Basic").toUpperCase()}
             </small>
             <strong>{templatePriceLabel(template)}</strong>
             <span>
-              {t(
-                "Sudah termasuk onboarding dan penugasan tim.",
-                "Includes onboarding and team assignment.",
-              )}
+              {template.withDesigner
+                ? t(
+                    "Didampingi Web Designer: 1x input awal + 3x penyesuaian (Premium) atau sesuai penawaran (Custom).",
+                    "Web Designer assisted: 1 initial input + 3 adjustments (Premium) or as quoted (Custom).",
+                  )
+                : t(
+                    "Isi & edit mandiri dari dashboard. CS memandu lewat Live Chat bila Anda bingung.",
+                    "Fill in and edit it yourself. Our CS guides you via Live Chat when needed.",
+                  )}
             </span>
             <hr />
             <ul>
-              <li>
-                <Check size={14} />
-                {t("Lisensi template", "Template license")}
-              </li>
-              <li>
-                <Check size={14} />
-                {t("Onboarding Customer Service", "Customer Service onboarding")}
-              </li>
-              <li>
-                <Check size={14} />
-                {t("Pendampingan Web Designer", "Web Designer assignment")}
-              </li>
-              <li>
-                <Check size={14} />
-                {t("Receipt email & PDF", "Email & PDF receipt")}
-              </li>
-              {template.premium && (
-                <>
-                  <li>
-                    <Check size={14} />
-                    {t("Animasi & musik premium", "Premium motion & sound library")}
-                  </li>
-                  <li>
-                    <Check size={14} />
-                    {t("Onboarding prioritas", "Priority onboarding")}
-                  </li>
-                </>
-              )}
+              {[
+                [t("Lagu, Maps, Gift, RSVP & Gallery", "Music, Maps, Gift, RSVP & Gallery"), true],
+                [t("Live Chat & panduan penggunaan oleh CS", "Live Chat & CS usage guidance"), true],
+                [
+                  t("Penyesuaian tampilan desktop", "Desktop layout adjustments"),
+                  ["Advanced", "Premium", "Custom"].includes(template.package || ""),
+                ],
+                [t("Pendampingan Web Designer", "Web Designer assistance"), Boolean(template.withDesigner)],
+                [
+                  t("Bantuan input data & foto oleh tim", "Data & photo input by our team"),
+                  Boolean(template.withDesigner),
+                ],
+                [t("QR Check-in", "QR Check-in"), Boolean(template.withDesigner)],
+                [t("Receipt email & PDF", "Email & PDF receipt"), !template.isFree],
+              ].map(([label, included]) => (
+                <li key={String(label)} className={included ? "" : "excluded"}>
+                  {included ? <Check size={14} /> : <X size={14} />}
+                  {label}
+                </li>
+              ))}
             </ul>
             <button onClick={onOrder}>
               <ShoppingCart size={17} />
@@ -8731,6 +8965,9 @@ function PaymentSuccessPage({
   onHome: () => void;
 }) {
   const free = Boolean(template?.isFree) || !(Number(order.amount) > 0);
+  // TnC Paket v1.3 — hanya Premium/Custom yang dikerjakan Web Designer.
+  const assisted = Boolean(template?.withDesigner);
+  const pkg = template?.package || (free ? "Free" : "");
   return (
     <div className="payment-success-page">
       <div className="success-rings">
@@ -8740,9 +8977,10 @@ function PaymentSuccessPage({
       <h1>Terima kasih. Project Anda sudah masuk ke tim kami.</h1>
       <p>
         Order <strong>{order.orderNo}</strong>{" "}
-        {free ? "sudah aktif (template gratis)." : "telah dibayar."} Satu
-        Customer Service dan satu Web Designer sudah dialokasikan melalui
-        workload assignment.
+        {free ? "sudah aktif (template gratis)." : "telah dibayar."}{" "}
+        {assisted
+          ? `Paket ${pkg}: satu Customer Service dan satu Web Designer sudah ditugaskan untuk mendampingi Anda.`
+          : `Paket ${pkg || "mandiri"}: undangan langsung bisa Anda isi dan edit sendiri dari dashboard. Customer Service siap memandu lewat Live Chat bila Anda bingung.`}
       </p>
       <div className="success-summary">
         <div>
@@ -8773,15 +9011,23 @@ function PaymentSuccessPage({
         <article>
           <span>2</span>
           <div>
-            <strong>CS follow-up</strong>
-            <p>CS menghubungi via Email, Web, atau WhatsApp.</p>
+            <strong>{assisted ? "CS follow-up" : "Isi undangan sendiri"}</strong>
+            <p>
+              {assisted
+                ? "CS menghubungi via Email, Web, atau WhatsApp."
+                : "Login, buka Template & Canvas, lalu isi nama, acara, foto dan lagu langsung di editor."}
+            </p>
           </div>
         </article>
         <article>
           <span>3</span>
           <div>
-            <strong>Web production</strong>
-            <p>Web Designer menerima task pembuatan website.</p>
+            <strong>{assisted ? "Web production" : "Panduan CS"}</strong>
+            <p>
+              {assisted
+                ? "Web Designer menerima task: 1x input awal + 3x penyesuaian (Premium) atau sesuai penawaran (Custom)."
+                : "Bingung? Tanyakan lewat Live Chat (09.00-21.00 WIB). Pengerjaan oleh Web Designer tersedia di paket Premium & Custom."}
+            </p>
           </div>
         </article>
       </div>
@@ -10813,7 +11059,8 @@ function Dashboard({
 }
 
 function EditorDashboard({
-  users,
+  users: allUsers,
+  orderOptions = [],
   setView,
   manageUserCanvas: _manageUserCanvas,
   templateCount,
@@ -10821,19 +11068,57 @@ function EditorDashboard({
   adminView = false,
 }: {
   users: ManagedUser[];
+  orderOptions?: CanvasOrderOption[];
   setView: (view: View) => void;
   manageUserCanvas: (userId: string) => void;
   templateCount: number;
   supportCount: number;
   adminView?: boolean;
 }) {
-  const assigned = users.filter((user) => user.assignedTo);
+  // QA16 TC-393/396 — kartu ringkasan, daftar "Customer saya" dan dropdown
+  // Manage Canvas memakai satu sumber: order lunas yang ditugaskan ke Web
+  // Designer ini. Dulu daftar memakai /api/clients (ikut customer yang belum
+  // di-assign) sehingga angkanya berbeda.
+  const orderCustomerIds = new Set(
+    orderOptions.map((option) => option.customerUserId),
+  );
+  const users = adminView
+    ? allUsers
+    : orderOptions
+        .filter(
+          (option, index, list) =>
+            list.findIndex(
+              (item) => item.customerUserId === option.customerUserId,
+            ) === index,
+        )
+        .map((option) => {
+          const known = allUsers.find(
+            (user) => user.id === option.customerUserId,
+          );
+          return {
+            ...(known || {
+              id: option.customerUserId,
+              name: option.customerName,
+              email: option.customerEmail,
+              siteTitle: option.customerName,
+              slug: "",
+              assignedTo: "",
+              status: "Assigned",
+              plan: "Free",
+              canvasIds: [],
+            }),
+            plan: [option.orderNo, option.templateName].filter(Boolean).join(" · ") || known?.plan || "Order",
+          } as ManagedUser;
+        });
+  const assigned = adminView
+    ? allUsers.filter((user) => user.assignedTo)
+    : users.filter((user) => orderCustomerIds.has(user.id));
   return (
     <div className="page">
       <div className="page-heading">
         <div>
           <div className="eyebrow">WEB DESIGNER STUDIO</div>
-          <h1>Creative operations dashboard</h1>
+          <h1>Dashboard Web Designer</h1>
           <p>
             Kelola template dan canvas website customer dalam satu tempat.
           </p>
@@ -10842,10 +11127,10 @@ function EditorDashboard({
           {/* QA TC-168: assign & kelola canvas customer kini satu alur, jadi
               tombol ini mengarah ke Manage Canvas, bukan Client Assignment. */}
           <button className="secondary-btn" onClick={() => setView("editor")}>
-            <WandSparkles size={17} /> Manage Canvas
+            <WandSparkles size={17} /> Kelola Canvas
           </button>
           <button className="primary-btn" onClick={() => setView("templates")}>
-            <LayoutTemplate size={17} /> Manage Templates
+            <LayoutTemplate size={17} /> Kelola Template
           </button>
         </div>
       </div>
@@ -10854,28 +11139,28 @@ function EditorDashboard({
           icon={Users}
           label="Customer dari order saya"
           value={String(assigned.length)}
-          note="Ditugaskan otomatis dari template buatan Anda"
+          note="Dari order lunas yang ditugaskan ke Anda"
         />
         <Stat
           icon={Layers3}
-          label="Managed Canvas"
+          label="Canvas dikelola"
           value={String(
             users.reduce(
               (total, user) => total + (user.canvasIds?.length || 0),
               0,
             ),
           )}
-          note="Across assigned clients"
+          note="Dari customer di atas"
         />
         <Stat
           icon={Palette}
-          label="Template library"
+          label="Koleksi template"
           value={String(templateCount)}
-          note="Available for assignment"
+          note="Siap dipakai"
         />
         <Stat
           icon={MessageCircle}
-          label="Support inbox"
+          label="Support Inbox"
           value={String(supportCount)}
           note="Percakapan dari pengguna"
         />
@@ -10885,10 +11170,10 @@ function EditorDashboard({
           <div className="panel-head">
             <div>
               <h3>Customer saya</h3>
-              <p>Customer yang canvasnya dapat Anda kelola</p>
+              <p>Customer dari order yang ditugaskan ke Anda</p>
             </div>
             <button className="text-btn" onClick={() => setView("editor")}>
-              Manage Canvas
+              Kelola Canvas
             </button>
           </div>
           <div className="client-list">
@@ -10921,22 +11206,22 @@ function EditorDashboard({
         <section className="panel editor-quick-panel">
           <div className="panel-head">
             <div>
-              <h3>Quick actions</h3>
-              <p>Continue your design workflow</p>
+              <h3>Aksi cepat</h3>
+              <p>Lanjutkan pekerjaan desain</p>
             </div>
           </div>
           <button onClick={() => setView("templates")}>
             <Palette size={18} />
             <span>
-              <strong>Create a template</strong>
-              <small>Build a reusable theme from Canvas.</small>
+              <strong>Buat template</strong>
+              <small>Susun tema yang bisa dipakai ulang dari Canvas.</small>
             </span>
             <ArrowRight size={16} />
           </button>
           <button onClick={() => setView("editor")}>
             <UserCog size={18} />
             <span>
-              <strong>Manage Canvas customer</strong>
+              <strong>Kelola canvas customer</strong>
               <small>Pilih order customer, canvasnya langsung termuat.</small>
             </span>
             <ArrowRight size={16} />
@@ -10944,8 +11229,8 @@ function EditorDashboard({
           <button onClick={() => setView("customer-service")}>
             <MessageSquareText size={18} />
             <span>
-              <strong>Open support inbox</strong>
-              <small>Respond to customer conversations.</small>
+              <strong>Buka Support Inbox</strong>
+              <small>Balas percakapan customer.</small>
             </span>
             <ArrowRight size={16} />
           </button>
@@ -12215,6 +12500,7 @@ function Templates({
     price: number,
     originalPrice?: number,
     isFree?: boolean,
+    pkg?: string,
   ) => Promise<void>;
   onReviewRevision?: (
     templateId: string,
@@ -12604,16 +12890,7 @@ function Templates({
           />
         </div>
         <div className="filter-tabs">
-          {[
-            "All",
-            "Editorial",
-            "Cinematic",
-            "Fairytale",
-            "Elegant",
-            "Romantic",
-            "Traditional",
-            "Modern",
-          ].map((item) => (
+          {["All", ...TEMPLATE_CATEGORIES].map((item) => (
             <button
               key={item}
               className={filter === item ? "active" : ""}
@@ -12953,7 +13230,14 @@ function Editor({
   loadDraft,
   discardDraft,
 }: EditorProps) {
-  const [activePage, setActivePage] = useState<PageKey>("pages");
+  const [activePage, setActivePageRaw] = useState<PageKey>("pages");
+  // QA16 TC-399 — di layar sempit panel kiri/kanan editor jadi laci yang
+  // tertutup otomatis, supaya tidak memotong konten (mis. Daftar Tamu).
+  const [mobilePanel, setMobilePanel] = useState<"none" | "structure" | "inspector">("none");
+  const setActivePage = (page: PageKey) => {
+    setActivePageRaw(page);
+    setMobilePanel("none");
+  };
   const requestedCanvasId = sessionStorage.getItem("ikrarku-edit-canvas");
   const initialSection =
     sections.find((section) => section.id === requestedCanvasId) || sections[0];
@@ -14035,16 +14319,17 @@ function Editor({
     type: "image" | "video",
   ) => {
     if (!file || !selectedFeature) return;
-    const limit = type === "image" ? 1024 * 1024 : 5 * 1024 * 1024;
-    if (type === "image") file = await shrinkImageToLimit(file, limit);
-    if (file.size > limit) {
-      flash(
-        `${type === "image" ? "Image" : "Video"} melebihi batas ${type === "image" ? "1 MB" : "5 MB"}.`,
+    if (type === "image") {
+      const ready = await prepareImageUpload(
+        file,
+        UPLOAD_LIMITS.featureImage,
+        "Foto",
+        flash,
       );
-      return;
-    }
-    if (type === "image" && !file.type.startsWith("image/")) {
-      flash("File harus berupa image.");
+      if (!ready) return;
+      file = ready;
+    } else if (file.size > 5 * 1024 * 1024) {
+      flash(`Video ${formatMb(file.size)} melebihi batas 5 MB.`);
       return;
     }
     if (type === "video" && !file.type.startsWith("video/")) {
@@ -14071,15 +14356,14 @@ function Editor({
   // bentrok dengan media utama (foto, video, sound).
   const uploadFeatureBackground = async (file: File | undefined) => {
     if (!file || !selectedFeature) return;
-    if (!file.type.startsWith("image/")) {
-      flash("Background harus berupa image.");
-      return;
-    }
-    file = await shrinkImageToLimit(file, 2 * 1024 * 1024);
-    if (file.size > 2 * 1024 * 1024) {
-      flash("Background image maksimal 2 MB.");
-      return;
-    }
+    const ready = await prepareImageUpload(
+      file,
+      UPLOAD_LIMITS.featureBackground,
+      "Background",
+      flash,
+    );
+    if (!ready) return;
+    file = ready;
     try {
       const saved = await uploadToServer(file, "feature-background");
       updateFeature(
@@ -14138,16 +14422,25 @@ function Editor({
 
   const uploadGallery = async (files: FileList | null) => {
     if (!files || !selectedFeature) return;
+    const list = Array.from(files);
+    if (list.some((file) => file.size > UPLOAD_LIMITS.gallery))
+      flash(`Mengompres ${list.length} foto gallery...`);
     const prepared = await Promise.all(
-      Array.from(files).map((file) => shrinkImageToLimit(file, 2 * 1024 * 1024)),
+      list.map((file) =>
+        file.type.startsWith("image/") && file.size <= BACKGROUND_SOURCE_LIMIT
+          ? shrinkImageToLimit(file, UPLOAD_LIMITS.gallery, 2560)
+          : Promise.resolve(file),
+      ),
     );
     const validFiles = prepared.filter(
-      (file) => file.type.startsWith("image/") && file.size <= 2 * 1024 * 1024,
+      (file) =>
+        file.type.startsWith("image/") && file.size <= UPLOAD_LIMITS.gallery,
     );
-    if (validFiles.length !== files.length)
+    if (validFiles.length !== list.length)
       flash(
-        "Sebagian file dilewati. Gallery hanya menerima image maksimal 2 MB per file.",
+        `${list.length - validFiles.length} file dilewati: Gallery hanya menerima gambar, maksimal 2 MB per foto setelah dikompres.`,
       );
+    if (!validFiles.length) return;
     try {
       const saved = await Promise.all(
         validFiles.map((file) => uploadToServer(file, "gallery")),
@@ -14206,7 +14499,7 @@ function Editor({
     }
     try {
       const saved = await uploadToServer(file, "nav-icon");
-      flash("Ikon menu berhasil diunggah.");
+      flash("Ikon berhasil diunggah.");
       return { url: saved.url, key: saved.key };
     } catch (error) {
       flash(error instanceof Error ? error.message : "Upload ikon gagal.");
@@ -14215,15 +14508,14 @@ function Editor({
   };
   const uploadLayerImage = async (file: File | undefined) => {
     if (!file) return null;
-    if (!file.type.startsWith("image/")) {
-      flash("Gambar layer harus berupa image.");
-      return null;
-    }
-    file = await shrinkImageToLimit(file, 2 * 1024 * 1024);
-    if (file.size > 2 * 1024 * 1024) {
-      flash("Gambar layer maksimal 2 MB.");
-      return null;
-    }
+    const ready = await prepareImageUpload(
+      file,
+      UPLOAD_LIMITS.layer,
+      "Gambar layer",
+      flash,
+    );
+    if (!ready) return null;
+    file = ready;
     try {
       const saved = await uploadToServer(file, "background-layer");
       flash("Gambar layer berhasil diunggah.");
@@ -14299,6 +14591,65 @@ function Editor({
     } catch (error) {
       flash(error instanceof Error ? error.message : "Upload gagal.");
     }
+  };
+
+  // QA16 TC-374 — slot background terpisah Desktop (16:9) & Mobile (9:16),
+  // bisa diisi dari mode mana pun. Mobile disimpan di section.mobile.
+  const uploadBackgroundSlot = async (
+    sectionId: string,
+    file: File | undefined,
+    slot: "desktop" | "mobile",
+  ) => {
+    if (!file) return;
+    const ready = await prepareImageUpload(
+      file,
+      BACKGROUND_IMAGE_LIMIT,
+      slot === "mobile" ? "Background mobile" : "Background desktop",
+      flash,
+    );
+    if (!ready) return;
+    try {
+      const saved = await uploadToServer(ready, "canvas-background");
+      const aspect = await readMediaAspect(ready).catch(() => undefined);
+      const patch = {
+        backgroundUrl: saved.url,
+        backgroundKey: saved.key,
+        backgroundName: file.name,
+        backgroundAspect: aspect,
+      };
+      setDirty(true);
+      commitSections((previous) =>
+        previous.map((section) =>
+          section.id !== sectionId
+            ? section
+            : slot === "desktop"
+              ? { ...section, ...patch }
+              : { ...section, mobile: { ...(section.mobile || {}), ...patch } },
+        ),
+      );
+      flash(
+        slot === "mobile"
+          ? "Background mobile (9:16) tersimpan. Tampil saat undangan dibuka di HP."
+          : "Background desktop (16:9) tersimpan.",
+      );
+    } catch (error) {
+      flash(error instanceof Error ? error.message : "Upload gagal.");
+    }
+  };
+  const clearMobileBackgroundSlot = (sectionId: string) => {
+    setDirty(true);
+    commitSections((previous) =>
+      previous.map((section) => {
+        if (section.id !== sectionId || !section.mobile) return section;
+        const mobile = { ...section.mobile };
+        delete mobile.backgroundUrl;
+        delete mobile.backgroundKey;
+        delete mobile.backgroundName;
+        delete mobile.backgroundAspect;
+        return { ...section, mobile };
+      }),
+    );
+    flash("Background mobile dihapus — HP kembali memakai background desktop.");
   };
 
   // TC-149: tawarkan pemulihan bila ada salinan lokal dari sesi sebelumnya.
@@ -14419,11 +14770,33 @@ function Editor({
         </div>
       )}
       <div
-        className="editor-shell"
+        className={`editor-shell mobile-panel-${mobilePanel}`}
         inert={saving || Boolean(recovery) || Boolean(localBackup)}
       >
         <header className="editor-topbar">
           <div className="editor-top-left">
+            <button
+              type="button"
+              className="icon-btn editor-mobile-toggle"
+              aria-label="Page Structure"
+              aria-pressed={mobilePanel === "structure"}
+              onClick={() =>
+                setMobilePanel((value) => (value === "structure" ? "none" : "structure"))
+              }
+            >
+              <PanelLeftOpen size={18} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn editor-mobile-toggle"
+              aria-label="Pengaturan (inspector)"
+              aria-pressed={mobilePanel === "inspector"}
+              onClick={() =>
+                setMobilePanel((value) => (value === "inspector" ? "none" : "inspector"))
+              }
+            >
+              <SlidersHorizontal size={18} />
+            </button>
             <button
               className="icon-btn"
               onClick={() => {
@@ -15054,6 +15427,19 @@ function Editor({
             </DeviceContext>
           </main>
           <aside className="editor-right">
+            {activePage !== "pages" ? (
+              <div className="inspector-scroll">
+                <SitePageInspector
+                  page={activePage}
+                  config={sections[0]?.rsvpPage}
+                  update={(next) =>
+                    sections[0] &&
+                    updateSectionShared(sections[0].id, { rsvpPage: next })
+                  }
+                />
+              </div>
+            ) : (
+            <>
             <div className="inspector-tabs">
               <button
                 className={inspectorTab === "content" ? "active" : ""}
@@ -15125,6 +15511,7 @@ function Editor({
                   uploadSoundMedia={uploadSoundMedia}
                   uploadGallery={uploadGallery}
                   uploadGiftLogo={uploadGiftLogo}
+                  uploadEventIcon={uploadNavIcon}
                   replay={() => setAnimationNonce((previous) => previous + 1)}
                   soundCatalog={soundCatalog}
                 />
@@ -15145,6 +15532,16 @@ function Editor({
                   }
                   backgroundInput={backgroundInput}
                   uploadBackground={uploadBackground}
+                  rawSection={
+                    sections.find((item) => item.id === selectedSection.id) ||
+                    selectedSection
+                  }
+                  uploadBackgroundSlot={(file, slot) =>
+                    uploadBackgroundSlot(selectedSection.id, file, slot)
+                  }
+                  clearMobileBackground={() =>
+                    clearMobileBackgroundSlot(selectedSection.id)
+                  }
                   backgroundGlobalOn={Boolean(sections[0]?.backgroundGlobal)}
                   isPrimaryCanvas={sections[0]?.id === selectedSection.id}
                   onFollowAspectAll={(on) => void followAspectAll(on)}
@@ -15217,6 +15614,8 @@ function Editor({
                 </>
               )}
             </div>
+            </>
+            )}
           </aside>
         </div>
       </div>
@@ -15345,6 +15744,7 @@ function FeatureInspector({
   uploadSoundMedia,
   uploadGallery,
   uploadGiftLogo,
+  uploadEventIcon,
   replay,
   soundCatalog,
 }: {
@@ -15366,6 +15766,9 @@ function FeatureInspector({
   uploadSoundMedia: (file: File | undefined) => Promise<void>;
   uploadGallery: (files: FileList | null) => Promise<void>;
   uploadGiftLogo?: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
+  uploadEventIcon?: (
     file: File | undefined,
   ) => Promise<{ url: string; key: string } | null>;
   replay: () => void;
@@ -15608,7 +16011,7 @@ function FeatureInspector({
               <Upload size={18} />
               <span>
                 <strong>Upload Image</strong>
-                <small>Maksimal 1 MB</small>
+                <small>JPG/PNG/WebP · di atas 2 MB dikompres otomatis (maks. file asli 25 MB)</small>
               </span>
             </button>
             {feature.mediaName && (
@@ -15669,7 +16072,7 @@ function FeatureInspector({
               <ImageIcon size={18} />
               <span>
                 <strong>Upload Gallery Images</strong>
-                <small>Maksimal 2 MB per image</small>
+                <small>Di atas 2 MB per foto dikompres otomatis</small>
               </span>
             </button>
             <div className="gallery-counter">
@@ -16447,7 +16850,11 @@ function FeatureInspector({
           </div>
         )}
         {feature.type === "event" && (
-          <EventItemsEditor feature={feature} update={update} />
+          <EventItemsEditor
+            feature={feature}
+            update={update}
+            uploadIcon={uploadEventIcon}
+          />
         )}
         {feature.type === "event" && (
           <>
@@ -16714,17 +17121,57 @@ function FeatureInspector({
                 <Bold size={14} />
                 <small>Teks</small>
               </button>
+            </div>
+            {/* QA16 TC-369 — italic & underline terpisah untuk header dan
+                supporting text, seperti Bold. */}
+            <div className="toolbar-row">
               <button
-                className={feature.italic ? "active" : ""}
-                onClick={() => update({ italic: !feature.italic })}
+                className={`bold-split ${(feature.titleItalic ?? feature.italic) ? "active" : ""}`}
+                title="Italic header"
+                aria-label="Italic header"
+                onClick={() =>
+                  update({ titleItalic: !(feature.titleItalic ?? feature.italic) })
+                }
               >
-                <Italic size={16} />
+                <Italic size={14} />
+                <small>Header</small>
               </button>
               <button
-                className={feature.underline ? "active" : ""}
-                onClick={() => update({ underline: !feature.underline })}
+                className={`bold-split ${(feature.bodyItalic ?? feature.italic) ? "active" : ""}`}
+                title="Italic teks"
+                aria-label="Italic teks"
+                onClick={() =>
+                  update({ bodyItalic: !(feature.bodyItalic ?? feature.italic) })
+                }
               >
-                <Underline size={16} />
+                <Italic size={14} />
+                <small>Teks</small>
+              </button>
+              <button
+                className={`bold-split ${(feature.titleUnderline ?? feature.underline) ? "active" : ""}`}
+                title="Underline header"
+                aria-label="Underline header"
+                onClick={() =>
+                  update({
+                    titleUnderline: !(feature.titleUnderline ?? feature.underline),
+                  })
+                }
+              >
+                <Underline size={14} />
+                <small>Header</small>
+              </button>
+              <button
+                className={`bold-split ${(feature.bodyUnderline ?? feature.underline) ? "active" : ""}`}
+                title="Underline teks"
+                aria-label="Underline teks"
+                onClick={() =>
+                  update({
+                    bodyUnderline: !(feature.bodyUnderline ?? feature.underline),
+                  })
+                }
+              >
+                <Underline size={14} />
+                <small>Teks</small>
               </button>
             </div>
             <label>
@@ -17165,21 +17612,43 @@ function FeatureInspector({
             <div className="group-heading">
               <strong>Bingkai & Posisi Gambar</strong>
             </div>
+            {/* QA16 TC-375 — pilihan bentuk sama persis dengan tab Style
+                (satu field frameShape), gaya tepi terpisah. */}
             <label>
               Bentuk bingkai
               <select
-                value={feature.imageFrame || "none"}
+                value={effectiveFrameShape(feature)}
+                onChange={(event) =>
+                  update(
+                    frameShapePatch(
+                      event.target.value as FrameShape,
+                      feature.imageFrame,
+                    ),
+                  )
+                }
+              >
+                {FRAME_SHAPES.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Gaya tepi
+              <select
+                value={
+                  ["rounded", "polaroid"].includes(feature.imageFrame || "")
+                    ? feature.imageFrame
+                    : "none"
+                }
                 onChange={(event) =>
                   update({ imageFrame: event.target.value as ImageFrame })
                 }
               >
-                <option value="none">Tanpa bingkai</option>
-                <option value="rounded">Rounded</option>
-                <option value="circle">Circle</option>
-                <option value="arch">Arch / Pintu</option>
+                <option value="none">Tanpa gaya tepi</option>
+                <option value="rounded">Sudut membulat</option>
                 <option value="polaroid">Polaroid</option>
-                <option value="leaf">Leaf</option>
-                <option value="diamond">Diamond</option>
               </select>
             </label>
             <label>
@@ -17849,7 +18318,84 @@ function BoxStyle({
           onChange={(event) => update({ margin: Number(event.target.value) })}
         />
       </label>
+      <BoxBorderAndNudge feature={feature} update={update} />
     </div>
+  );
+}
+
+/** QA16 TC-365/366 — garis tepi kotak fitur (warna/tebal/gaya, mengikuti
+ *  border radius) dan geser atas/bawah yang tetap berfungsi saat canvas
+ *  memakai "Tempel antar fitur". */
+function BoxBorderAndNudge({
+  feature,
+  update,
+}: {
+  feature: Feature;
+  update: (patch: Partial<Feature>) => void;
+}) {
+  const width = feature.boxBorderWidth ?? 0;
+  return (
+    <>
+      <div className="group-heading">
+        <strong>Garis tepi</strong>
+        <small>Ikut border radius</small>
+      </div>
+      <label>
+        Tebal garis <span>{width}px</span>
+        <input
+          type="range"
+          min="0"
+          max="12"
+          value={width}
+          onChange={(event) =>
+            update({ boxBorderWidth: Number(event.target.value) || undefined })
+          }
+        />
+      </label>
+      {width > 0 && (
+        <div className="two-inputs">
+          <label>
+            Warna garis
+            <ColorInput
+              value={feature.boxBorderColor}
+              fallback="#c9a45c"
+              label="Warna garis tepi"
+              onChange={(next) => update({ boxBorderColor: next })}
+            />
+          </label>
+          <label>
+            Gaya garis
+            <select
+              value={feature.boxBorderStyle || "solid"}
+              onChange={(event) =>
+                update({
+                  boxBorderStyle: event.target.value as Feature["boxBorderStyle"],
+                })
+              }
+            >
+              <option value="solid">Garis penuh</option>
+              <option value="dashed">Putus-putus</option>
+              <option value="dotted">Titik-titik</option>
+              <option value="double">Ganda</option>
+            </select>
+          </label>
+        </div>
+      )}
+      {!feature.freePosition && (
+        <>
+          <label className="check-row">
+            <input
+              type="checkbox"
+              checked={Boolean(feature.stackDetach)}
+              onChange={(event) =>
+                update({ stackDetach: event.target.checked || undefined })
+              }
+            />
+            Lepas dari "Tempel antar fitur" (pakai margin sendiri)
+          </label>
+        </>
+      )}
+    </>
   );
 }
 
@@ -18674,7 +19220,132 @@ const loopEffectCatalog: [LoopEffect, string][] = [
   ["pulse", "Berdenyut"],
   ["shimmer", "Berkilau"],
   ["drift", "Melayang"],
+  ["kenburns", "Zoom perlahan (Ken Burns)"],
+  ["spin", "Berputar pelan"],
+  ["bounce", "Memantul"],
+  ["swing", "Berayun lebar"],
+  ["glow", "Bercahaya"],
+  ["heartbeat", "Detak jantung"],
 ];
+
+/** QA16 TC-371 — animasi masuk canvas (scroll-trigger / saat dimuat),
+ *  durasi, delay, easing, dan tombol putar ulang di editor. */
+function SectionEntranceControls({
+  section,
+  update,
+}: {
+  section: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+}) {
+  const effect = section.sectionEntrance || "none";
+  const replay = () => {
+    const node = document.querySelector(
+      `.canvas-frame [data-section-id="${section.id}"]`,
+    ) as HTMLElement | null;
+    if (!node) return;
+    node.classList.remove("sec-revealed", "sec-replay");
+    void node.offsetWidth;
+    node.classList.add("sec-replay");
+  };
+  return (
+    <div className="loop-effect-controls">
+      <div className="group-heading">
+        <strong>Animasi Masuk Canvas</strong>
+      </div>
+      <div className="layout-help">
+        Seluruh canvas muncul dengan efek saat digulir ke layar (scroll-trigger)
+        atau langsung saat undangan dibuka.
+      </div>
+      <label>
+        Efek masuk
+        <select
+          value={effect}
+          onChange={(event) =>
+            update({ sectionEntrance: event.target.value as SectionEntrance })
+          }
+        >
+          {SECTION_ENTRANCES.map(([value, label]) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {effect !== "none" && (
+        <>
+          <label>
+            Pemicu
+            <select
+              value={section.sectionEntranceTrigger || "scroll"}
+              onChange={(event) =>
+                update({
+                  sectionEntranceTrigger: event.target
+                    .value as CanvasSection["sectionEntranceTrigger"],
+                })
+              }
+            >
+              <option value="scroll">Saat digulir ke layar (scroll-trigger)</option>
+              <option value="load">Langsung saat dibuka</option>
+            </select>
+          </label>
+          <div className="two-inputs">
+            <label className="range-field">
+              <span className="range-head">
+                Durasi<b>{((section.sectionEntranceDuration ?? 900) / 1000).toFixed(1)}s</b>
+              </span>
+              <input
+                type="range"
+                min={200}
+                max={4000}
+                step={100}
+                value={section.sectionEntranceDuration ?? 900}
+                onChange={(event) =>
+                  update({ sectionEntranceDuration: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label className="range-field">
+              <span className="range-head">
+                Delay<b>{((section.sectionEntranceDelay ?? 0) / 1000).toFixed(1)}s</b>
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={3000}
+                step={100}
+                value={section.sectionEntranceDelay ?? 0}
+                onChange={(event) =>
+                  update({ sectionEntranceDelay: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+          <label>
+            Easing
+            <select
+              value={section.sectionEntranceEasing || "ease-out"}
+              onChange={(event) =>
+                update({
+                  sectionEntranceEasing: event.target
+                    .value as CanvasSection["sectionEntranceEasing"],
+                })
+              }
+            >
+              <option value="ease-out">Halus melambat (ease-out)</option>
+              <option value="ease">Standar (ease)</option>
+              <option value="ease-in-out">Halus dua arah</option>
+              <option value="linear">Linear</option>
+              <option value="spring">Pegas (spring)</option>
+            </select>
+          </label>
+          <button type="button" className="replay-btn" onClick={replay}>
+            <Play size={15} /> Putar ulang animasi canvas
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 /** TC-239 — live motion untuk elemen layer 2: image, box/kolom putih,
  *  header, dan text masing-masing bisa diberi gerakan berulang sendiri. */
@@ -18968,7 +19639,9 @@ function SectionDecorationEditor({
         terus-menerus. Posisinya tetap menempel ke titik tambat itu berapa pun
         ukurannya; gunakan <strong>Geser X/Y</strong> (ketik angka atau tombol
         panah) untuk memindahkannya ke mana saja di canvas, termasuk canvas
-        tinggi berisi banyak fitur.
+        tinggi berisi banyak fitur. <strong>Langsung di canvas:</strong>{" "}
+        selama canvas ini yang dipilih, ornamen bisa di-drag untuk digeser dan
+        pojok kanan bawahnya ditarik untuk mengubah ukuran.
       </div>
       {items.map((item, index) => (
         <div className="extra-text-row" key={item.id}>
@@ -19566,7 +20239,7 @@ function LayerImageUpload({
         <Upload size={16} />
         <span>
           <strong>{busy ? "Mengunggah..." : label}</strong>
-          <small>Ambil dari komputer (PNG transparan didukung), maksimal 2 MB.</small>
+          <small>Ambil dari komputer (PNG transparan didukung). Di atas 4 MB dikompres otomatis.</small>
         </span>
       </button>
       {layer.url && (
@@ -19775,16 +20448,81 @@ function BackgroundLayerEditor({
       {layers.map((layer, index) => (
         <div className="extra-text-row" key={layer.id}>
           <div className="form-spec-head">
-            <span>Layer {index + 1}</span>
-            <button
-              onClick={() =>
-                commit((current) =>
-                  current.filter((item) => item.id !== layer.id),
-                )
-              }
-            >
-              <Trash2 size={12} />
-            </button>
+            <span>Layer {index + 2}</span>
+            <span className="layer-head-actions">
+              {/* QA16 TC-367 — duplikat layer seperti ornamen. */}
+              <button
+                type="button"
+                title="Duplikat layer"
+                aria-label="Duplikat layer"
+                onClick={() =>
+                  commit((current) => {
+                    const at = current.findIndex((item) => item.id === layer.id);
+                    const copy = { ...current[at], id: uid("bglayer") };
+                    const next = [...current];
+                    next.splice(at + 1, 0, copy);
+                    return next;
+                  })
+                }
+              >
+                <Copy size={12} />
+              </button>
+              <button
+                type="button"
+                title="Hapus layer"
+                aria-label="Hapus layer"
+                onClick={() =>
+                  commit((current) =>
+                    current.filter((item) => item.id !== layer.id),
+                  )
+                }
+              >
+                <Trash2 size={12} />
+              </button>
+            </span>
+          </div>
+          {/* QA16 TC-368 — urutan lapisan atas-bawah seperti ornamen.
+              Layer terakhir digambar paling atas. */}
+          <div className="deco-order" role="group" aria-label="Urutan layer">
+            <span>Urutan layer</span>
+            {(
+              [
+                ["front", ChevronsUp, "Paling depan"],
+                ["forward", ChevronUp, "Maju"],
+                ["backward", ChevronDown, "Mundur"],
+                ["back", ChevronsDown, "Paling belakang"],
+              ] as const
+            ).map(([move, Icon, label]) => (
+              <button
+                key={move}
+                type="button"
+                disabled={
+                  ((move === "front" || move === "forward") &&
+                    index === layers.length - 1) ||
+                  ((move === "back" || move === "backward") && index === 0)
+                }
+                onClick={() =>
+                  commit((current) => {
+                    const at = current.findIndex((item) => item.id === layer.id);
+                    if (at < 0) return current;
+                    const list = [...current];
+                    const [item] = list.splice(at, 1);
+                    const target =
+                      move === "front"
+                        ? list.length
+                        : move === "back"
+                          ? 0
+                          : move === "forward"
+                            ? at + 1
+                            : at - 1;
+                    list.splice(Math.max(0, Math.min(list.length, target)), 0, item);
+                    return list;
+                  })
+                }
+              >
+                <Icon size={13} /> {label}
+              </button>
+            ))}
           </div>
           {/* Revisi: gambar layer dapat diunggah dari komputer, tidak hanya URL. */}
           <LayerImageUpload
@@ -20125,7 +20863,7 @@ function BackgroundSlidesEditor({
           <strong>
             {busy > 0 ? `Mengunggah ${busy} foto…` : "Tambah foto slideshow"}
           </strong>
-          <small>Bisa pilih beberapa foto sekaligus · maksimal 2 MB per foto</small>
+          <small>Bisa pilih beberapa foto sekaligus · di atas 2 MB dikompres otomatis</small>
         </span>
       </button>
       {total >= 2 && (
@@ -20177,7 +20915,16 @@ function SectionInspector({
   backgroundGlobalOn = false,
   isPrimaryCanvas = true,
   onFollowAspectAll,
+  rawSection,
+  uploadBackgroundSlot,
+  clearMobileBackground,
 }: {
+  rawSection?: CanvasSection;
+  uploadBackgroundSlot?: (
+    file: File | undefined,
+    slot: "desktop" | "mobile",
+  ) => Promise<void>;
+  clearMobileBackground?: () => void;
   section: CanvasSection;
   tab: InspectorTab;
   update: (patch: Partial<CanvasSection>) => void;
@@ -20202,6 +20949,8 @@ function SectionInspector({
   onFollowAspectAll?: (on: boolean) => void;
 }) {
   const backgroundVideoInput = useRef<HTMLInputElement>(null);
+  const slotDesktopInput = useRef<HTMLInputElement>(null);
+  const slotMobileInput = useRef<HTMLInputElement>(null);
   if (tab === "content")
     return (
       <div className="inspector-group">
@@ -20264,6 +21013,66 @@ function SectionInspector({
             ))}
           </div>
         </label>
+        {/* QA16 TC-380 — simbol penghubung antar 2 kolom (mempelai). */}
+        {section.columns.length === 2 && (
+          <div className="desktop-side-style">
+            <span className="desktop-side-style-head">Simbol penghubung kolom</span>
+            <div className="two-inputs">
+              <label>
+                Simbol
+                <select
+                  value={section.columnConnector || ""}
+                  onChange={(event) =>
+                    update({ columnConnector: event.target.value || undefined })
+                  }
+                >
+                  <option value="">Tanpa simbol</option>
+                  <option value="&">&amp;</option>
+                  <option value="♥">♥</option>
+                  <option value="+">+</option>
+                  <option value="×">×</option>
+                  <option value="dan">dan</option>
+                </select>
+              </label>
+              <label>
+                Warna
+                <ColorInput
+                  value={section.columnConnectorColor}
+                  fallback="#c9a45c"
+                  onChange={(next) => update({ columnConnectorColor: next })}
+                />
+              </label>
+            </div>
+            {section.columnConnector && (
+              <>
+                <label className="range-field">
+                  <span className="range-head">
+                    Ukuran<b>{section.columnConnectorSize || 48}px</b>
+                  </span>
+                  <input
+                    type="range"
+                    min={16}
+                    max={160}
+                    value={section.columnConnectorSize || 48}
+                    onChange={(event) =>
+                      update({ columnConnectorSize: Number(event.target.value) })
+                    }
+                  />
+                </label>
+                <label>
+                  Font
+                  <FontSelect
+                    allowInherit
+                    value={section.columnConnectorFont}
+                    onChange={(value) =>
+                      update({ columnConnectorFont: value || undefined })
+                    }
+                  />
+                </label>
+              </>
+            )}
+          </div>
+        )}
         {/* QA 15 TC-339/340 — posisi vertikal layout kolom + geser manual. */}
         <label>
           Posisi vertikal kolom
@@ -20387,9 +21196,68 @@ function SectionInspector({
               <Upload size={18} />
               <span>
                 <strong>Upload Gambar Layer 1</strong>
-                <small>Gambar/GIF maksimal 4 MB</small>
+                <small>Untuk perangkat yang sedang diedit · di atas 8 MB dikompres otomatis</small>
               </span>
             </button>
+            {/* QA16 TC-374 — slot terpisah Desktop 16:9 & Mobile 9:16. */}
+            {uploadBackgroundSlot && rawSection && (
+              <div className="bg-device-slots">
+                <input
+                  ref={slotDesktopInput}
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    void uploadBackgroundSlot(file, "desktop");
+                  }}
+                />
+                <input
+                  ref={slotMobileInput}
+                  hidden
+                  type="file"
+                  accept="image/*"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    event.target.value = "";
+                    void uploadBackgroundSlot(file, "mobile");
+                  }}
+                />
+                {(
+                  [
+                    ["desktop", "Desktop", "Landscape 16:9", rawSection.backgroundUrl, slotDesktopInput],
+                    ["mobile", "Mobile", "Portrait 9:16", rawSection.mobile?.backgroundUrl, slotMobileInput],
+                  ] as const
+                ).map(([slot, label, ratio, url, ref]) => (
+                  <div key={slot} className={`bg-device-slot slot-${slot}`}>
+                    <button
+                      type="button"
+                      className="bg-device-thumb"
+                      style={url ? { backgroundImage: `url(${assetUrl(url)})` } : undefined}
+                      onClick={() => ref.current?.click()}
+                      title={`Upload background ${label}`}
+                    >
+                      {!url && <Upload size={16} />}
+                    </button>
+                    <strong>{label}</strong>
+                    <small>{ratio}</small>
+                    <small className="bg-device-state">
+                      {url
+                        ? "Terpasang"
+                        : slot === "mobile"
+                          ? "Kosong · ikut desktop"
+                          : "Kosong"}
+                    </small>
+                    {slot === "mobile" && url && clearMobileBackground && (
+                      <button type="button" className="bg-device-clear" onClick={clearMobileBackground}>
+                        <Trash2 size={12} /> Hapus
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
             <button
               className="upload-control layer-one-video"
               onClick={() => backgroundVideoInput.current?.click()}
@@ -20598,6 +21466,7 @@ function SectionInspector({
           <span>Animasi, spacing, dan height</span>
         </div>
       </div>
+      <SectionEntranceControls section={section} update={update} />
       {/* QA TC-139: animasi khusus untuk layer background tumpang tindih,
           terpisah dari animasi isi section. */}
       <LoopEffectControls
@@ -20628,6 +21497,48 @@ function SectionInspector({
         loopSpeed={section.loopSpeed}
         onChange={update}
       />
+      {/* QA16 TC-379 — tata letak desktop per canvas (berlaku saat tata
+          letak desktop global "Penuh"). */}
+      <div className="loop-effect-controls">
+        <div className="group-heading">
+          <strong>Tata letak desktop canvas ini</strong>
+        </div>
+        <div className="segmented-control" role="group" aria-label="Tata letak desktop canvas">
+          <button
+            className={section.sectionDesktopLayout !== "column" ? "active" : ""}
+            onClick={() => updateShared({ sectionDesktopLayout: undefined })}
+          >
+            Ikut global
+          </button>
+          <button
+            className={section.sectionDesktopLayout === "column" ? "active" : ""}
+            onClick={() => updateShared({ sectionDesktopLayout: "column" })}
+          >
+            Kolom (ala serein)
+          </button>
+        </div>
+        {section.sectionDesktopLayout === "column" && (
+          <label className="range-field">
+            <span className="range-head">
+              Lebar kolom<b>{section.sectionDesktopWidth || 480}px</b>
+            </span>
+            <input
+              type="range"
+              min={340}
+              max={900}
+              step={10}
+              value={section.sectionDesktopWidth || 480}
+              onChange={(event) =>
+                updateShared({ sectionDesktopWidth: Number(event.target.value) })
+              }
+            />
+          </label>
+        )}
+        <div className="layout-help">
+          Hanya berlaku di desktop saat Tata letak desktop (Page Structure) =
+          Penuh. Pada mode Kolom seluruh undangan sudah tampil dalam kolom.
+        </div>
+      </div>
       <label>
         Horizontal padding <span>{section.paddingX ?? 32}px</span>
         <input
@@ -20659,7 +21570,7 @@ function SectionInspector({
           <Rows3 size={14} />
           <span>
             <strong>Tempel antar fitur</strong>
-            <small>Fitur disusun atas-bawah tanpa jarak, menyatu.</small>
+            <small>Fitur disusun atas-bawah tanpa jarak. Urutan tetap bisa di-drag di Page Structure; posisi tiap fitur bisa digeser di Style › Geser atas / bawah.</small>
           </span>
         </div>
         <button
@@ -21570,10 +22481,71 @@ function DesktopSideEditor({
               <option value="center">Tengah</option>
               <option value="top">Atas</option>
               <option value="bottom">Bawah</option>
+              <option value="custom">Kustom (geser X/Y)</option>
             </select>
           </label>
         </div>
       )}
+      {first.desktopSideOverlayUrl &&
+        first.desktopSideOverlayPosition === "custom" && (
+          <div className="two-inputs">
+            <label>
+              Posisi X layer 2<b>{first.desktopSideOverlayX ?? 50}%</b>
+              <input
+                type="range"
+                min={-20}
+                max={120}
+                value={first.desktopSideOverlayX ?? 50}
+                onChange={(event) =>
+                  update({ desktopSideOverlayX: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              Posisi Y layer 2<b>{first.desktopSideOverlayY ?? 50}%</b>
+              <input
+                type="range"
+                min={-20}
+                max={120}
+                value={first.desktopSideOverlayY ?? 50}
+                onChange={(event) =>
+                  update({ desktopSideOverlayY: Number(event.target.value) })
+                }
+              />
+            </label>
+          </div>
+        )}
+      {/* QA16 TC-382 — posisi blok header & supporting text. */}
+      <div className="two-inputs">
+        <label>
+          Posisi X teks<b>{first.desktopSideTextX ?? 50}%</b>
+          <input
+            type="range"
+            min={5}
+            max={95}
+            value={first.desktopSideTextX ?? 50}
+            onChange={(event) =>
+              update({ desktopSideTextX: Number(event.target.value) })
+            }
+          />
+        </label>
+        <label>
+          Posisi Y teks<b>{first.desktopSideTextY ?? 50}%</b>
+          <input
+            type="range"
+            min={5}
+            max={95}
+            value={first.desktopSideTextY ?? 50}
+            onChange={(event) =>
+              update({ desktopSideTextY: Number(event.target.value) })
+            }
+          />
+        </label>
+      </div>
+      <p className="layout-help">
+        Posisi & ukuran teks dihitung dari lebar area 70%, jadi tampil sama
+        di layar 1366, 1440, 1920 px maupun saat jendela diubah.
+      </p>
       <label>
         Warna teks
         <ColorInput value={first.desktopSideTextColor} fallback="#ffffff" onChange={(next) => update({ desktopSideTextColor: next })} />
@@ -21629,6 +22601,21 @@ function DesktopSideEditor({
             <i />
           </button>
         </div>
+        <TextStyleToggles
+          label="Header"
+          italic={first.desktopSideTitleItalic}
+          underline={first.desktopSideTitleUnderline}
+          onChange={(patch) =>
+            update({
+              ...(patch.italic !== undefined
+                ? { desktopSideTitleItalic: patch.italic }
+                : {}),
+              ...(patch.underline !== undefined
+                ? { desktopSideTitleUnderline: patch.underline }
+                : {}),
+            })
+          }
+        />
         <span className="desktop-side-style-head">Gaya supporting text</span>
         <label>
           Font supporting text
@@ -21662,7 +22649,27 @@ function DesktopSideEditor({
             onChange={(next) => update({ desktopSideBodyColor: next })}
           />
         </label>
+        <TextStyleToggles
+          label="Supporting text"
+          bold={first.desktopSideBodyBold}
+          italic={first.desktopSideBodyItalic}
+          underline={first.desktopSideBodyUnderline}
+          onChange={(patch) =>
+            update({
+              ...(patch.bold !== undefined
+                ? { desktopSideBodyBold: patch.bold }
+                : {}),
+              ...(patch.italic !== undefined
+                ? { desktopSideBodyItalic: patch.italic }
+                : {}),
+              ...(patch.underline !== undefined
+                ? { desktopSideBodyUnderline: patch.underline }
+                : {}),
+            })
+          }
+        />
       </div>
+      <DesktopSideExtrasEditor first={first} update={update} />
       <input
         ref={slideInput}
         hidden
@@ -21975,7 +22982,8 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
     !first.desktopSideVideoUrl &&
     !hasText &&
     !first.desktopSideOverlayUrl &&
-    !(first.desktopSideDecorations || []).length
+    !(first.desktopSideDecorations || []).length &&
+    !(first.desktopSideExtras || []).some((extra) => extra.text)
   )
     return null;
   return (
@@ -21992,7 +23000,17 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
             className={`desktop-side-overlay at-${first.desktopSideOverlayPosition || "center"}`}
             src={assetUrl(first.desktopSideOverlayUrl)}
             alt=""
-            style={{ width: `${first.desktopSideOverlaySize || 70}%` }}
+            style={{
+              width: `${first.desktopSideOverlaySize || 70}%`,
+              ...(first.desktopSideOverlayPosition === "custom"
+                ? {
+                    left: `${first.desktopSideOverlayX ?? 50}%`,
+                    top: `${first.desktopSideOverlayY ?? 50}%`,
+                    bottom: "auto",
+                    transform: "translate(-50%, -50%)",
+                  }
+                : {}),
+            }}
           />
         )}
         {first.desktopSideVideoUrl ? (
@@ -22020,17 +23038,19 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
         {hasText && (
           <div
             className={`desktop-side-text side-style-${sideStyle} ${slides.length || first.desktopSideVideoUrl ? "on-media" : ""}`}
-            style={
-              first.desktopSideTextColor
+            style={{
+              ...(first.desktopSideTextColor
                 ? { color: first.desktopSideTextColor }
-                : undefined
-            }
+                : {}),
+              left: `${first.desktopSideTextX ?? 50}%`,
+              top: `${first.desktopSideTextY ?? 50}%`,
+            }}
           >
             {first.desktopSideTitle && (
               <h2
                 style={{
                   fontFamily: first.desktopSideTitleFont || undefined,
-                  fontSize: first.desktopSideTitleSize || undefined,
+                  fontSize: sideFont(first.desktopSideTitleSize || 64),
                   color: first.desktopSideTitleColor || undefined,
                   fontWeight:
                     first.desktopSideTitleBold === undefined
@@ -22038,6 +23058,10 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
                       : first.desktopSideTitleBold
                         ? 700
                         : 400,
+                  fontStyle: first.desktopSideTitleItalic ? "italic" : undefined,
+                  textDecoration: first.desktopSideTitleUnderline
+                    ? "underline"
+                    : undefined,
                 }}
               >
                 {sideStyle === "monogram" && initials.length >= 2 && (
@@ -22063,8 +23087,13 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
               <p
                 style={{
                   fontFamily: first.desktopSideBodyFont || undefined,
-                  fontSize: first.desktopSideBodySize || undefined,
+                  fontSize: sideFont(first.desktopSideBodySize || 17),
                   color: first.desktopSideBodyColor || undefined,
+                  fontWeight: first.desktopSideBodyBold ? 700 : undefined,
+                  fontStyle: first.desktopSideBodyItalic ? "italic" : undefined,
+                  textDecoration: first.desktopSideBodyUnderline
+                    ? "underline"
+                    : undefined,
                 }}
               >
                 {first.desktopSideBody}
@@ -22072,7 +23101,181 @@ function DesktopSidePanel({ first }: { first: CanvasSection }) {
             )}
           </div>
         )}
+        {(first.desktopSideExtras || []).map((extra) =>
+          extra.text ? (
+            <div
+              key={extra.id}
+              className={`desktop-side-extra kind-${extra.kind}`}
+              style={{
+                left: `${extra.x}%`,
+                top: `${extra.y}%`,
+                fontFamily: extra.font || undefined,
+                fontSize: sideFont(extra.size || (extra.kind === "heading" ? 40 : 16)),
+                color: extra.color || first.desktopSideTextColor || undefined,
+                fontWeight:
+                  extra.bold === undefined ? undefined : extra.bold ? 700 : 400,
+                fontStyle: extra.italic ? "italic" : undefined,
+                textDecoration: extra.underline ? "underline" : undefined,
+              }}
+            >
+              {extra.text}
+            </div>
+          ) : null,
+        )}
       </div>
+    </div>
+  );
+}
+
+/** Tombol B / I / U kecil (QA16 TC-369/392). */
+function TextStyleToggles({
+  label,
+  bold,
+  italic,
+  underline,
+  onChange,
+}: {
+  label: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  onChange: (patch: { bold?: boolean; italic?: boolean; underline?: boolean }) => void;
+}) {
+  return (
+    <div className="text-style-toggles" role="group" aria-label={`Gaya ${label}`}>
+      <span>{label}</span>
+      {bold !== undefined || label === "Supporting text" ? (
+        <button
+          type="button"
+          className={bold ? "active" : ""}
+          aria-pressed={Boolean(bold)}
+          title={`${label} tebal`}
+          onClick={() => onChange({ bold: !bold })}
+        >
+          <Bold size={13} />
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className={italic ? "active" : ""}
+        aria-pressed={Boolean(italic)}
+        title={`${label} miring (italic)`}
+        onClick={() => onChange({ italic: !italic })}
+      >
+        <Italic size={13} />
+      </button>
+      <button
+        type="button"
+        className={underline ? "active" : ""}
+        aria-pressed={Boolean(underline)}
+        title={`${label} garis bawah`}
+        onClick={() => onChange({ underline: !underline })}
+      >
+        <Underline size={13} />
+      </button>
+    </div>
+  );
+}
+
+/** QA16 TC-391 — header / teks tambahan pada sisi visual 70%. */
+function DesktopSideExtrasEditor({
+  first,
+  update,
+}: {
+  first: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+}) {
+  const extras = first.desktopSideExtras || [];
+  const commit = (next: DesktopSideExtra[]) => update({ desktopSideExtras: next });
+  const patch = (id: string, value: Partial<DesktopSideExtra>) =>
+    commit(extras.map((item) => (item.id === id ? { ...item, ...value } : item)));
+  return (
+    <div className="desktop-side-style">
+      <span className="desktop-side-style-head">Header / teks tambahan</span>
+      <div className="nudge-buttons">
+        <button
+          type="button"
+          onClick={() =>
+            commit([
+              ...extras,
+              { id: uid("sx"), kind: "heading", text: "Save the Date", x: 50, y: 20, size: 40 },
+            ])
+          }
+        >
+          <Plus size={13} /> Tambah header
+        </button>
+        <button
+          type="button"
+          onClick={() =>
+            commit([
+              ...extras,
+              { id: uid("sx"), kind: "text", text: "Teks tambahan", x: 50, y: 80, size: 16 },
+            ])
+          }
+        >
+          <Plus size={13} /> Tambah teks
+        </button>
+      </div>
+      {extras.map((item, index) => (
+        <div className="extra-text-row" key={item.id}>
+          <div className="form-spec-head">
+            <span>
+              {item.kind === "heading" ? "Header" : "Teks"} {index + 1}
+            </span>
+            <button
+              type="button"
+              title="Hapus"
+              onClick={() => commit(extras.filter((x) => x.id !== item.id))}
+            >
+              <Trash2 size={12} />
+            </button>
+          </div>
+          <textarea
+            rows={item.kind === "heading" ? 1 : 2}
+            value={item.text}
+            onChange={(event) => patch(item.id, { text: event.target.value })}
+          />
+          <div className="two-inputs">
+            <label>
+              X<b>{item.x}%</b>
+              <input type="range" min={0} max={100} value={item.x} onChange={(event) => patch(item.id, { x: Number(event.target.value) })} />
+            </label>
+            <label>
+              Y<b>{item.y}%</b>
+              <input type="range" min={0} max={100} value={item.y} onChange={(event) => patch(item.id, { y: Number(event.target.value) })} />
+            </label>
+          </div>
+          <label className="range-field">
+            <span className="range-head">
+              Ukuran<b>{item.size || (item.kind === "heading" ? 40 : 16)}px</b>
+            </span>
+            <input
+              type="range"
+              min={10}
+              max={140}
+              value={item.size || (item.kind === "heading" ? 40 : 16)}
+              onChange={(event) => patch(item.id, { size: Number(event.target.value) })}
+            />
+          </label>
+          <div className="two-inputs">
+            <label>
+              Font
+              <FontSelect allowInherit value={item.font} onChange={(value) => patch(item.id, { font: value || undefined })} />
+            </label>
+            <label>
+              Warna
+              <ColorInput value={item.color} fallback={first.desktopSideTextColor || "#ffffff"} onChange={(color) => patch(item.id, { color })} />
+            </label>
+          </div>
+          <TextStyleToggles
+            label="Teks"
+            bold={item.bold ?? false}
+            italic={item.italic}
+            underline={item.underline}
+            onChange={(value) => patch(item.id, value)}
+          />
+        </div>
+      ))}
     </div>
   );
 }
@@ -22121,6 +23324,68 @@ function DesktopLayoutPanel({
   };
   return (
     <div className="desktop-layout-panel">
+      {/* QA16 TC-379 — navbar bawaan undangan bisa disembunyikan/diubah. */}
+      <div className="desktop-side-style">
+        <span className="desktop-side-style-head">Navbar undangan</span>
+        <div className="segmented-control" role="group" aria-label="Navbar undangan">
+          {(
+            [
+              ["show", "Tampil"],
+              ["transparent", "Transparan"],
+              ["hide", "Sembunyikan"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              className={(first.siteNavMode || "show") === value ? "active" : ""}
+              aria-pressed={(first.siteNavMode || "show") === value}
+              onClick={() => update({ siteNavMode: value })}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        {(first.siteNavMode || "show") !== "hide" && (
+          <>
+            <label>
+              Menu (pisahkan dengan koma)
+              <input
+                value={first.siteNavLinks ?? "Our Story, Event, Gallery, RSVP"}
+                onChange={(event) => update({ siteNavLinks: event.target.value })}
+              />
+            </label>
+            <div className="two-inputs">
+              <label>
+                Warna latar
+                <ColorInput
+                  value={first.siteNavBackground}
+                  fallback="#ffffff"
+                  noneValue="transparent"
+                  onChange={(next) => update({ siteNavBackground: next })}
+                />
+              </label>
+              <label>
+                Warna teks
+                <ColorInput
+                  value={first.siteNavTextColor}
+                  fallback="#567067"
+                  onChange={(next) => update({ siteNavTextColor: next })}
+                />
+              </label>
+            </div>
+            <label className="check-row">
+              <input
+                type="checkbox"
+                checked={first.siteNavShowBrand !== false}
+                onChange={(event) =>
+                  update({ siteNavShowBrand: event.target.checked ? undefined : false })
+                }
+              />
+              Tampilkan logo ikrarku di navbar
+            </label>
+          </>
+        )}
+      </div>
       <div className="setting-row compact">
         <div>
           <Monitor size={16} />
@@ -22640,7 +23905,34 @@ function WeddingCanvasBody({
       { threshold: [0, 0.16], rootMargin: "0px 0px -6% 0px" },
     );
     targets.forEach((node) => observer.observe(node));
-    return () => observer.disconnect();
+    // QA16 TC-371 — animasi masuk per canvas (scroll-trigger / saat dibuka).
+    const sectionNodes = Array.from(
+      root.querySelectorAll(".canvas-section.sec-in"),
+    ) as HTMLElement[];
+    sectionNodes
+      .filter((node) => node.classList.contains("sec-load"))
+      .forEach((node) => node.classList.add("sec-revealed"));
+    const sectionObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("sec-revealed");
+            sectionObserver.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 },
+    );
+    sectionNodes
+      .filter((node) => !node.classList.contains("sec-load"))
+      .forEach((node) => {
+        node.classList.add("sec-await");
+        sectionObserver.observe(node);
+      });
+    return () => {
+      observer.disconnect();
+      sectionObserver.disconnect();
+    };
   }, [editable, thumbnail, opened, sections, animationNonce]);
 
   useEffect(() => {
@@ -22799,7 +24091,13 @@ function WeddingCanvasBody({
   }, [coverLockedNow, onCoverLockChange]);
 
   if (page === "rsvp-page")
-    return <RsvpPage guests={guests} addGuest={addGuest} />;
+    return (
+      <RsvpPage
+        guests={guests}
+        addGuest={addGuest}
+        config={sections[0]?.rsvpPage}
+      />
+    );
   // Revisi 27 Okt — layar Buka Undangan = Canvas cover apa adanya. Dulu
   // dirender oleh komponen terpisah (InvitationCover) dengan susunan sendiri:
   // urutan lapisan, ukuran, dan posisi teks berbeda dari canvas editor (teks
@@ -22988,14 +24286,44 @@ function WeddingCanvasBody({
       <CoverOpenContext value={lockedCover ? openCover : null}>
       <SoundControlContext value={soundControl}>
       {soundVpos !== "bottom" && soundNode}
-      {!lockedCover && (
-      <nav ref={siteNavRef}>
-        <Brand />
+      {!lockedCover && (sections[0]?.siteNavMode || "show") !== "hide" && (
+      <nav
+        ref={siteNavRef}
+        className={`site-nav nav-${sections[0]?.siteNavMode || "show"}`}
+        style={
+          {
+            ...(sections[0]?.siteNavBackground
+              ? { background: sections[0].siteNavBackground }
+              : {}),
+            ...(sections[0]?.siteNavTextColor
+              ? { "--site-nav-color": sections[0].siteNavTextColor }
+              : {}),
+          } as React.CSSProperties
+        }
+      >
+        {sections[0]?.siteNavShowBrand !== false ? <Brand /> : <span />}
         <div>
-          <a>Our Story</a>
-          <a>Event</a>
-          <a>Gallery</a>
-          <a>RSVP</a>
+          {(sections[0]?.siteNavLinks ?? "Our Story, Event, Gallery, RSVP")
+            .split(",")
+            .map((label) => label.trim())
+            .filter(Boolean)
+            .map((label) => (
+              <a
+                key={label}
+                onClick={() => {
+                  // Tautan menu menggulir ke canvas yang namanya cocok.
+                  const target = sections.find((item) =>
+                    (item.name || "").toLowerCase().includes(label.toLowerCase()),
+                  );
+                  if (!target) return;
+                  revealRootRef.current
+                    ?.querySelector(`[data-section-id="${target.id}"]`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              >
+                {label}
+              </a>
+            ))}
         </div>
       </nav>
       )}
@@ -23082,7 +24410,7 @@ function WeddingCanvasBody({
           <section
             key={section.id}
             data-section-id={section.id}
-            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect ? " follow-aspect" : ""}${decorationSectionClasses(section.decorations)}`}
+            className={`canvas-section loop-${section.loopEffect || "none"} layout-${section.layoutMode} ${editable && selectedSectionId === section.id ? "selected-canvas" : ""}${(section.paddingX ?? 32) === 0 ? " pad-x-0" : ""}${section.paddingY === 0 ? " pad-y-0" : ""}${section.stackFeatures ? " stack-features" : ""}${section.backgroundFollowAspect && section.backgroundAspect ? " follow-aspect" : ""}${decorationSectionClasses(section.decorations)}${section.sectionEntrance && section.sectionEntrance !== "none" ? ` sec-in sec-in-${section.sectionEntrance}${section.sectionEntranceTrigger === "load" ? " sec-load" : ""}` : ""}${section.sectionDesktopLayout === "column" ? " sec-desktop-column" : ""}${editable && selectedSectionId === section.id && !selectedFeatureId ? " deco-edit" : ""}`}
             onDragOver={(event) => {
               if (
                 editable &&
@@ -23109,6 +24437,26 @@ function WeddingCanvasBody({
             }}
             style={
               {
+                ...(section.sectionDesktopLayout === "column"
+                  ? { "--sec-col-w": `${section.sectionDesktopWidth || 480}px` }
+                  : {}),
+                ...(isDarkPaint(
+                  section.backgroundGradientEnabled
+                    ? section.backgroundGradientFrom || section.backgroundColor
+                    : section.backgroundColor,
+                )
+                  ? { "--auto-text": "#fbf6ec" }
+                  : {}),
+                ...(section.sectionEntrance && section.sectionEntrance !== "none"
+                  ? {
+                      "--sec-dur": `${section.sectionEntranceDuration ?? 900}ms`,
+                      "--sec-delay": `${section.sectionEntranceDelay ?? 0}ms`,
+                      "--sec-ease":
+                        section.sectionEntranceEasing === "spring"
+                          ? "cubic-bezier(.34,1.56,.64,1)"
+                          : section.sectionEntranceEasing || "ease-out",
+                    }
+                  : {}),
                 background: (() => {
                   // TC-231 — transparansi warna/gradient background canvas.
                   const alpha =
@@ -23198,7 +24546,19 @@ function WeddingCanvasBody({
                 <BackgroundSlideshow section={section} />
               )}
             {/* Ornamen pojok dengan gerak berulang. */}
-            <SectionDecorations decorations={section.decorations} />
+            <SectionDecorations
+              decorations={section.decorations}
+              onPatch={
+                editable && updateSectionLayout
+                  ? (id, patch) =>
+                      updateSectionLayout(section.id, {
+                        decorations: (section.decorations || []).map((item) =>
+                          item.id === id ? { ...item, ...patch } : item,
+                        ),
+                      })
+                  : undefined
+              }
+            />
             {/* QA TC-108: layer background tambahan di atas background utama. */}
             {(section.backgroundLayers || []).map((layer, layerIndex) => (
               <div
@@ -23354,6 +24714,26 @@ function WeddingCanvasBody({
                   : {}),
               }}
             >
+              {/* QA16 TC-380 — simbol penghubung (mis. "&") di antara dua
+                  kolom mempelai. */}
+              {section.columns.length === 2 && section.columnConnector && (
+                <span
+                  className="column-connector"
+                  aria-hidden
+                  style={{
+                    fontSize: section.columnConnectorSize || 48,
+                    color: section.columnConnectorColor || undefined,
+                    fontFamily: section.columnConnectorFont
+                      ? `"${section.columnConnectorFont}"`
+                      : undefined,
+                    left: section.columnWidths?.length === 2
+                      ? `${(section.columnWidths[0] / (section.columnWidths[0] + section.columnWidths[1])) * 100}%`
+                      : "50%",
+                  }}
+                >
+                  {section.columnConnector}
+                </span>
+              )}
               {section.columns.map((column, columnIndex) => (
                 <div
                   key={column.id}
@@ -23563,14 +24943,65 @@ function decorationCutSide(
   return null;
 }
 
+/** QA16 TC-377 — ornamen bisa digeser (drag) & diubah ukurannya (pegangan
+ *  pojok kanan bawah) langsung di canvas editor. Nilai yang ditulis sama
+ *  dengan slider panel ornamen (offsetX/offsetY/size). */
+function startDecorationDrag(
+  event: React.PointerEvent,
+  decoration: SectionDecoration,
+  mode: "move" | "resize",
+  onPatch: (patch: Partial<SectionDecoration>) => void,
+) {
+  event.preventDefault();
+  event.stopPropagation();
+  const target = event.currentTarget as HTMLElement;
+  const host = target.closest(".section-decoration") as HTMLElement | null;
+  // Skala zoom preview editor: lebar tampil / lebar layout.
+  const scale = host
+    ? host.getBoundingClientRect().width / Math.max(1, host.offsetWidth)
+    : 1;
+  const startX = event.clientX;
+  const startY = event.clientY;
+  const baseX = decoration.offsetX ?? 0;
+  const baseY = decoration.offsetY ?? 0;
+  const baseSize = decoration.size;
+  window.getSelection()?.removeAllRanges();
+  document.body.classList.add("deco-dragging");
+  const move = (e: PointerEvent) => {
+    const dx = (e.clientX - startX) / Math.max(0.01, scale);
+    const dy = (e.clientY - startY) / Math.max(0.01, scale);
+    if (mode === "move")
+      onPatch({
+        offsetX: Math.round(Math.max(-600, Math.min(600, baseX + dx))),
+        offsetY: Math.round(Math.max(-600, Math.min(600, baseY + dy))),
+      });
+    else
+      onPatch({
+        size: Math.round(Math.max(24, Math.min(900, baseSize + Math.max(dx, dy)))),
+      });
+  };
+  const end = () => {
+    document.body.classList.remove("deco-dragging");
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", end);
+    window.removeEventListener("pointercancel", end);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", end);
+  window.addEventListener("pointercancel", end);
+}
+
 function SectionDecorations({
   decorations,
   pinned = false,
+  onPatch,
 }: {
   decorations?: SectionDecoration[];
   /** QA 13 TC-298 — true: hanya ornamen "tetap" (dirender di lapisan layar
    *  milik undangan); false: hanya ornamen biasa milik canvas. */
   pinned?: boolean;
+  /** Diisi hanya di editor: ornamen bisa di-drag & di-resize. */
+  onPatch?: (id: string, patch: Partial<SectionDecoration>) => void;
 }) {
   const sectionOverflows = (decorations || []).some((item) => item.overflow);
   return (
@@ -23582,7 +25013,16 @@ function SectionDecorations({
               const node = (
               <span
                 key={decoration.id}
-                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"} deco-${decoration.layer || "front"}${decoration.scrollMotion && decoration.scrollMotion !== "none" ? ` scroll-${decoration.scrollMotion}` : ""}${cutSide ? ` deco-cut-${cutSide}` : ""}`}
+                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"} deco-${decoration.layer || "front"}${decoration.scrollMotion && decoration.scrollMotion !== "none" ? ` scroll-${decoration.scrollMotion}` : ""}${cutSide ? ` deco-cut-${cutSide}` : ""}${onPatch ? " deco-editable" : ""}`}
+                onPointerDown={
+                  onPatch
+                    ? (event) =>
+                        startDecorationDrag(event, decoration, "move", (patch) =>
+                          onPatch(decoration.id, patch),
+                        )
+                    : undefined
+                }
+                title={onPatch ? "Pilih canvas, lalu drag untuk menggeser ornamen · tarik pojok kanan bawah untuk ubah ukuran" : undefined}
                 style={
                   {
                     width: decoration.size,
@@ -23631,6 +25071,16 @@ function SectionDecorations({
                   />
                 ) : (
                   <DecorGlyphIcon glyph={decoration.glyph} />
+                )}
+                {onPatch && (
+                  <i
+                    className="deco-resize-handle"
+                    onPointerDown={(event) =>
+                      startDecorationDrag(event, decoration, "resize", (patch) =>
+                        onPatch(decoration.id, patch),
+                      )
+                    }
+                  />
                 )}
               </span>
               );
@@ -23700,7 +25150,11 @@ function FeatureBlock({
     fontFamily: feature.fontFamily,
     textAlign: feature.align,
     lineHeight: feature.lineHeight,
-    color: feature.textColor || defaultFeatureStyle.textColor,
+    // QA16 TC-378 — warna bawaan (#154F40) tenggelam di canvas gelap; tanpa
+    // warna pilihan, teks memakai --auto-text yang diset canvas gelap.
+    color:
+      feature.textColor ||
+      `var(--auto-text, ${defaultFeatureStyle.textColor})`,
     background: (() => {
       const alpha =
         feature.backgroundOpacity !== undefined
@@ -23727,6 +25181,15 @@ function FeatureBlock({
     padding: feature.type === "invitation-cover" ? 0 : feature.padding,
     marginTop: feature.margin,
     marginBottom: feature.margin,
+    ...(feature.mediaRotation
+      ? ({ "--media-rotate": `${feature.mediaRotation}deg` } as React.CSSProperties)
+      : {}),
+    ...(feature.boxBorderWidth
+      ? {
+          border: `${feature.boxBorderWidth}px ${feature.boxBorderStyle || "solid"} ${feature.boxBorderColor || "#c9a45c"}`,
+        }
+      : {}),
+
     fontWeight: (feature.bodyBold ?? feature.bold) ? 700 : 400,
     // QA 13 TC-293/294 — teks di dalam kartu (nama di Greetings, nomor
     // rekening & alamat di Wedding Gift) dulu selalu tebal karena memakai
@@ -23750,8 +25213,19 @@ function FeatureBlock({
           "--title-weight": feature.titleBold ? 700 : 400,
         } as React.CSSProperties)
       : {}),
-    fontStyle: feature.italic ? "italic" : "normal",
-    textDecoration: feature.underline ? "underline" : "none",
+    fontStyle: (feature.bodyItalic ?? feature.italic) ? "italic" : "normal",
+    // Garis bawah diwariskan ke semua turunan, jadi dipasang per elemen
+    // (header / teks) lewat custom property, bukan di blok.
+    textDecoration: "none",
+    ...({
+      "--title-style": (feature.titleItalic ?? feature.italic) ? "italic" : "normal",
+      "--title-decoration": (feature.titleUnderline ?? feature.underline)
+        ? "underline"
+        : "none",
+      "--body-decoration": (feature.bodyUnderline ?? feature.underline)
+        ? "underline"
+        : "none",
+    } as React.CSSProperties),
     position: feature.freePosition ? "absolute" : "relative",
     ...designerStyle(feature),
     // QA 15 TC-340 — geser manual atas/bawah (fitur yang tidak bebas posisi).
@@ -23900,7 +25374,7 @@ function FeatureBlock({
         feature.freePosition && feature.boxHeight ? "true" : undefined
       }
 data-feature-id={feature.id}
-            className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} ${feature.motionSpeed && feature.motionSpeed !== "medium" ? `motion-${feature.motionSpeed}` : ""} ${hasCustomMotion(feature) ? "motion-custom" : ""} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${feature.frameShape && (feature.type === "image" || feature.type === "gallery") ? `has-frame frame-${feature.frameShape}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
+            className={`feature-block feature-${feature.type} object-${feature.objectAlign || "stretch"} fx-${feature.entranceEffect} trans-${feature.transition} ${feature.motionSpeed && feature.motionSpeed !== "medium" ? `motion-${feature.motionSpeed}` : ""} ${hasCustomMotion(feature) ? "motion-custom" : ""} effect-${feature.visualEffect || "none"} ${feature.backgroundGradientEnabled ? "has-gradient" : ""} ${feature.freePosition ? "free-positioned" : ""} ${feature.stackDetach ? "stack-detach" : ""} ${feature.hideDesktop ? "designer-hide-desktop" : ""} ${feature.hideMobile ? "designer-hide-mobile" : ""} ${feature.animateOnScroll === false ? "no-scroll-reveal" : ""} loop-${feature.loopEffect || "none"} ${selected ? "selected-feature" : ""} ${feature.backgroundImageUrl && feature.backgroundImageOpacity !== undefined && feature.backgroundImageOpacity < 100 ? "has-bg-fade" : ""} ${feature.titleFontFamily ? "has-title-font" : ""} ${feature.titleBold !== undefined ? "has-title-weight" : ""} ${(feature.bodyBold ?? feature.bold) !== undefined ? "has-body-weight" : ""} ${feature.imageFade && feature.imageFade !== "none" ? `img-fade-${feature.imageFade} ${feature.imageFadeColor && feature.imageFadeColor !== "transparent" ? "img-fade-color" : "img-fade-mask"}` : ""} ${feature.verticalPlacement ? `place-${feature.verticalPlacement}` : ""} ${(feature.type === "image" || feature.type === "gallery") && effectiveFrameShape(feature) !== "rect" ? `has-frame frame-${effectiveFrameShape(feature)}` : ""} ${feature.bodyFontFamily ? "has-body-font" : ""} ${elementMotionClasses(feature)}`}
       style={style}
       onAnimationEnd={(event) => {
         // Efek masuk selesai → animasi berulang (loop) boleh mulai.
@@ -25357,6 +26831,17 @@ function EventItemsList({
     >
       {items.map((item) => (
         <div className="event-item" key={item.id}>
+          {item.iconUrl && (
+            <img
+              className="event-item-icon"
+              src={assetUrl(item.iconUrl)}
+              alt=""
+              style={{
+                width: feature.eventIconSize || 32,
+                height: feature.eventIconSize || 32,
+              }}
+            />
+          )}
           <h3 className="event-item-name">{item.name}</h3>
           {(() => {
             // QA 15 TC-331 — format otomatis dari Tanggal & jam bila dipilih.
@@ -25446,9 +26931,14 @@ function EventItemsList({
 function EventItemsEditor({
   feature,
   update,
+  uploadIcon,
 }: {
   feature: Feature;
   update: (patch: Partial<Feature>) => void;
+  /** QA16 TC-380 — ikon custom per acara. */
+  uploadIcon?: (
+    file: File | undefined,
+  ) => Promise<{ url: string; key: string } | null>;
 }) {
   const items = feature.eventItems || [];
   const commit = (next: EventItem[]) => update({ eventItems: next });
@@ -25601,6 +27091,40 @@ function EventItemsEditor({
               onChange={(event) => patch(item.id, { name: event.target.value })}
             />
           </label>
+          {uploadIcon && (
+            <div className="event-icon-upload">
+              {item.iconUrl ? (
+                <img src={assetUrl(item.iconUrl)} alt="Ikon acara" />
+              ) : (
+                <span className="event-icon-placeholder">
+                  <ImageIcon size={14} />
+                </span>
+              )}
+              <label className="secondary-btn event-icon-btn">
+                <Upload size={13} /> {item.iconUrl ? "Ganti ikon" : "Upload ikon acara"}
+                <input
+                  hidden
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onClick={resetFileInput}
+                  onChange={async (event) => {
+                    const saved = await uploadIcon(event.target.files?.[0]);
+                    if (saved)
+                      patch(item.id, { iconUrl: saved.url, iconKey: saved.key });
+                  }}
+                />
+              </label>
+              {item.iconUrl && (
+                <button
+                  type="button"
+                  title="Hapus ikon"
+                  onClick={() => patch(item.id, { iconUrl: undefined, iconKey: undefined })}
+                >
+                  <Trash2 size={12} />
+                </button>
+              )}
+            </div>
+          )}
           <div className="two-inputs">
             <label>
               Tanggal (teks)
@@ -26001,18 +27525,60 @@ function MediaFadeEditor({
             key={value}
             type="button"
             role="radio"
-            aria-checked={(feature.frameShape || "rect") === value}
-            className={(feature.frameShape || "rect") === value ? "active" : ""}
+            aria-checked={effectiveFrameShape(feature) === value}
+            className={effectiveFrameShape(feature) === value ? "active" : ""}
             title={label}
-            onClick={() =>
-              update({ frameShape: value === "rect" ? undefined : value })
-            }
+            onClick={() => update(frameShapePatch(value, feature.imageFrame))}
           >
             <i className={`frame-swatch frame-shape-${value}`} />
             <small>{label}</small>
           </button>
         ))}
       </div>
+      {/* QA16 TC-384 — rotasi kanan/kiri foto. */}
+      <div className="group-heading">
+        <strong>Rotasi foto</strong>
+        <small>{feature.mediaRotation ?? 0}°</small>
+      </div>
+      <div className="nudge-buttons">
+        <button
+          type="button"
+          title="Putar ke kiri 90°"
+          onClick={() =>
+            update({ mediaRotation: (((feature.mediaRotation ?? 0) - 90 + 540) % 360) - 180 || undefined })
+          }
+        >
+          <RotateCcw size={13} /> Kiri 90°
+        </button>
+        <button
+          type="button"
+          title="Putar ke kanan 90°"
+          onClick={() =>
+            update({ mediaRotation: (((feature.mediaRotation ?? 0) + 90 + 540) % 360) - 180 || undefined })
+          }
+        >
+          <RotateCw size={13} /> Kanan 90°
+        </button>
+        {(feature.mediaRotation ?? 0) !== 0 && (
+          <button type="button" onClick={() => update({ mediaRotation: undefined })}>
+            Reset
+          </button>
+        )}
+      </div>
+      <label className="range-field">
+        <span className="range-head">
+          Sudut halus<b>{feature.mediaRotation ?? 0}°</b>
+        </span>
+        <input
+          type="range"
+          min={-180}
+          max={180}
+          value={feature.mediaRotation ?? 0}
+          onChange={(event) =>
+            update({ mediaRotation: Number(event.target.value) || undefined })
+          }
+        />
+      </label>
       <div className="group-heading">
         <strong>Gradien transparan foto</strong>
       </div>
@@ -26216,7 +27782,7 @@ function GalleryFeature({
       <div className="media-placeholder">
         <ImageIcon size={28} />
         <strong>Gallery Feature</strong>
-        <span>Upload image maksimal 2 MB per file</span>
+        <span>Upload foto (di atas 2 MB dikompres otomatis)</span>
       </div>
     );
   if (feature.galleryStyle === "carousel")
@@ -26437,7 +28003,10 @@ function ImageLayoutFeature({
   ) => React.ReactNode;
 }) {
   const layout = feature.imageLayoutTemplate || "single";
-  const frame = feature.imageFrame || "none";
+  // QA16 TC-375 — bentuk (arch/circle/leaf/diamond) kini lewat frameShape.
+  const frame = LEGACY_FRAME_TO_SHAPE[feature.imageFrame || ""]
+    ? "none"
+    : feature.imageFrame || "none";
   const media = (url?: string, extraClass = "") =>
     url ? (
       <img
@@ -26820,6 +28389,7 @@ function GreetingsWidget({
 function RsvpPage({
   guests,
   addGuest,
+  config = {},
 }: {
   guests: Guest[];
   addGuest: (
@@ -26828,17 +28398,24 @@ function RsvpPage({
     pax: number,
     canvasId?: string,
   ) => void;
+  config?: RsvpPageConfig;
 }) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState<Guest["status"]>("Hadir");
   const [pax, setPax] = useState(1);
+  const [phone, setPhone] = useState("");
+  const [message, setMessage] = useState("");
+  const maxPax = Math.max(1, Math.min(20, config.maxPax || 5));
   return (
     <section className="system-page rsvp-system-page">
       <div className="system-page-heading">
         <Users size={25} />
-        <small>RSVP CONFIRMATION</small>
-        <h1>Konfirmasi Kehadiran</h1>
-        <p>Bantu kami mempersiapkan hari istimewa dengan lebih baik.</p>
+        <small>{config.eyebrow ?? "RSVP CONFIRMATION"}</small>
+        <h1>{config.title || "Konfirmasi Kehadiran"}</h1>
+        <p>
+          {config.subtitle ??
+            "Bantu kami mempersiapkan hari istimewa dengan lebih baik."}
+        </p>
       </div>
       <div className="rsvp-layout">
         <form
@@ -26872,18 +28449,42 @@ function RsvpPage({
             </select>
           </label>
           <label>
-            Jumlah tamu
+            Jumlah tamu (maks. {maxPax})
             <input
               type="number"
               min="1"
-              max="5"
+              max={maxPax}
               value={pax}
               disabled={status !== "Hadir"}
-              onChange={(event) => setPax(Number(event.target.value))}
+              onChange={(event) =>
+                setPax(Math.max(1, Math.min(maxPax, Number(event.target.value) || 1)))
+              }
             />
           </label>
-          <button type="submit">Kirim konfirmasi</button>
+          {config.askPhone && (
+            <label>
+              No. WhatsApp
+              <input
+                value={phone}
+                inputMode="tel"
+                onChange={(event) => setPhone(event.target.value)}
+                placeholder="08xx"
+              />
+            </label>
+          )}
+          {config.askMessage && (
+            <label>
+              Pesan untuk mempelai
+              <textarea
+                value={message}
+                rows={3}
+                onChange={(event) => setMessage(event.target.value)}
+              />
+            </label>
+          )}
+          <button type="submit">{config.buttonLabel || "Kirim konfirmasi"}</button>
         </form>
+        {config.showSummary !== false && (
         <div className="rsvp-summary">
           <strong>
             {guests.filter((guest) => guest.status === "Hadir").length}
@@ -26897,8 +28498,124 @@ function RsvpPage({
             />
           ))}
         </div>
+        )}
       </div>
     </section>
+  );
+}
+
+/** QA16 TC-397/398 — panel kanan saat Site Pages bukan halaman canvas. */
+function SitePageInspector({
+  page,
+  config = {},
+  update,
+}: {
+  page: string;
+  config?: RsvpPageConfig;
+  update: (next: RsvpPageConfig) => void;
+}) {
+  if (page === "invitees")
+    return (
+      <div className="inspector-group">
+        <div className="selection-label">
+          <Users size={17} />
+          <div>
+            <strong>List Undangan</strong>
+            <span>Site Pages</span>
+          </div>
+        </div>
+        <div className="layout-help">
+          Kelola nama tamu dan salin link personal (…?to=Nama) di area
+          tengah. Pengaturan canvas tampil lagi setelah kembali ke{" "}
+          <strong>Pages</strong>.
+        </div>
+      </div>
+    );
+  const set = (patch: Partial<RsvpPageConfig>) => update({ ...config, ...patch });
+  return (
+    <div className="inspector-group">
+      <div className="selection-label">
+        <CheckCircle2 size={17} />
+        <div>
+          <strong>RSVP Confirmation</strong>
+          <span>Site Pages · halaman konfirmasi kehadiran</span>
+        </div>
+      </div>
+      <label>
+        Label kecil (eyebrow)
+        <input
+          value={config.eyebrow ?? "RSVP CONFIRMATION"}
+          onChange={(event) => set({ eyebrow: event.target.value })}
+        />
+      </label>
+      <label>
+        Judul
+        <input
+          value={config.title ?? "Konfirmasi Kehadiran"}
+          onChange={(event) => set({ title: event.target.value })}
+        />
+      </label>
+      <label>
+        Subjudul
+        <textarea
+          rows={2}
+          value={config.subtitle ?? "Bantu kami mempersiapkan hari istimewa dengan lebih baik."}
+          onChange={(event) => set({ subtitle: event.target.value })}
+        />
+      </label>
+      <label className="range-field">
+        <span className="range-head">
+          Batas jumlah tamu per konfirmasi<b>{config.maxPax || 5}</b>
+        </span>
+        <input
+          type="range"
+          min={1}
+          max={20}
+          value={config.maxPax || 5}
+          onChange={(event) => set({ maxPax: Number(event.target.value) })}
+        />
+      </label>
+      <div className="group-heading">
+        <strong>Field formulir</strong>
+      </div>
+      <label className="check-row">
+        <input type="checkbox" checked disabled /> Nama lengkap (wajib)
+      </label>
+      <label className="check-row">
+        <input type="checkbox" checked disabled /> Konfirmasi hadir & jumlah tamu
+      </label>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={Boolean(config.askPhone)}
+          onChange={(event) => set({ askPhone: event.target.checked })}
+        />
+        No. WhatsApp
+      </label>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={Boolean(config.askMessage)}
+          onChange={(event) => set({ askMessage: event.target.checked })}
+        />
+        Pesan untuk mempelai
+      </label>
+      <label className="check-row">
+        <input
+          type="checkbox"
+          checked={config.showSummary !== false}
+          onChange={(event) => set({ showSummary: event.target.checked })}
+        />
+        Tampilkan ringkasan respons hadir
+      </label>
+      <label>
+        Teks tombol
+        <input
+          value={config.buttonLabel ?? "Kirim konfirmasi"}
+          onChange={(event) => set({ buttonLabel: event.target.value })}
+        />
+      </label>
+    </div>
   );
 }
 
@@ -27375,7 +29092,7 @@ function ChatWidget({
                 key={message.id}
                 className={`chat-message ${message.sender}`}
               >
-                <p className="chat-text">{message.text}</p>
+                <p className="chat-text"><LinkifiedText text={message.text} /></p>
                 <span>{message.time}</span>
               </div>
             ))}
@@ -27970,34 +29687,57 @@ function SettingsPage({
   flash: _flash,
   notificationMuted,
   onNotificationMuted,
+  staff = false,
+  roleLabel = "",
+  onAccountSettings,
 }: {
   slug: string;
   setSlug: (slug: string) => void;
   flash: (message: string) => void;
   notificationMuted: boolean;
   onNotificationMuted: (muted: boolean) => Promise<void>;
+  staff?: boolean;
+  roleLabel?: string;
+  onAccountSettings?: () => void;
 }) {
   const t = useT();
   const [tab, setTab] = useState<
-    "general" | "notifications" | "domain" | "privacy"
+    "general" | "notifications" | "domain" | "privacy" | "security"
   >("general");
-  const tabs: [typeof tab, string][] = [
-    ["general", t("Umum", "General")],
-    ["notifications", t("Notifikasi", "Notifications")],
-    ["domain", t("Alamat website", "Domain")],
-    ["privacy", t("Privasi", "Privacy")],
-  ];
+  // QA16 TC-406 — Web Designer/CS/Admin tidak punya website undangan, jadi
+  // tab Alamat website & Privasi (milik customer) tidak ditampilkan.
+  const tabs: [typeof tab, string][] = staff
+    ? [
+        ["general", t("Umum", "General")],
+        ["notifications", t("Notifikasi", "Notifications")],
+        ["security", t("Keamanan akun", "Account security")],
+      ]
+    : [
+        ["general", t("Umum", "General")],
+        ["notifications", t("Notifikasi", "Notifications")],
+        ["domain", t("Alamat website", "Domain")],
+        ["privacy", t("Privasi", "Privacy")],
+      ];
   return (
     <div className="page narrow-page">
       <div className="page-heading">
         <div>
           <div className="eyebrow">{t("PENGATURAN", "PREFERENCES")}</div>
-          <h1>{t("Pengaturan website & notifikasi", "Website & notification settings")}</h1>
+          <h1>
+            {staff
+              ? t("Pengaturan akun & notifikasi", "Account & notification settings")
+              : t("Pengaturan website & notifikasi", "Website & notification settings")}
+          </h1>
           <p>
-            {t(
-              "Kelola bahasa, alamat website, notifikasi, dan visibilitas website.",
-              "Manage language, website address, notifications, and visibility.",
-            )}
+            {staff
+              ? t(
+                  "Kelola bahasa, notifikasi, dan keamanan akun Anda.",
+                  "Manage language, notifications, and account security.",
+                )
+              : t(
+                  "Kelola bahasa, alamat website, notifikasi, dan visibilitas website.",
+                  "Manage language, website address, notifications, and visibility.",
+                )}
           </p>
         </div>
       </div>
@@ -28014,7 +29754,61 @@ function SettingsPage({
           ))}
         </div>
         <div className="settings-card">
-          {tab === "general" && (
+          {tab === "general" && staff && (
+            <>
+              <h3>{t("Preferensi umum", "General preferences")}</h3>
+              <p>
+                {t(
+                  `Akun ${roleLabel}. Pengaturan website undangan hanya ada pada akun customer.`,
+                  `${roleLabel} account. Invitation website settings exist only on customer accounts.`,
+                )}
+              </p>
+              <div className="setting-row">
+                <div>
+                  <Globe2 size={18} />
+                  <span>
+                    <strong>{t("Bahasa", "Language")}</strong>
+                    <small>
+                      {t(
+                        "Berlaku untuk dashboard dan halaman publik ikrarku.",
+                        "Applies to the dashboard and ikrarku public pages.",
+                      )}
+                    </small>
+                  </span>
+                </div>
+                <LangSwitch />
+              </div>
+            </>
+          )}
+          {tab === "security" && (
+            <>
+              <h3>{t("Keamanan akun", "Account security")}</h3>
+              <p>
+                {t(
+                  "Nama, email dan password diubah lewat Pengaturan Akun. Perubahan email atau password wajib memasukkan password saat ini.",
+                  "Name, email and password are changed in Account Settings. Changing email or password requires your current password.",
+                )}
+              </p>
+              <div className="setting-row">
+                <div>
+                  <ShieldCheck size={18} />
+                  <span>
+                    <strong>{t("Profil & password", "Profile & password")}</strong>
+                    <small>
+                      {t(
+                        "Sesi otomatis keluar bila tidak aktif.",
+                        "Sessions sign out automatically when idle.",
+                      )}
+                    </small>
+                  </span>
+                </div>
+                <button className="secondary-btn" onClick={onAccountSettings}>
+                  {t("Buka Pengaturan Akun", "Open Account Settings")}
+                </button>
+              </div>
+            </>
+          )}
+          {tab === "general" && !staff && (
             <>
               <h3>{t("Preferensi umum", "General preferences")}</h3>
               <p>
@@ -28839,6 +30633,14 @@ function CustomerServiceDatabase({
 }) {
   const [selectedId, setSelectedId] = useState(conversations[0]?.id || "");
   const [reply, setReply] = useState("");
+  // QA16 TC-404 — lampiran file pada balasan (gambar/PDF, maks 10 MB).
+  const [attachment, setAttachment] = useState<{
+    name: string;
+    url: string;
+  } | null>(null);
+  const [attachBusy, setAttachBusy] = useState(false);
+  const [attachError, setAttachError] = useState("");
+  const attachInput = useRef<HTMLInputElement>(null);
   // Mode pengiriman: balasan ke customer, atau catatan internal antar staff.
   const [replyMode, setReplyMode] = useState<"public" | "internal">("public");
   const [query, setQuery] = useState("");
@@ -29054,7 +30856,7 @@ function CustomerServiceDatabase({
                         )}
                       </strong>
                     )}
-                    <p className="chat-text">{message.body}</p>
+                    <p className="chat-text"><LinkifiedText text={message.body} /></p>
                     <span>
                       {new Date(message.created_at).toLocaleString("id-ID")}
                     </span>
@@ -29065,13 +30867,18 @@ function CustomerServiceDatabase({
                 className={replyMode === "internal" ? "internal-mode" : ""}
                 onSubmit={async (event) => {
                   event.preventDefault();
-                  if (!reply.trim()) return;
-                  const value = reply;
+                  if (!reply.trim() && !attachment) return;
+                  const value = attachment
+                    ? `${reply.trim()}${reply.trim() ? "\n" : ""}📎 ${attachment.name}: ${attachment.url}`
+                    : reply;
+                  const keep = attachment;
                   setReply("");
+                  setAttachment(null);
                   try {
                     await onReply(selected.id, value, replyMode);
                   } catch {
-                    setReply(value);
+                    setReply(reply);
+                    setAttachment(keep);
                   }
                 }}
               >
@@ -29103,7 +30910,70 @@ function CustomerServiceDatabase({
                       : "Balas customer..."
                   }
                 />
+                {(attachment || attachError) && (
+                  <div className={`reply-attachment ${attachError ? "error" : ""}`}>
+                    {attachment ? (
+                      <>
+                        <Paperclip size={13} />
+                        <a href={attachment.url} target="_blank" rel="noopener noreferrer">
+                          {attachment.name}
+                        </a>
+                        <button
+                          type="button"
+                          aria-label="Hapus lampiran"
+                          onClick={() => setAttachment(null)}
+                        >
+                          <X size={13} />
+                        </button>
+                      </>
+                    ) : (
+                      attachError
+                    )}
+                  </div>
+                )}
                 <div>
+                  <input
+                    ref={attachInput}
+                    hidden
+                    type="file"
+                    accept="image/*,application/pdf"
+                    onClick={resetFileInput}
+                    onChange={async (event) => {
+                      const file = event.target.files?.[0];
+                      if (!file) return;
+                      setAttachError("");
+                      if (file.size > 10 * 1024 * 1024) {
+                        setAttachError(`Lampiran ${formatMb(file.size)} melebihi batas 10 MB.`);
+                        return;
+                      }
+                      setAttachBusy(true);
+                      try {
+                        const form = new FormData();
+                        form.append("category", "chat-attachment");
+                        form.append("file", file);
+                        const saved = await api.uploadMedia(form);
+                        setAttachment({
+                          name: file.name,
+                          url: new URL(assetUrl(saved.url), window.location.origin).href,
+                        });
+                      } catch (issue) {
+                        setAttachError(
+                          issue instanceof Error ? issue.message : "Upload lampiran gagal.",
+                        );
+                      } finally {
+                        setAttachBusy(false);
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="secondary-btn attach-btn"
+                    disabled={attachBusy}
+                    onClick={() => attachInput.current?.click()}
+                    title="Lampirkan gambar atau PDF (maks 10 MB)"
+                  >
+                    <Paperclip size={14} /> {attachBusy ? "Mengunggah..." : "Lampiran"}
+                  </button>
                   <span>
                     {replyMode === "internal"
                       ? "Catatan ini hanya terlihat oleh staff. Tidak dikirim ke live chat maupun email customer."
@@ -29115,7 +30985,7 @@ function CustomerServiceDatabase({
                     ) : (
                       <Send size={15} />
                     )}
-                    {replyMode === "internal" ? "Simpan catatan" : "Send reply"}
+                    {replyMode === "internal" ? "Simpan catatan" : "Kirim balasan"}
                   </button>
                 </div>
               </form>
@@ -29340,12 +31210,28 @@ export function orderMilestones(
   const published = paid && options.sitePublished && options.hasDesign;
   const designDone = published || taskDone(/build|desain|design/i);
   const onboardingDone = designDone || taskDone(/onboarding/i) || (paid && options.hasDesign);
-  const steps: { label: string; done: boolean }[] = [
-    { label: en ? "Payment received" : "Pembayaran diterima", done: paid },
-    { label: en ? "Onboarding with Customer Service" : "Onboarding bersama Customer Service", done: paid && onboardingDone },
-    { label: en ? "Invitation designed by Web Designer" : "Undangan dikerjakan Web Designer", done: paid && designDone },
-    { label: en ? "Website published" : "Website terbit", done: published },
-  ];
+  // TnC Paket v1.3 — paket mandiri (Free/Basic/Advanced) tidak punya tahap
+  // pengerjaan Web Designer; customer mengisi sendiri dengan panduan CS.
+  const selfService = order.package
+    ? !["Premium", "Custom"].includes(order.package)
+    : order.order_status === "Paid - Mandiri";
+  const steps: { label: string; done: boolean }[] = selfService
+    ? [
+        { label: en ? "Payment received" : "Pembayaran diterima", done: paid },
+        {
+          label: en
+            ? "Fill in your invitation (CS guides via Live Chat)"
+            : "Isi undangan sendiri (dipandu CS lewat Live Chat)",
+          done: paid && (published || options.hasDesign),
+        },
+        { label: en ? "Website published" : "Website terbit", done: published },
+      ]
+    : [
+        { label: en ? "Payment received" : "Pembayaran diterima", done: paid },
+        { label: en ? "Onboarding with Customer Service" : "Onboarding bersama Customer Service", done: paid && onboardingDone },
+        { label: en ? "Invitation designed by Web Designer" : "Undangan dikerjakan Web Designer", done: paid && designDone },
+        { label: en ? "Website published" : "Website terbit", done: published },
+      ];
   const current = steps.findIndex((step) => !step.done);
   return { steps, current };
 }
@@ -30430,8 +32316,8 @@ function AccountSettingsModal({
       <div className="template-create-dialog account-settings-dialog">
         <header>
           <div>
-            <span>ACCOUNT SETTINGS</span>
-            <h2>Profile & Security</h2>
+            <span>PENGATURAN AKUN</span>
+            <h2>Profil & Keamanan</h2>
           </div>
           <button onClick={onClose}>
             <X size={18} />
@@ -30439,14 +32325,14 @@ function AccountSettingsModal({
         </header>
         <div className="two-inputs">
           <label>
-            First Name
+            Nama depan
             <input
               value={firstName}
               onChange={(event) => setFirstName(event.target.value)}
             />
           </label>
           <label>
-            Last Name
+            Nama belakang
             <input
               value={lastName}
               onChange={(event) => setLastName(event.target.value)}
@@ -30462,7 +32348,7 @@ function AccountSettingsModal({
           />
         </label>
         <label>
-          New Password
+          Password baru
           <div className="password-field">
             <input
               type={showPassword ? "text" : "password"}
@@ -30481,15 +32367,18 @@ function AccountSettingsModal({
             </button>
           </div>
         </label>
-        {sensitive && (
+        {/* QA16 TC-407 — field selalu tampil; wajib diisi bila email atau
+            password berubah (server juga memverifikasi). */}
+        {(
           <label>
-            Current Password
+            Password saat ini {sensitive && <em className="required-mark">*</em>}
             <div className="password-field">
               <input
                 type={showCurrent ? "text" : "password"}
                 value={currentPassword}
                 onChange={(event) => setCurrentPassword(event.target.value)}
-                placeholder="Diperlukan untuk perubahan sensitif"
+                placeholder="Wajib untuk mengubah email atau password"
+                autoComplete="current-password"
               />
               <button
                 type="button"
@@ -30514,7 +32403,7 @@ function AccountSettingsModal({
         </div>
         <footer>
           <button className="secondary-btn" onClick={onClose}>
-            Cancel
+            Batal
           </button>
           <button
             className="primary-btn"
@@ -30529,7 +32418,7 @@ function AccountSettingsModal({
               })
             }
           >
-            <Save size={16} /> Save Settings
+            <Save size={16} /> Simpan
           </button>
         </footer>
       </div>
@@ -31019,12 +32908,9 @@ function TemplateCreatorModal({
             value={category}
             onChange={(event) => setCategory(event.target.value)}
           >
-            <option>Elegant</option>
-            <option>Editorial</option>
-            <option>Cinematic</option>
-            <option>Fairytale</option>
-            <option>Traditional</option>
-            <option>Modern</option>
+            {TEMPLATE_CATEGORIES.map((item) => (
+              <option key={item}>{item}</option>
+            ))}
           </select>
         </label>
         <label>
@@ -31120,6 +33006,53 @@ function LoadingScreen() {
 const BACKGROUND_IMAGE_LIMIT = 8 * 1024 * 1024;
 const BACKGROUND_IMAGE_SIDE = 2560;
 const BACKGROUND_SOURCE_LIMIT = 25 * 1024 * 1024;
+
+/** QA16 TC-373 — batas upload yang dipakai editor & artikel Pusat Bantuan. */
+const UPLOAD_LIMITS = {
+  featureImage: 2 * 1024 * 1024,
+  featureBackground: 4 * 1024 * 1024,
+  layer: 4 * 1024 * 1024,
+  gallery: 2 * 1024 * 1024,
+  ornament: 2 * 1024 * 1024,
+};
+const formatMb = (bytes: number) =>
+  `${(bytes / 1048576).toFixed(bytes < 1048576 ? 2 : 1)} MB`;
+
+/** Validasi + kompres gambar dengan pesan yang selalu terlihat. Mengembalikan
+ *  null (setelah memanggil `notify`) bila file tidak bisa dipakai. */
+async function prepareImageUpload(
+  file: File,
+  limit: number,
+  label: string,
+  notify: (message: string) => void,
+): Promise<File | null> {
+  if (!file.type.startsWith("image/")) {
+    notify(`${label} harus berupa gambar (JPG, PNG, WebP atau GIF).`);
+    return null;
+  }
+  if (file.size > BACKGROUND_SOURCE_LIMIT) {
+    notify(
+      `${label} ${formatMb(file.size)} melebihi batas file asli 25 MB. Perkecil resolusinya lalu coba lagi.`,
+    );
+    return null;
+  }
+  if (file.size <= limit) return file;
+  if (file.type === "image/gif") {
+    notify(
+      `${label} GIF ${formatMb(file.size)} melebihi batas ${formatMb(limit)} (GIF tidak bisa dikompres otomatis).`,
+    );
+    return null;
+  }
+  notify(`Mengompres ${label.toLowerCase()} ${formatMb(file.size)}...`);
+  const out = await shrinkImageToLimit(file, limit, 2560);
+  if (out.size > limit) {
+    notify(
+      `${label} gagal dikompres di bawah ${formatMb(limit)} (masih ${formatMb(out.size)}). Gunakan gambar beresolusi lebih kecil.`,
+    );
+    return null;
+  }
+  return out;
+}
 
 async function shrinkImageToLimit(
   file: File,
@@ -31279,10 +33212,39 @@ function FirstPasswordDialog({
   );
 }
 
-function Toast({ message }: { message: string }) {
+/** Pesan gagal/ditolak ditampilkan sebagai toast error (ikon & warna). */
+function isErrorToast(message: string) {
+  return /gagal|maksimal|melebihi|tidak (bisa|dapat|valid)|harus berupa|ditolak|error|timeout|terlalu besar|dilewati/i.test(
+    message,
+  );
+}
+
+/** QA16 TC-404 — tautan (mis. lampiran) di pesan chat bisa diklik. */
+function LinkifiedText({ text }: { text: string }) {
+  const parts = String(text || "").split(/(https?:\/\/[^\s]+)/g);
   return (
-    <div className="toast">
-      <Check size={16} /> {message}
+    <>
+      {parts.map((part, index) =>
+        /^https?:\/\//.test(part) ? (
+          <a key={index} href={part} target="_blank" rel="noopener noreferrer">
+            {part.includes("/uploads/") ? "Buka lampiran" : part}
+          </a>
+        ) : (
+          <Fragment key={index}>{part}</Fragment>
+        ),
+      )}
+    </>
+  );
+}
+
+function Toast({ message }: { message: string }) {
+  const error = isErrorToast(message);
+  return (
+    <div
+      className={`toast ${error ? "toast-error" : ""}`}
+      role={error ? "alert" : "status"}
+    >
+      {error ? <TriangleAlert size={16} /> : <Check size={16} />} {message}
     </div>
   );
 }
@@ -35133,6 +37095,7 @@ function CommissionWorkspace({ canApprove }: { canApprove: boolean }) {
         </div>
       </div>
       {canApprove && <CommissionRatePanel />}
+      <CommissionWithdrawPanel canApprove={canApprove} />
       <CommissionPanel canApprove={canApprove} limit={10} />
     </div>
   );
@@ -35251,7 +37214,66 @@ function CommissionPanel({
     }
     setBusy("");
   };
-  const allRows = data?.rows || [];
+  // QA16 TC-401 — filter status & bulan, ekspor CSV.
+  const [statusFilter, setStatusFilter] = useState<"all" | "paid" | "unpaid">(
+    "all",
+  );
+  const [monthFilter, setMonthFilter] = useState("");
+  const months = Array.from(
+    new Set(
+      (data?.rows || []).map((row) =>
+        String(row.order_paid_at || row.created_at || "").slice(0, 7),
+      ),
+    ),
+  )
+    .filter(Boolean)
+    .sort()
+    .reverse();
+  const allRows = (data?.rows || []).filter(
+    (row) =>
+      (statusFilter === "all" ||
+        (statusFilter === "paid") === (row.status === "Paid")) &&
+      (!monthFilter ||
+        String(row.order_paid_at || row.created_at || "").startsWith(
+          monthFilter,
+        )),
+  );
+  const exportCommissionCsv = () => {
+    const header = [
+      "Tanggal order",
+      "Template",
+      ...(canApprove ? ["Creator"] : []),
+      "Customer",
+      "Nilai order",
+      "Rate",
+      "Komisi",
+      "Status",
+      "Tanggal dibayar",
+    ];
+    const lines = allRows.map((row) =>
+      [
+        String(row.order_paid_at || row.created_at || "").slice(0, 10),
+        row.template_name,
+        ...(canApprove ? [row.creator_name || ""] : []),
+        row.customer_name,
+        row.order_amount || 0,
+        `${Math.round(Number(row.rate || 0) * 100)}%`,
+        row.amount || 0,
+        row.status === "Paid" ? "Sudah dibayar" : "Belum dibayar",
+        String(row.settled_at || "").slice(0, 10),
+      ]
+        .map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`)
+        .join(","),
+    );
+    const blob = new Blob(["\ufeff" + [header.join(","), ...lines].join("\n")], {
+      type: "text/csv;charset=utf-8",
+    });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `komisi-${monthFilter || "semua"}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
   const [page, setPage] = useState(0);
   const pageCount = Math.max(1, Math.ceil(allRows.length / limit));
   const safePage = Math.min(page, pageCount - 1);
@@ -35270,7 +37292,7 @@ function CommissionPanel({
     <section className="commission-panel">
       <div className="section-heading">
         <div>
-          <span>TEMPLATE CREATOR</span>
+          <span>RIWAYAT KOMISI</span>
           <h2>Riwayat pembayaran komisi</h2>
           <p>
             {canApprove
@@ -35278,9 +37300,44 @@ function CommissionPanel({
               : `Catatan komisi dari order yang memakai template buatan Anda. ${allRows.length} order tercatat.`}
           </p>
         </div>
-        <button className="secondary-btn" onClick={() => void load()}>
-          <Repeat2 size={15} /> Refresh
-        </button>
+        <div className="commission-tools">
+          <select
+            aria-label="Filter status komisi"
+            value={statusFilter}
+            onChange={(event) =>
+              setStatusFilter(event.target.value as typeof statusFilter)
+            }
+          >
+            <option value="all">Semua status</option>
+            <option value="unpaid">Belum dibayar</option>
+            <option value="paid">Sudah dibayar</option>
+          </select>
+          <select
+            aria-label="Filter bulan"
+            value={monthFilter}
+            onChange={(event) => setMonthFilter(event.target.value)}
+          >
+            <option value="">Semua bulan</option>
+            {months.map((month) => (
+              <option key={month} value={month}>
+                {new Date(`${month}-01T00:00:00`).toLocaleDateString("id-ID", {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </option>
+            ))}
+          </select>
+          <button
+            className="secondary-btn"
+            disabled={!allRows.length}
+            onClick={exportCommissionCsv}
+          >
+            <Download size={15} /> Ekspor CSV
+          </button>
+          <button className="secondary-btn" onClick={() => void load()}>
+            <Repeat2 size={15} /> Refresh
+          </button>
+        </div>
       </div>
       <div className="commission-summary">
         {canApprove ? (
@@ -35322,7 +37379,7 @@ function CommissionPanel({
       {rows.length > 0 && (
         <div className="commission-table">
           <div className={`commission-row ledger ${canApprove ? "with-creator" : ""} head`}>
-            <span>Tanggal order</span>
+            <span>Tgl. order</span>
             <span>Template</span>
             {canApprove && <span>Creator</span>}
             <span>Customer</span>
@@ -35391,19 +37448,206 @@ function CommissionPanel({
   );
 }
 
+/** QA16 TC-401 — rekening penerima & penarikan komisi. Web Designer mengisi
+ *  rekening (dikonfirmasi password) lalu mengajukan penarikan seluruh komisi
+ *  yang belum dibayar; Administrator memproses (tandai ditransfer/tolak). */
+function CommissionWithdrawPanel({ canApprove }: { canApprove: boolean }) {
+  const [account, setAccount] = useState({
+    bankName: "",
+    accountNo: "",
+    accountName: "",
+  });
+  const [editing, setEditing] = useState(false);
+  const [password, setPassword] = useState("");
+  const [items, setItems] = useState<any[]>([]);
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState("");
+  const load = useCallback(async () => {
+    try {
+      setItems(await api.withdrawals());
+      if (!canApprove) setAccount(await api.payoutAccount());
+    } catch (issue) {
+      setMessage(issue instanceof Error ? issue.message : "Gagal memuat data.");
+    }
+  }, [canApprove]);
+  useEffect(() => {
+    void load();
+  }, [load]);
+  const run = async (key: string, action: () => Promise<unknown>, ok: string) => {
+    setBusy(key);
+    setMessage("");
+    try {
+      await action();
+      setMessage(ok);
+      await load();
+      return true;
+    } catch (issue) {
+      setMessage(issue instanceof Error ? issue.message : "Gagal memproses.");
+      return false;
+    } finally {
+      setBusy("");
+    }
+  };
+  const pending = items.find((item) => item.status === "Requested");
+  const statusLabel = (status: string) =>
+    status === "Paid" ? "Ditransfer" : status === "Rejected" ? "Ditolak" : "Diproses";
+  return (
+    <section className="commission-panel commission-withdraw">
+      <div className="section-heading">
+        <div>
+          <span>PENARIKAN KOMISI</span>
+          <h2>{canApprove ? "Pengajuan penarikan" : "Rekening & penarikan"}</h2>
+          <p>
+            {canApprove
+              ? "Transfer ke rekening yang tercantum, lalu tandai sudah ditransfer. Komisi terkait otomatis berstatus dibayar."
+              : "Isi rekening penerima, lalu ajukan penarikan seluruh komisi yang belum dibayar. Administrator memproses transfer."}
+          </p>
+        </div>
+      </div>
+      {message && <div className="commission-note">{message}</div>}
+      {!canApprove && (
+        <div className="payout-account">
+          {!editing ? (
+            <>
+              <div>
+                <small>Rekening penerima</small>
+                <strong>
+                  {account.accountNo
+                    ? `${account.bankName} · ${account.accountNo} a.n. ${account.accountName}`
+                    : "Belum diisi"}
+                </strong>
+              </div>
+              <button className="secondary-btn" onClick={() => setEditing(true)}>
+                <PenLine size={14} /> {account.accountNo ? "Ubah rekening" : "Isi rekening"}
+              </button>
+              <button
+                className="primary-btn"
+                disabled={!account.accountNo || Boolean(pending) || busy === "withdraw"}
+                title={pending ? "Masih ada pengajuan yang diproses" : undefined}
+                onClick={() =>
+                  void run("withdraw", () => api.requestWithdrawal(), "Pengajuan penarikan terkirim ke Administrator.")
+                }
+              >
+                <Wallet size={15} /> {busy === "withdraw" ? "Mengirim..." : "Ajukan penarikan"}
+              </button>
+            </>
+          ) : (
+            <form
+              className="payout-form"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const ok = await run(
+                  "account",
+                  () =>
+                    api.savePayoutAccount({ ...account, currentPassword: password }),
+                  "Rekening tersimpan.",
+                );
+                if (ok) {
+                  setEditing(false);
+                  setPassword("");
+                }
+              }}
+            >
+              <input
+                placeholder="Nama bank (mis. BCA)"
+                value={account.bankName}
+                onChange={(event) => setAccount({ ...account, bankName: event.target.value })}
+              />
+              <input
+                placeholder="Nomor rekening"
+                inputMode="numeric"
+                value={account.accountNo.replace(/[^0-9]/g, "")}
+                onChange={(event) => setAccount({ ...account, accountNo: event.target.value })}
+              />
+              <input
+                placeholder="Nama pemilik rekening"
+                value={account.accountName}
+                onChange={(event) => setAccount({ ...account, accountName: event.target.value })}
+              />
+              <input
+                type="password"
+                placeholder="Password saat ini"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+              />
+              <button className="primary-btn" disabled={!password || busy === "account"}>
+                Simpan
+              </button>
+              <button type="button" className="secondary-btn" onClick={() => setEditing(false)}>
+                Batal
+              </button>
+            </form>
+          )}
+        </div>
+      )}
+      {items.length > 0 && (
+        <div className="withdraw-list">
+          {items.slice(0, 8).map((item) => (
+            <div key={item.id} className="withdraw-row">
+              <span>{formatShortDate(item.createdAt)}</span>
+              {canApprove && <strong>{item.creatorName}</strong>}
+              <strong>{formatRupiah(item.amount)}</strong>
+              <span>
+                {item.bankName} · {item.accountNo} a.n. {item.accountName}
+              </span>
+              <em className={`status-chip ${item.status === "Paid" ? "published" : "pending"}`}>
+                {statusLabel(item.status)}
+              </em>
+              {canApprove && item.status === "Requested" && (
+                <span className="withdraw-actions">
+                  <button
+                    className="settle-btn"
+                    disabled={busy === item.id}
+                    onClick={() =>
+                      void run(item.id, () => api.completeWithdrawal(item.id, "paid"), "Penarikan ditandai sudah ditransfer.")
+                    }
+                  >
+                    Tandai ditransfer
+                  </button>
+                  <button
+                    className="settle-btn"
+                    disabled={busy === item.id}
+                    onClick={() =>
+                      void run(item.id, () => api.completeWithdrawal(item.id, "reject"), "Pengajuan ditolak.")
+                    }
+                  >
+                    Tolak
+                  </button>
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+      {canApprove && !items.length && (
+        <div className="panel-empty">Belum ada pengajuan penarikan.</div>
+      )}
+    </section>
+  );
+}
+
 function TemplatePriceControl({
   price,
   originalPrice = 0,
   isFree = false,
+  pkg,
   onSave,
 }: {
   price: number;
   originalPrice?: number;
   isFree?: boolean;
-  onSave: (price: number, originalPrice: number, isFree: boolean) => Promise<void>;
+  pkg?: string;
+  onSave: (
+    price: number,
+    originalPrice: number,
+    isFree: boolean,
+    pkg?: string,
+  ) => Promise<void>;
 }) {
   const [editing, setEditing] = useState(false);
   const [free, setFree] = useState(isFree);
+  const [packageName, setPackageName] = useState(pkg || "Basic");
   const [value, setValue] = useState(String(price));
   const [original, setOriginal] = useState(originalPrice ? String(originalPrice) : "");
   const [busy, setBusy] = useState(false);
@@ -35415,16 +37659,22 @@ function TemplatePriceControl({
           setValue(String(price));
           setOriginal(originalPrice ? String(originalPrice) : "");
           setFree(isFree);
+          setPackageName(pkg && pkg !== "Free" ? pkg : "Basic");
           setEditing(true);
         }}
       >
-        <PenLine size={12} /> {price || isFree ? "Ubah harga" : "Tetapkan harga"}
+        <PenLine size={12} /> {price || isFree ? "Ubah harga & paket" : "Tetapkan harga"}
       </button>
     );
   const save = async () => {
     setBusy(true);
     try {
-      await onSave(free ? 0 : Number(value) || 0, Number(original) || 0, free);
+      await onSave(
+        free ? 0 : Number(value) || 0,
+        Number(original) || 0,
+        free,
+        free ? "Free" : packageName,
+      );
       setEditing(false);
     } catch {
       /* pesan sudah ditampilkan */
@@ -35468,6 +37718,20 @@ function TemplatePriceControl({
         />
         Gratis (tanpa pembayaran)
       </label>
+      {/* TnC Paket v1.3 — menentukan ada/tidaknya pendampingan Web Designer. */}
+      <select
+        aria-label="Paket template"
+        value={free ? "Free" : packageName}
+        disabled={free}
+        onChange={(event) => setPackageName(event.target.value)}
+        title="Basic/Advanced: customer isi mandiri + panduan CS. Premium/Custom: didampingi Web Designer."
+      >
+        {!free ? null : <option value="Free">Free</option>}
+        <option value="Basic">Basic · mandiri</option>
+        <option value="Advanced">Advanced · mandiri</option>
+        <option value="Premium">Premium · + Web Designer</option>
+        <option value="Custom">Custom · + Web Designer</option>
+      </select>
       <button type="submit" disabled={busy}>
         Simpan
       </button>
@@ -35509,6 +37773,7 @@ function TemplateApprovalManager({
     price: number,
     originalPrice?: number,
     isFree?: boolean,
+    pkg?: string,
   ) => Promise<void>;
   onReviewRevision?: (
     templateId: string,
@@ -35687,8 +37952,9 @@ function TemplateApprovalManager({
                     price={template.price || 0}
                     originalPrice={template.originalPrice || 0}
                     isFree={template.isFree}
-                    onSave={(price, original, isFree) =>
-                      onSetPrice(template.id, price, original, isFree)
+                    pkg={template.package}
+                    onSave={(price, original, isFree, pkg) =>
+                      onSetPrice(template.id, price, original, isFree, pkg)
                     }
                   />
                 )}

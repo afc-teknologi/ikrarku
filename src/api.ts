@@ -258,6 +258,7 @@ export const api = {
     price: number,
     originalPrice?: number,
     isFree?: boolean,
+    pkg?: string,
   ) =>
     request<any>(`/templates/${id}/price`, {
       method: "PATCH",
@@ -265,6 +266,7 @@ export const api = {
         price,
         ...(originalPrice === undefined ? {} : { originalPrice }),
         ...(isFree === undefined ? {} : { isFree }),
+        ...(pkg === undefined ? {} : { package: pkg }),
       }),
     }),
   // QA TC-151 — kurasi badge "Recommended" pada katalog publik.
@@ -459,6 +461,32 @@ export const api = {
     ),
   settleCommission: (id: string) =>
     request<any>(`/commissions/${id}/settle`, { method: "POST" }),
+  // QA16 TC-401 — rekening & penarikan komisi.
+  payoutAccount: () =>
+    request<{ bankName: string; accountNo: string; accountName: string }>(
+      "/commissions/payout-account",
+    ),
+  savePayoutAccount: (body: {
+    bankName: string;
+    accountNo: string;
+    accountName: string;
+    currentPassword: string;
+  }) =>
+    request<any>("/commissions/payout-account", {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  withdrawals: () => request<any[]>("/commissions/withdrawals"),
+  requestWithdrawal: () =>
+    request<{ ok: boolean; amount: number; count: number }>(
+      "/commissions/withdrawals",
+      { method: "POST" },
+    ),
+  completeWithdrawal: (id: string, decision: "paid" | "reject", note = "") =>
+    request<any>(`/commissions/withdrawals/${id}/complete`, {
+      method: "POST",
+      body: JSON.stringify({ decision, note }),
+    }),
   commissionRates: () =>
     request<{ defaultRate: number; creators: any[] }>("/commission-rates"),
   settleCreatorCommissions: (id: string) =>
