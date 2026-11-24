@@ -264,6 +264,46 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       403,
     );
   });
+  await t.test("Incoming metric counts distinct active senders and reopens a resolved guest thread", async () => {
+    const count = async (token = admin.token) => {
+      const result = await call("GET", "/cs/metrics", undefined, token);
+      assert.equal(result.status, 200);
+      return result.data.incoming;
+    };
+    const initial = await count();
+    const guest = await call("POST", "/public/chat", {
+      email: "metric-guest@example.test",
+      body: "First message",
+    });
+    assert.equal(guest.status, 201);
+    const { conversationId, conversationToken } = guest.data;
+    await call("POST", "/public/chat", { conversationToken, body: "Follow-up" });
+    const duplicate = await call("POST", "/public/chat", {
+      email: "Metric-Guest@example.test",
+      body: "Same sender, different session",
+    });
+    assert.equal(duplicate.status, 201);
+    assert.equal(await count(), initial + 1);
+
+    const setStatus = async (id, status) => {
+      const result = await call("PATCH", `/conversations/${id}`, { status }, admin.token);
+      assert.equal(result.status, 200);
+    };
+    await setStatus(conversationId, "Pending");
+    await setStatus(duplicate.data.conversationId, "Resolved");
+    assert.equal(await count(), initial + 1);
+    await setStatus(conversationId, "Resolved");
+    assert.equal(await count(), initial);
+
+    const reopened = await call("POST", "/public/chat", {
+      conversationToken,
+      body: "A new question after resolution",
+    });
+    assert.equal(reopened.data.conversationId, conversationId);
+    assert.equal(db.prepare("SELECT status FROM conversations WHERE id=?").get(conversationId).status, "Open");
+    assert.equal(await count(), initial + 1);
+    await setStatus(conversationId, "Resolved");
+  });
   // Catatan internal: koordinasi staff pada satu tiket, tidak boleh pernah
   // sampai ke customer lewat widget chat maupun email.
   await t.test(

@@ -149,6 +149,13 @@ import {
 const ActivityChart = lazy(() => import("./components/ActivityChart"));
 import { createPortal } from "react-dom";
 import "./App.css";
+import "./TemplateMarketplace.css";
+import weddingLogin from "./assets/wedding-login.webp";
+import {
+  ALL_TEMPLATE_CATEGORIES,
+  matchesTemplateCategory,
+  templateCategories,
+} from "./templateCatalog";
 import {
   getSiteLang,
   useSiteLang,
@@ -3860,6 +3867,7 @@ function App() {
   const [accountSettingsOpen, setAccountSettingsOpen] = useState(false);
   const [chatWidgetOpen, setChatWidgetOpen] = useState(false);
   const [publicTemplates, setPublicTemplates] = useState<Template[]>([]);
+  const [catalogFilters, setCatalogFilters] = useState(initialCatalogFilters);
   const [selectedPublicTemplate, setSelectedPublicTemplate] =
     useState<Template | null>(null);
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
@@ -4053,7 +4061,7 @@ function App() {
           setView("journal");
           if (deepArticleSlug) setArticleSlug(deepArticleSlug);
         }
-        if (pathSlug === "desain") setView("designs");
+        if (pathSlug === "desain" || pathSlug === "templates") setView("designs");
         if (pathSlug === "kebijakan-privasi") setView("privacy");
         if (pathSlug === "syarat-ketentuan") setView("terms");
         if (pathSlug === "faq") setView("faq");
@@ -4715,7 +4723,7 @@ function App() {
         );
         return;
       }
-      const next = target.view;
+      const next = target.templateId ? "designs" : target.view;
       const previous = viewRef.current;
       if (
         next === "landing" &&
@@ -6310,14 +6318,10 @@ function App() {
   if (view === "template-detail" && selectedPublicTemplate)
     return (
       <TemplateJourneyPage
+        key={selectedPublicTemplate.id}
         template={selectedPublicTemplate}
-        onBack={() => {
-          setLandingScrollTarget("templates");
-          setView("landing");
-        }}
-        onPreview={() => setSelectedTemplate(selectedPublicTemplate)}
+        onBack={() => setView("designs")}
         onOrder={() => beginCheckout(selectedPublicTemplate)}
-        flash={flash}
       />
     );
 
@@ -6385,6 +6389,9 @@ function App() {
         setView={setView}
         onTemplate={openTemplateJourney}
         databaseOnline={databaseOnline}
+        filters={catalogFilters}
+        setFilters={setCatalogFilters}
+        accountName={currentAccountId ? currentAccount?.name : undefined}
       />
     );
   if (view === "journal")
@@ -7202,129 +7209,122 @@ function useScrollResetOnOpen(
   }, [open, ...deps]);
 }
 
-// Halaman katalog desain lengkap. Landing hanya menampilkan 9 desain; sisanya
-// dibuka di sini dengan filter kategori dan pencarian.
+type CatalogSort = "recommended" | "price-asc" | "price-desc";
+const initialCatalogFilters = {
+  category: ALL_TEMPLATE_CATEGORIES,
+  query: "",
+  sort: "recommended" as CatalogSort,
+  page: 1,
+};
+
 function AllDesignsPage({
   templates,
   setView,
   onTemplate,
   databaseOnline,
+  filters,
+  setFilters,
+  accountName,
 }: {
   templates: Template[];
   setView: (view: View) => void;
   onTemplate: (template: Template) => void;
   databaseOnline: boolean;
+  filters: typeof initialCatalogFilters;
+  setFilters: React.Dispatch<React.SetStateAction<typeof initialCatalogFilters>>;
+  accountName?: string;
 }) {
   const t = useT();
-  const [category, setCategory] = useState("Semua");
-  const [query, setQuery] = useState("");
-  const categories = useMemo(
-    () => ["Semua", ...new Set(templates.map((item) => item.category))],
-    [templates],
-  );
+  const { category, query, sort } = filters;
+  const categories = useMemo(() => templateCategories(templates), [templates]);
   const visible = useMemo(() => {
+    const term = query.trim().toLowerCase();
     const filtered = templates.filter(
       (item) =>
-        (category === "Semua" || item.category === category) &&
-        `${item.name} ${item.description || ""}`
+        matchesTemplateCategory(item, category) &&
+        `${item.name} ${item.category} ${item.description || ""}`
           .toLowerCase()
-          .includes(query.trim().toLowerCase()),
+          .includes(term),
     );
-    // QA TC-151: desain rekomendasi selalu di urutan depan.
-    return [
-      ...filtered.filter((item) => item.recommended),
-      ...filtered.filter((item) => !item.recommended),
-    ];
-  }, [templates, category, query]);
-  // QA TC-150 (revisi): pagination bernomor, maksimal 12 desain per halaman.
+    if (sort === "recommended") {
+      return filtered.sort((a, b) => Number(Boolean(b.recommended)) - Number(Boolean(a.recommended)));
+    }
+    const direction = sort === "price-asc" ? 1 : -1;
+    return filtered.sort((a, b) => direction * ((a.price ?? 0) - (b.price ?? 0)));
+  }, [templates, category, query, sort]);
   const PAGE_SIZE = 12;
-  const [page, setPage] = useState(1);
   const pageCount = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-  useEffect(() => setPage(1), [category, query]);
-  // Daftar bisa menyusut setelah filter; jaga halaman aktif tetap valid.
-  useEffect(() => {
-    setPage((previous) => Math.min(previous, pageCount));
-  }, [pageCount]);
+  const page = Math.min(filters.page, pageCount);
+  const setPage = (next: number) => setFilters((previous) => ({ ...previous, page: next }));
   const paged = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return (
-    <div className="journal-page">
-      <header className="journal-topbar">
-        <button className="secondary-btn" onClick={() => setView("landing")}>
-          <ArrowLeft size={16} /> {t("Kembali ke beranda", "Back to home")}
+    <div className="marketplace-page">
+      <header className="marketplace-header">
+        <button className="marketplace-brand" aria-label={t("Beranda Ikrarku", "Ikrarku home")} onClick={() => setView("landing")}>
+          <Brand />
         </button>
-        <Brand />
-        <div className="journal-topbar-actions">
-          {/* QA TC-152 (revisi): tombol Jurnal dihapus dari header halaman
-              katalog desain. Menu Jurnal tetap tersedia di navbar landing. */}
+        <div className="marketplace-header-actions">
           <LangSwitch />
-          <button className="secondary-btn" onClick={() => setView("login")}>
-            {t("Masuk", "Sign in")}
-          </button>
-          <button className="primary-btn" onClick={() => setView("designs")}>
-            {t("Temukan desain", "Find a design")} <ArrowRight size={15} />
+          <button className="secondary-btn" onClick={() => setView(accountName ? "dashboard" : "login")}>
+            {accountName ? t("Workspace", "Workspace") : t("Masuk", "Sign in")}
           </button>
         </div>
       </header>
-      <main>
-        <section className="journal-hero">
-          <span className="eyebrow">{t("KATALOG DESAIN", "DESIGN CATALOG")}</span>
-          <h1>
-            {t("Temukan yang terasa", "Find the one that feels")}
-            <br />
-            <em>{t("seperti kalian.", "like you.")}</em>
-          </h1>
-          <p>
-            {t(
-              "Semua desain undangan yang tersedia, lengkap dengan kategori dan harga.",
-              "Every available invitation design, with categories and prices.",
-            )}
-          </p>
-          {!databaseOnline && (
-            <div className="journal-offline">
-              {t(
-                "Koneksi ke server sedang bermasalah. Katalog mungkin belum lengkap.",
-                "We are having trouble reaching the server. The catalog may be incomplete.",
-              )}
-            </div>
-          )}
-        </section>
-        <section className="journal-toolbar">
-          <div className="journal-filter">
-            {categories.map((item) => (
-              <button
-                key={item}
-                className={category === item ? "is-active" : ""}
-                onClick={() => setCategory(item)}
-              >
-                {item === "Semua" ? t("Semua", "All") : item}
-              </button>
-            ))}
-          </div>
-          <label className="journal-search">
-            <Search size={15} />
+      <main className="marketplace-main">
+        <section className="marketplace-catalog-heading">
+          <h1>{t("Template undangan pernikahan", "Wedding invitation templates")}</h1>
+          <p>{t("Temukan desain yang sesuai dengan gaya dan anggaran Anda.", "Find a design that fits your style and budget.")}</p>
+          <label className="marketplace-search">
+            <Search size={18} aria-hidden="true" />
             <input
+              type="search"
+              aria-label={t("Cari desain", "Search designs")}
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("Cari desain...", "Search designs...")}
+              onChange={(event) => setFilters({ ...filters, query: event.target.value, page: 1 })}
+              placeholder={t("Cari nama atau gaya desain…", "Search by name or style…")}
             />
           </label>
         </section>
-        <section className="ikr-template-grid design-catalog-grid">
+        {!databaseOnline && (
+          <p className="journal-offline" role="status">
+            {t("Koneksi ke server sedang bermasalah. Katalog mungkin belum lengkap.", "The catalog may be incomplete while the server is unavailable.")}
+          </p>
+        )}
+        <section className="marketplace-toolbar" aria-label={t("Filter katalog", "Catalog filters")}>
+          <div className="marketplace-categories">
+            {categories.map((item) => (
+              <button
+                key={item}
+                type="button"
+                aria-pressed={category === item}
+                onClick={() => setFilters({ ...filters, category: item, page: 1 })}
+              >
+                {item === ALL_TEMPLATE_CATEGORIES ? t("Semua", "All") : item}
+              </button>
+            ))}
+          </div>
+          <div className="marketplace-results">
+            <span role="status">{visible.length} {t("template", visible.length === 1 ? "template" : "templates")}</span>
+            <label>
+              <span>{t("Urutkan", "Sort by")}</span>
+              <select value={sort} onChange={(event) => setFilters({ ...filters, sort: event.target.value as CatalogSort, page: 1 })}>
+                <option value="recommended">{t("Rekomendasi", "Recommended")}</option>
+                <option value="price-asc">{t("Harga terendah", "Price low to high")}</option>
+                <option value="price-desc">{t("Harga tertinggi", "Price high to low")}</option>
+              </select>
+            </label>
+          </div>
+        </section>
+        <section className="ikr-template-grid marketplace-grid" aria-label={t("Daftar template", "Template listings")}>
           {paged.map((template) => (
             <article className="ikr-template" key={template.id}>
-              <button
-                className="ikr-template-preview"
-                aria-label={`${t("Lihat desain", "View design")} ${template.name}`}
-                onClick={() => onTemplate(template)}
-              >
+              <div className="ikr-template-preview">
                 {template.preview || template.sampleImage ? (
-                  <div
-                    className="ikr-template-sample"
-                    style={{
-                      backgroundImage: `url(${template.preview || template.sampleImage})`,
-                    }}
-                    role="img"
-                    aria-label={`Sample ${template.name}`}
+                  <img
+                    className="marketplace-card-image"
+                    src={template.sampleImage || template.preview}
+                    alt={template.name}
+                    loading="lazy"
                   />
                 ) : template.canvasSections?.length ? (
                   <WebsiteTemplatePreview
@@ -7346,9 +7346,6 @@ function AllDesignsPage({
                     </span>
                   </div>
                 )}
-                <span className="ikr-preview-action">
-                  {t("Lihat desain", "View design")} <ArrowRight size={16} />
-                </span>
                 {/* QA 14 TC-318 — label Recommended, New, dan Diskon. */}
                 {(template.recommended ||
                   template.isNew ||
@@ -7374,12 +7371,12 @@ function AllDesignsPage({
                     ) : null}
                   </span>
                 )}
-              </button>
+              </div>
               <div className="ikr-template-info">
                 <div>
                   <small>
                     {template.category}
-                    {template.package ? ` · Paket ${template.package}` : ""}
+                    {template.package ? ` · ${template.package}` : ""}
                   </small>
                   <h3>{template.name}</h3>
                 </div>
@@ -7390,13 +7387,22 @@ function AllDesignsPage({
                   {templatePriceLabel(template)}
                 </span>
               </div>
+              <button className="marketplace-card-action" onClick={() => onTemplate(template)}
+                aria-label={`${t("Lihat detail", "View details")} ${template.name}`}>
+                {t("Lihat detail", "View details")} <ArrowRight size={16} />
+              </button>
             </article>
           ))}
           {!visible.length && (
-            <div className="journal-empty">
+            <div className="marketplace-empty">
               {t(
                 "Belum ada desain yang cocok dengan pencarian Anda.",
                 "No designs match your search yet.",
+              )}
+              {(category !== ALL_TEMPLATE_CATEGORIES || query) && (
+                <button className="secondary-btn" onClick={() => setFilters(initialCatalogFilters)}>
+                  {t("Reset filter", "Reset filters")}
+                </button>
               )}
             </div>
           )}
@@ -7410,7 +7416,7 @@ function AllDesignsPage({
               className="catalog-page-step"
               disabled={page === 1}
               aria-label={t("Halaman sebelumnya", "Previous page")}
-              onClick={() => setPage((previous) => Math.max(1, previous - 1))}
+              onClick={() => setPage(page - 1)}
             >
               <ChevronLeft size={16} />
             </button>
@@ -7431,7 +7437,7 @@ function AllDesignsPage({
               disabled={page === pageCount}
               aria-label={t("Halaman berikutnya", "Next page")}
               onClick={() =>
-                setPage((previous) => Math.min(pageCount, previous + 1))
+                setPage(page + 1)
               }
             >
               <ChevronRight size={16} />
@@ -7441,7 +7447,7 @@ function AllDesignsPage({
       </main>
       <footer className="journal-footer">
         <Brand />
-        <span>{t("Undangan digital. Cerita yang personal.", "Digital invitations. Personal stories.")}</span>
+        <button className="secondary-btn" onClick={() => setView("faq")}>{t("Bantuan", "Help")}</button>
       </footer>
     </div>
   );
@@ -7754,7 +7760,8 @@ function Auth({
   };
   return (
     <div className="auth-page">
-      <section className="auth-visual">
+      <section className={view === "login" ? "auth-visual auth-wedding" : "auth-visual"}>
+        {view === "login" && <img className="auth-wedding-photo" src={weddingLogin} alt="" fetchPriority="high" />}
         <button className="auth-back" onClick={() => setView("landing")}>
           <ArrowLeft size={16} /> {t("Kembali ke website", "Back to website")}
         </button>
@@ -8171,18 +8178,20 @@ function VerifyEmailPage({ setView }: { setView: (view: View) => void }) {
 function TemplateJourneyPage({
   template,
   onBack,
-  onPreview,
   onOrder,
-  flash,
 }: {
   template: Template;
   onBack: () => void;
-  onPreview: () => void;
   onOrder: () => void;
-  flash?: (message: string) => void;
 }) {
   const t = useT();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [shareStatus, setShareStatus] = useState("");
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useLayoutEffect(() => {
+    const dialog = dialogRef.current;
+    if (previewOpen && dialog && !dialog.open) dialog.showModal();
+  }, [previewOpen]);
   // TC-277 — bagikan link template. Link membuka langsung halaman ini.
   const shareTemplate = async () => {
     const url = `${window.location.origin}/templates?t=${encodeURIComponent(template.id)}`;
@@ -8197,12 +8206,7 @@ function TemplateJourneyPage({
     }
     try {
       await navigator.clipboard.writeText(url);
-      flash?.(
-        t(
-          "Link template disalin. Bagikan ke pasangan atau keluarga.",
-          "Template link copied. Share it with your partner or family.",
-        ),
-      );
+      setShareStatus(t("Link template disalin.", "Template link copied."));
     } catch {
       window.prompt(t("Salin link template ini:", "Copy this template link:"), url);
     }
@@ -8218,171 +8222,123 @@ function TemplateJourneyPage({
   // dan posisi scroll-nya bertahan saat preview dibuka ulang atau mode device
   // diganti, sehingga preview sebelumnya terbuka di tengah undangan.
   useScrollResetOnOpen(previewShellRef, previewOpen, journeyDevice);
-  const heroImage =
-    template.headerImage || template.preview || template.sampleImage;
+  const images = [...new Set([template.sampleImage, template.preview, template.headerImage].filter(Boolean))] as string[];
+  const [imageIndex, setImageIndex] = useState(0);
+  const cover = images[imageIndex];
+  const orderLabel = template.isFree ? t("Pilih Template Gratis", "Choose free template") : t("Pesan Sekarang", "Order now");
+  const packageName = template.package || (template.isFree ? "Free" : "Basic");
+  const designerPackage = ["Premium", "Custom"].includes(packageName);
+  const features = [
+    t("Musik, peta lokasi, hadiah, RSVP, dan galeri", "Music, location map, gifts, RSVP, and gallery"),
+    t("Live Chat dan panduan dari tim CS", "Live Chat and guidance from our support team"),
+    ...(["Advanced", "Premium", "Custom"].includes(packageName)
+      ? [t("Penyesuaian tampilan desktop", "Desktop layout adjustments")] : []),
+    ...(designerPackage ? [t("QR Check-in", "QR check-in")] : []),
+    ...(template.withDesigner ? [t("Pendampingan Web Designer dan bantuan input awal", "Web Designer assistance and initial setup")] : []),
+    ...(packageName === "Custom"
+      ? [t("Multi-language dan desain UI/UX khusus", "Multiple languages and custom UI/UX design")] : []),
+    ...(!template.isFree ? [t("Bukti pembayaran via email dan PDF", "Payment receipt by email and PDF")] : []),
+  ];
   return (
-    <div className="journey-page">
-      <header>
-        <button onClick={onBack}>
-          <ArrowLeft size={17} />
-          {t("Kembali", "Back")}
+    <div className="marketplace-page marketplace-detail">
+      <header className="marketplace-header">
+        <button className="marketplace-brand" aria-label={t("Katalog template Ikrarku", "Ikrarku template catalog")} onClick={onBack}>
+          <Brand />
         </button>
-        <Brand />
-        <div className="journey-header-end">
-          <LangSwitch />
-          <button className="journey-order" onClick={onOrder}>
-            <ShoppingCart size={16} />
-            {t("Pesan Sekarang", "Order now")}
-          </button>
-        </div>
+        <LangSwitch />
       </header>
-      <main>
-        <section
-          className={`journey-visual preset-${template.preset || "classic"}`}
-          style={
-            heroImage
-              ? {
-                  backgroundImage: `linear-gradient(180deg,rgba(5,20,15,.1),rgba(5,20,15,.65)),url(${heroImage})`,
-                }
-              : { background: template.bg }
-          }
-        >
-          <div>
-            <span>{template.category}</span>
-            <h1>{template.name}</h1>
-            <p>{t("Koleksi wedding website dari ikrarku.", "A wedding website collection by ikrarku.")}</p>
-          </div>
-        </section>
-        <section className="journey-content">
-          <div>
-            <span className="eyebrow">{t("DETAIL TEMPLATE", "TEMPLATE DETAIL")}</span>
-            <h2>
-              {t(
-                "Sebuah cerita yang dirancang terasa milik kalian.",
-                "A story designed to feel unmistakably yours.",
+      <main className="marketplace-main">
+        <nav className="marketplace-breadcrumb" aria-label={t("Lokasi halaman", "Breadcrumb")}>
+          <button onClick={onBack}><ArrowLeft size={16} /> {t("Katalog template", "Template catalog")}</button>
+          <ChevronRight size={14} aria-hidden="true" />
+          <span aria-current="page">{template.name}</span>
+        </nav>
+        <div className="marketplace-detail-grid">
+          <section className="marketplace-gallery" aria-label={t("Galeri template", "Template gallery")}>
+            <button className="marketplace-cover" onClick={() => setPreviewOpen(true)} aria-label={t("Buka preview template", "Open template preview")}>
+              {cover ? (
+                <img src={cover} alt={template.name} />
+              ) : template.canvasSections?.length ? (
+                <WebsiteTemplatePreview template={template} title={template.name} sections={template.canvasSections} bare />
+              ) : (
+                <TemplateCoverArt template={template} />
               )}
-            </h2>
-            <p>
-              {template.description ||
-                t(
-                  "Template premium dengan storytelling, responsif, dan siap dikustomisasi melalui visual Canvas Editor.",
-                  "A premium storytelling template, responsive and ready to customise in the visual Canvas Editor.",
-                )}
-            </p>
-            <div className="journey-features">
-              <article>
-                <LayoutTemplate size={20} />
-                <strong>{t("Canvas responsif", "Responsive canvas")}</strong>
-                <span>
-                  {t(
-                    "Tampilan desktop dan mobile yang konsisten.",
-                    "A consistent desktop and mobile experience.",
-                  )}
-                </span>
-              </article>
-              <article>
-                <WandSparkles size={20} />
-                <strong>{t("Kustomisasi tanpa kode", "No-code customisation")}</strong>
-                <span>
-                  {t(
-                    "Teks, gambar, animasi, musik, RSVP, dan galeri.",
-                    "Text, images, motion, sound, RSVP, and gallery.",
-                  )}
-                </span>
-              </article>
-              <article>
-                <UserCheck size={20} />
-                <strong>{t("Onboarding didampingi", "Managed onboarding")}</strong>
-                <span>
-                  {t(
-                    "Setelah pembayaran, order ditangani CS dan Web Designer.",
-                    "After payment, your order is assigned to CS and a Web Designer.",
-                  )}
-                </span>
-              </article>
+            </button>
+            {images.length > 1 && (
+              <div className="marketplace-thumbnails">
+                {images.map((src, index) => (
+                  <button
+                    key={src}
+                    aria-label={`${t("Tampilkan gambar", "Show image")} ${index + 1}`}
+                    aria-pressed={index === imageIndex}
+                    onClick={() => setImageIndex(index)}
+                  >
+                    <img src={src} alt="" loading="lazy" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+          <section className="marketplace-order" aria-labelledby="marketplace-template-name">
+            <div className="marketplace-tags">
+              {template.category !== packageName && <span>{template.category}</span>}
+              <span>{t("Paket", "Package")} {packageName}</span>
+              {template.recommended && <span><Star size={13} /> {t("Rekomendasi", "Recommended")}</span>}
             </div>
-            <div className="journey-actions">
-              <button
-                className="secondary-btn"
-                onClick={() => {
-                  setPreviewOpen(true);
-                  onPreview();
-                }}
-              >
-                <Eye size={16} />
-                {t("Preview Template", "Preview template")}
+            <h1 id="marketplace-template-name">{template.name}</h1>
+            {template.createdByName && <p className="marketplace-byline">{t("Desain oleh", "Designed by")} {template.createdByName}</p>}
+            <div className="marketplace-detail-price">
+              <strong>{templatePriceLabel(template)}</strong>
+              {template.originalPrice ? <s>{formatRupiah(template.originalPrice)}</s> : null}
+            </div>
+            <p>{template.description || t(
+              "Personalisasi undangan pernikahan ini dari editor visual Ikrarku.",
+              "Personalise this wedding invitation in Ikrarku’s visual editor.",
+            )}</p>
+            <div className="marketplace-order-actions">
+              <button className="primary-btn" onClick={onOrder}>
+                <ShoppingCart size={17} /> {orderLabel}
               </button>
-              <button
-                className="secondary-btn journey-share"
-                onClick={() => void shareTemplate()}
-              >
-                <Share2 size={16} />
-                {t("Bagikan Template", "Share template")}
+              <button className="secondary-btn" onClick={() => setPreviewOpen(true)}>
+                <Eye size={17} /> {t("Preview Template", "Preview template")}
+              </button>
+              <button className="secondary-btn marketplace-share" onClick={() => void shareTemplate()}
+                aria-label={t("Bagikan template", "Share template")}>
+                <Share2 size={17} />
               </button>
             </div>
-          </div>
-          <aside>
-            {/* TnC Paket v1.3 — isi paket mengikuti dokumen paket. */}
-            <small>
-              {t("PAKET", "PACKAGE")} {(template.package || "Basic").toUpperCase()}
-            </small>
-            <strong>{templatePriceLabel(template)}</strong>
-            <span>
-              {template.withDesigner
-                ? t(
-                    "Didampingi Web Designer: 1x input awal + 3x penyesuaian (Premium) atau sesuai penawaran (Custom).",
-                    "Web Designer assisted: 1 initial input + 3 adjustments (Premium) or as quoted (Custom).",
-                  )
-                : t(
-                    "Isi & edit mandiri dari dashboard. CS memandu lewat Live Chat bila Anda bingung.",
-                    "Fill in and edit it yourself. Our CS guides you via Live Chat when needed.",
-                  )}
-            </span>
-            <hr />
+            {shareStatus && <div className="marketplace-share-status" role="status">{shareStatus}</div>}
+          </section>
+          <section className="marketplace-inclusions">
+            <h2>{t("Yang termasuk dalam paket", "Included in this package")}</h2>
             <ul>
-              {[
-                [t("Lagu, Maps, Gift, RSVP & Gallery", "Music, Maps, Gift, RSVP & Gallery"), true],
-                [t("Live Chat & panduan penggunaan oleh CS", "Live Chat & CS usage guidance"), true],
-                [
-                  t("Penyesuaian tampilan desktop", "Desktop layout adjustments"),
-                  ["Advanced", "Premium", "Custom"].includes(template.package || ""),
-                ],
-                [t("Pendampingan Web Designer", "Web Designer assistance"), Boolean(template.withDesigner)],
-                [
-                  t("Bantuan input data & foto oleh tim", "Data & photo input by our team"),
-                  Boolean(template.withDesigner),
-                ],
-                [t("QR Check-in", "QR Check-in"), Boolean(template.withDesigner)],
-                [t("Receipt email & PDF", "Email & PDF receipt"), !template.isFree],
-              ].map(([label, included]) => (
-                <li key={String(label)} className={included ? "" : "excluded"}>
-                  {included ? <Check size={14} /> : <X size={14} />}
-                  {label}
-                </li>
+              {features.map((label) => (
+                <li key={label}><Check size={17} aria-hidden="true" /> {label}</li>
               ))}
             </ul>
-            <button onClick={onOrder}>
-              <ShoppingCart size={17} />
-              {t("Pesan Sekarang", "Order now")}
-            </button>
-          </aside>
-        </section>
+          </section>
+        </div>
       </main>
       {previewOpen && (
-        <div
+        <dialog
+          ref={dialogRef}
           className={`journey-preview-overlay actual-template-preview device-${journeyDevice}`}
+          aria-label={t("Preview template", "Template preview")}
+          onClose={() => setPreviewOpen(false)}
         >
           {/* QA TC-136: toggle mode Desktop / Mobile pada preview template. */}
           <div className="journey-preview-toolbar">
             <div className="journey-device-switch">
               <button
                 className={journeyDevice === "desktop" ? "active" : ""}
+                aria-pressed={journeyDevice === "desktop"}
                 onClick={() => setJourneyDevice("desktop")}
               >
                 <Monitor size={15} /> Desktop
               </button>
               <button
                 className={journeyDevice === "mobile" ? "active" : ""}
+                aria-pressed={journeyDevice === "mobile"}
                 onClick={() => setJourneyDevice("mobile")}
               >
                 <Smartphone size={15} /> Mobile
@@ -8391,7 +8347,7 @@ function TemplateJourneyPage({
             <button
               className="journey-preview-close"
               aria-label={t("Tutup preview", "Close preview")}
-              onClick={() => setPreviewOpen(false)}
+              onClick={() => dialogRef.current?.close()}
             >
               <X size={18} />
             </button>
@@ -8421,9 +8377,9 @@ function TemplateJourneyPage({
               <div
                 className={`journey-preview-window preset-${template.preset || "classic"}`}
                 style={
-                  template.preview
+                  cover
                     ? {
-                        backgroundImage: `linear-gradient(180deg,rgba(5,20,15,.08),rgba(5,20,15,.58)),url(${template.preview})`,
+                        backgroundImage: `linear-gradient(180deg,rgba(5,20,15,.08),rgba(5,20,15,.58)),url(${cover})`,
                       }
                     : { background: template.bg }
                 }
@@ -8435,7 +8391,7 @@ function TemplateJourneyPage({
           </div>
           </PreviewSurfaceContext>
           </DeviceContext>
-        </div>
+        </dialog>
       )}
     </div>
   );
@@ -30128,7 +30084,7 @@ function AdminDashboard({
           <div>
             <strong>Customer Service</strong>
             <span>
-              {metrics.incoming} pesan masuk · {metrics.replies} balasan
+              {metrics.incoming} pengirim aktif · {metrics.replies} balasan
             </span>
           </div>
           <ArrowRight size={17} />
@@ -30549,9 +30505,9 @@ function CustomerServiceDashboard({
       <div className="cs-metric-grid">
         <button onClick={() => setView("customer-service")}>
           <MessageCircle size={20} />
-          <span>Pesan masuk</span>
+          <span>Pengirim aktif</span>
           <strong>{metrics.incoming}</strong>
-          <small>Total pesan customer di semua percakapan yang dapat diakses</small>
+          <small>Satu hitungan per pengirim dengan percakapan Open atau Pending</small>
         </button>
         <button onClick={() => setView("customer-service")}>
           <Send size={20} />

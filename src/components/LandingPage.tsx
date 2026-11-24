@@ -17,6 +17,8 @@ import {
 } from "lucide-react";
 import type { Template, ArticleItem, View } from "../App";
 import { useSiteLang } from "../i18n";
+import { matchesTemplateCategory, templateCategories } from "../templateCatalog";
+import weddingHero from "../assets/wedding-home.webp";
 import "./LandingPage.css";
 
 /** TC-246 — teks landing page dalam dua bahasa. Pilihan tersimpan per
@@ -42,9 +44,7 @@ const COPY = {
       "Hadirkan hari istimewa kalian dalam undangan digital yang personal. Pilih desain, ceritakan kisahnya, dan sambut setiap tamu dengan hangat.",
     heroCta: "Pilih desain kalian",
     heroHow: "Lihat cara kerjanya",
-    heroArt: "Ilustrasi undangan digital",
-    inviteTagline: "Bersama, memulai selamanya.",
-    inviteOpen: "Buka undangan",
+    heroArt: "Pasangan pengantin Indonesia tertawa bersama di hari pernikahan mereka",
     strip: ["Cerita kalian, satu tautan.", "RSVP online", "Galeri kenangan", "Lokasi acara", "Musik pilihan"],
     tplEyebrow: "TEMUKAN YANG TERASA SEPERTI KALIAN",
     tplTitle: ["Berawal dari desain", "yang kalian sukai."],
@@ -115,9 +115,7 @@ const COPY = {
       "Bring your special day to life with a personal digital invitation. Choose a design, tell your story, and welcome every guest warmly.",
     heroCta: "Choose your design",
     heroHow: "See how it works",
-    heroArt: "Digital invitation illustration",
-    inviteTagline: "Together, beginning forever.",
-    inviteOpen: "Open invitation",
+    heroArt: "Indonesian newlyweds laughing together on their wedding day",
     strip: ["Your story, one link.", "Online RSVP", "Memory gallery", "Event location", "Your music"],
     tplEyebrow: "FIND THE ONE THAT FEELS LIKE YOU",
     tplTitle: ["It starts with a design", "you love."],
@@ -446,14 +444,14 @@ export default function LandingPage({
   }, [lang]);
   const root = useRef<HTMLDivElement>(null);
   const categories = useMemo(
-    () => [ALL, ...new Set(templates.map((t) => t.category))],
+    () => templateCategories(templates),
     [templates],
   );
   // QA TC-151: desain rekomendasi tampil lebih dulu supaya customer yang
   // bingung memilih langsung melihatnya.
   const visible = useMemo(() => {
     const filtered = templates.filter(
-      (t) => category === ALL || t.category === category,
+      (t) => matchesTemplateCategory(t, category),
     );
     return [
       ...filtered.filter((t) => t.recommended),
@@ -621,41 +619,8 @@ export default function LandingPage({
               </button>
             </div>
           </div>
-          <div className="ikr-hero-art" aria-label={tx.heroArt}>
-            <div className="ikr-art-caption">
-              A LITTLE PREVIEW OF YOUR FOREVER
-            </div>
-            <div className="ikr-invitation">
-              <svg
-                className="ikr-botanical"
-                viewBox="0 0 360 420"
-                fill="none"
-                aria-hidden="true"
-              >
-                <g stroke="currentColor" strokeWidth="1.2">
-                  <path d="M16 410C52 290 4 158 95 12M340 414C299 293 361 170 270 18" />
-                  {[0, 1, 2, 3, 4, 5].map((i) => (
-                    <g
-                      key={i}
-                      transform={`translate(${i % 2 ? 12 : 0},${i * 55})`}
-                    >
-                      <path d="M41 78C7 47 5 32 14 22C43 24 59 42 41 78ZM42 79C69 58 87 52 96 60C94 87 69 98 42 79M315 80C348 52 352 28 340 20C313 29 301 53 315 80M316 82C291 57 270 54 263 65C273 90 296 99 316 82" />
-                    </g>
-                  ))}
-                </g>
-              </svg>
-              <span className="ikr-invite-kicker">THE WEDDING OF</span>
-              <h2>
-                Alya <i>&</i> Raka
-              </h2>
-              <span className="ikr-invite-rule" />
-              <p>{tx.inviteTagline}</p>
-              <strong>20 . 12 . 2026</strong>
-              <span className="ikr-invite-location">BANDUNG, INDONESIA</span>
-              <span className="ikr-invite-open">
-                {tx.inviteOpen} <ArrowRight size={13} />
-              </span>
-            </div>
+          <div className="ikr-hero-art">
+            <img src={weddingHero} alt={tx.heroArt} fetchPriority="high" width={1122} height={1402} />
           </div>
         </section>
         <div className="ikr-benefit-strip">
@@ -777,10 +742,10 @@ export default function LandingPage({
             </div>
           )}
           {/* Landing menampilkan 9 desain; selebihnya dibuka di halaman khusus. */}
-          {visible.length > 9 && (
+          {templates.length > 0 && (
             <div className="ikr-template-more">
               <button className="ikr-btn" onClick={() => setView("designs")}>
-                {tx.seeAllDesigns} ({visible.length}) <ArrowRight size={16} />
+                {tx.seeAllDesigns} <ArrowRight size={16} />
               </button>
             </div>
           )}
