@@ -155,6 +155,7 @@ import {
   ALL_TEMPLATE_CATEGORIES,
   matchesTemplateCategory,
   templateCategories,
+  templatePackageBenefits,
 } from "./templateCatalog";
 import {
   getSiteLang,
@@ -5977,6 +5978,7 @@ function App() {
   };
 
   const openTemplateJourney = (template: Template) => {
+    window.scrollTo({ top: 0, behavior: "instant" });
     setSelectedPublicTemplate(template);
     setView("template-detail");
   };
@@ -6320,6 +6322,8 @@ function App() {
       <TemplateJourneyPage
         key={selectedPublicTemplate.id}
         template={selectedPublicTemplate}
+        templates={publicTemplates}
+        onTemplate={openTemplateJourney}
         onBack={() => setView("designs")}
         onOrder={() => beginCheckout(selectedPublicTemplate)}
       />
@@ -7217,6 +7221,93 @@ const initialCatalogFilters = {
   page: 1,
 };
 
+function MarketplaceTemplateCard({
+  template,
+  onTemplate,
+}: {
+  template: Template;
+  onTemplate: (template: Template) => void;
+}) {
+  const t = useT();
+  return (
+    <article className="ikr-template">
+      <div className="ikr-template-preview">
+        {template.preview || template.sampleImage ? (
+          <img
+            className="marketplace-card-image"
+            src={template.sampleImage || template.preview}
+            alt={template.name}
+            loading="lazy"
+          />
+        ) : template.canvasSections?.length ? (
+          <WebsiteTemplatePreview
+            template={template}
+            title={template.name}
+            sections={template.canvasSections}
+            bare
+          />
+        ) : (
+          <div
+            className="ikr-template-fallback"
+            style={{ background: template.bg, color: template.accent }}
+          >
+            <small>{template.category}</small>
+            <span>
+              Our story,
+              <br />
+              <i>beautifully told.</i>
+            </span>
+          </div>
+        )}
+        {/* QA 14 TC-318 — label Recommended, New, dan Diskon. */}
+        {(template.recommended ||
+          template.isNew ||
+          template.originalPrice) && (
+          <span className="ikr-template-badges">
+            {template.recommended && (
+              <span className="ikr-template-badge">
+                <Star size={12} /> Recommended
+              </span>
+            )}
+            {template.isNew && (
+              <span className="ikr-template-badge is-new">New</span>
+            )}
+            {template.originalPrice ? (
+              <span className="ikr-template-badge is-sale">
+                {t("Diskon", "Sale")}{" "}
+                {Math.round(
+                  (1 - (template.price || 0) / template.originalPrice) *
+                    100,
+                )}
+                %
+              </span>
+            ) : null}
+          </span>
+        )}
+      </div>
+      <div className="ikr-template-info">
+        <div>
+          <small>
+            {template.category}
+            {template.package ? ` · ${template.package}` : ""}
+          </small>
+          <h3>{template.name}</h3>
+        </div>
+        <span className="ikr-template-price">
+          {template.originalPrice ? (
+            <s>{formatRupiah(template.originalPrice)}</s>
+          ) : null}
+          {templatePriceLabel(template)}
+        </span>
+      </div>
+      <button className="marketplace-card-action" onClick={() => onTemplate(template)}
+        aria-label={`${t("Lihat detail", "View details")} ${template.name}`}>
+        {t("Lihat detail", "View details")} <ArrowRight size={16} />
+      </button>
+    </article>
+  );
+}
+
 function AllDesignsPage({
   templates,
   setView,
@@ -7317,81 +7408,7 @@ function AllDesignsPage({
         </section>
         <section className="ikr-template-grid marketplace-grid" aria-label={t("Daftar template", "Template listings")}>
           {paged.map((template) => (
-            <article className="ikr-template" key={template.id}>
-              <div className="ikr-template-preview">
-                {template.preview || template.sampleImage ? (
-                  <img
-                    className="marketplace-card-image"
-                    src={template.sampleImage || template.preview}
-                    alt={template.name}
-                    loading="lazy"
-                  />
-                ) : template.canvasSections?.length ? (
-                  <WebsiteTemplatePreview
-                    template={template}
-                    title={template.name}
-                    sections={template.canvasSections}
-                    bare
-                  />
-                ) : (
-                  <div
-                    className="ikr-template-fallback"
-                    style={{ background: template.bg, color: template.accent }}
-                  >
-                    <small>{template.category}</small>
-                    <span>
-                      Our story,
-                      <br />
-                      <i>beautifully told.</i>
-                    </span>
-                  </div>
-                )}
-                {/* QA 14 TC-318 — label Recommended, New, dan Diskon. */}
-                {(template.recommended ||
-                  template.isNew ||
-                  template.originalPrice) && (
-                  <span className="ikr-template-badges">
-                    {template.recommended && (
-                      <span className="ikr-template-badge">
-                        <Star size={12} /> Recommended
-                      </span>
-                    )}
-                    {template.isNew && (
-                      <span className="ikr-template-badge is-new">New</span>
-                    )}
-                    {template.originalPrice ? (
-                      <span className="ikr-template-badge is-sale">
-                        {t("Diskon", "Sale")}{" "}
-                        {Math.round(
-                          (1 - (template.price || 0) / template.originalPrice) *
-                            100,
-                        )}
-                        %
-                      </span>
-                    ) : null}
-                  </span>
-                )}
-              </div>
-              <div className="ikr-template-info">
-                <div>
-                  <small>
-                    {template.category}
-                    {template.package ? ` · ${template.package}` : ""}
-                  </small>
-                  <h3>{template.name}</h3>
-                </div>
-                <span className="ikr-template-price">
-                  {template.originalPrice ? (
-                    <s>{formatRupiah(template.originalPrice)}</s>
-                  ) : null}
-                  {templatePriceLabel(template)}
-                </span>
-              </div>
-              <button className="marketplace-card-action" onClick={() => onTemplate(template)}
-                aria-label={`${t("Lihat detail", "View details")} ${template.name}`}>
-                {t("Lihat detail", "View details")} <ArrowRight size={16} />
-              </button>
-            </article>
+            <MarketplaceTemplateCard key={template.id} template={template} onTemplate={onTemplate} />
           ))}
           {!visible.length && (
             <div className="marketplace-empty">
@@ -8177,10 +8194,14 @@ function VerifyEmailPage({ setView }: { setView: (view: View) => void }) {
 
 function TemplateJourneyPage({
   template,
+  templates,
+  onTemplate,
   onBack,
   onOrder,
 }: {
   template: Template;
+  templates: Template[];
+  onTemplate: (template: Template) => void;
   onBack: () => void;
   onOrder: () => void;
 }) {
@@ -8227,18 +8248,12 @@ function TemplateJourneyPage({
   const cover = images[imageIndex];
   const orderLabel = template.isFree ? t("Pilih Template Gratis", "Choose free template") : t("Pesan Sekarang", "Order now");
   const packageName = template.package || (template.isFree ? "Free" : "Basic");
-  const designerPackage = ["Premium", "Custom"].includes(packageName);
-  const features = [
-    t("Musik, peta lokasi, hadiah, RSVP, dan galeri", "Music, location map, gifts, RSVP, and gallery"),
-    t("Live Chat dan panduan dari tim CS", "Live Chat and guidance from our support team"),
-    ...(["Advanced", "Premium", "Custom"].includes(packageName)
-      ? [t("Penyesuaian tampilan desktop", "Desktop layout adjustments")] : []),
-    ...(designerPackage ? [t("QR Check-in", "QR check-in")] : []),
-    ...(template.withDesigner ? [t("Pendampingan Web Designer dan bantuan input awal", "Web Designer assistance and initial setup")] : []),
-    ...(packageName === "Custom"
-      ? [t("Multi-language dan desain UI/UX khusus", "Multiple languages and custom UI/UX design")] : []),
-    ...(!template.isFree ? [t("Bukti pembayaran via email dan PDF", "Payment receipt by email and PDF")] : []),
-  ];
+  const features = templatePackageBenefits(packageName).map(([id, en]) => t(id, en));
+  const otherTemplates = templates.filter((item) => item.id !== template.id);
+  const relatedTemplates = [
+    ...otherTemplates.filter((item) => item.category === template.category),
+    ...otherTemplates.filter((item) => item.category !== template.category),
+  ].slice(0, 3);
   return (
     <div className="marketplace-page marketplace-detail">
       <header className="marketplace-header">
@@ -8302,22 +8317,36 @@ function TemplateJourneyPage({
               <button className="secondary-btn" onClick={() => setPreviewOpen(true)}>
                 <Eye size={17} /> {t("Preview Template", "Preview template")}
               </button>
-              <button className="secondary-btn marketplace-share" onClick={() => void shareTemplate()}
-                aria-label={t("Bagikan template", "Share template")}>
-                <Share2 size={17} />
+              <button className="secondary-btn marketplace-share" onClick={() => void shareTemplate()}>
+                <Share2 size={17} /> {t("Share Template", "Share template")}
               </button>
             </div>
             {shareStatus && <div className="marketplace-share-status" role="status">{shareStatus}</div>}
-          </section>
-          <section className="marketplace-inclusions">
-            <h2>{t("Yang termasuk dalam paket", "Included in this package")}</h2>
-            <ul>
-              {features.map((label) => (
-                <li key={label}><Check size={17} aria-hidden="true" /> {label}</li>
-              ))}
-            </ul>
+            <section className="marketplace-inclusions">
+              <h2>{t("Yang termasuk dalam paket", "Included in this package")}</h2>
+              <ul>
+                {features.map((label) => (
+                  <li key={label}><Check size={17} aria-hidden="true" /> {label}</li>
+                ))}
+              </ul>
+            </section>
           </section>
         </div>
+        {relatedTemplates.length > 0 && (
+          <section className="marketplace-related" aria-labelledby="marketplace-related-title">
+            <div className="marketplace-related-heading">
+              <h2 id="marketplace-related-title">{t("Template lainnya", "More templates")}</h2>
+              <a className="secondary-btn" href="/desain">
+                {t("Lihat semua template", "Browse all templates")} <ArrowRight size={16} />
+              </a>
+            </div>
+            <div className="ikr-template-grid marketplace-grid">
+              {relatedTemplates.map((item) => (
+                <MarketplaceTemplateCard key={item.id} template={item} onTemplate={onTemplate} />
+              ))}
+            </div>
+          </section>
+        )}
       </main>
       {previewOpen && (
         <dialog
