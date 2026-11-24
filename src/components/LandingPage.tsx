@@ -10,14 +10,13 @@ import {
   MousePointer2,
   ChevronLeft,
   ChevronRight,
-  Star,
   LogIn,
   UserRound,
   Globe,
 } from "lucide-react";
 import type { Template, ArticleItem, View } from "../App";
 import { useSiteLang } from "../i18n";
-import { matchesTemplateCategory, templateCategories } from "../templateCatalog";
+import LandingCarousel from "./LandingCarousel";
 import weddingHero from "../assets/wedding-home.webp";
 import "./LandingPage.css";
 
@@ -46,18 +45,7 @@ const COPY = {
     heroHow: "Lihat cara kerjanya",
     heroArt: "Pasangan pengantin Indonesia tertawa bersama di hari pernikahan mereka",
     strip: ["Cerita kalian, satu tautan.", "RSVP online", "Galeri kenangan", "Lokasi acara", "Musik pilihan"],
-    tplEyebrow: "TEMUKAN YANG TERASA SEPERTI KALIAN",
-    tplTitle: ["Berawal dari desain", "yang kalian sukai."],
-    tplBody:
-      "Eksplorasi gaya, lihat preview, dan temukan detail harga sebelum melangkah lebih jauh.",
-    tplFilter: "Filter kategori desain",
     all: "Semua",
-    viewDesign: "Lihat desain",
-    styleIllustration: "ILUSTRASI GAYA",
-    tplEmpty: "Desain untuk kategori ini belum tersedia.",
-    tplOffline:
-      "Katalog belum dapat dimuat. Silakan muat ulang atau coba beberapa saat lagi.",
-    seeAllDesigns: "Lihat semua desain",
     featEyebrow: "INDAH DILIHAT. MUDAH DIGUNAKAN.",
     featTitle: ["Detail kecil.", "Arti yang besar."],
     featBody:
@@ -117,17 +105,8 @@ const COPY = {
     heroHow: "See how it works",
     heroArt: "Indonesian newlyweds laughing together on their wedding day",
     strip: ["Your story, one link.", "Online RSVP", "Memory gallery", "Event location", "Your music"],
-    tplEyebrow: "FIND THE ONE THAT FEELS LIKE YOU",
-    tplTitle: ["It starts with a design", "you love."],
-    tplBody:
-      "Explore styles, view previews, and check pricing details before taking the next step.",
-    tplFilter: "Filter design categories",
     all: "All",
-    viewDesign: "View design",
-    styleIllustration: "STYLE ILLUSTRATION",
-    tplEmpty: "No designs in this category yet.",
     tplOffline: "The catalog could not be loaded. Please reload or try again shortly.",
-    seeAllDesigns: "See all designs",
     featEyebrow: "BEAUTIFUL TO SEE. EASY TO USE.",
     featTitle: ["Small details.", "Big meaning."],
     featBody:
@@ -172,14 +151,14 @@ type Props = {
   setView: (view: View) => void;
   templates: Template[];
   articles: ArticleItem[];
-  onTemplate: (template: Template) => void;
+  onTemplate: (template: Template, preview?: boolean) => void;
+  renderPreview: (template: Template) => ReactNode;
   onArticle: (article: ArticleItem) => void;
   accountName?: string;
   onOpenWorkspace?: () => void;
   scrollTarget?: string | null;
   onScrolled?: () => void;
   databaseOnline: boolean;
-  renderPreview: (template: Template) => ReactNode;
   /** QA 15 TC-354 — footer lengkap (navigasi, bantuan, legal, kontak). */
   renderFooter?: (scrollTo: (id: string) => void) => ReactNode;
 };
@@ -408,12 +387,6 @@ function JournalCarousel({
 
 /** Nilai internal kategori "semua"; labelnya diterjemahkan saat render. */
 const ALL = "Semua";
-const rupiah = (value = 0) =>
-  new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
 const scrollToSection = (id: string) =>
   document.getElementById(id)?.scrollIntoView({
     behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
@@ -431,11 +404,13 @@ export default function LandingPage({
   scrollTarget,
   onScrolled,
   databaseOnline,
-  renderPreview,
   renderFooter,
+  renderPreview,
 }: Props) {
-  const [menu, setMenu] = useState(false),
-    [category, setCategory] = useState(ALL);
+  const [menu, setMenu] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
+  const [heroVisible, setHeroVisible] = useState(false);
+  const hero = useRef<HTMLElement>(null);
   // QA 15 — bahasa dipakai bersama seluruh situs (src/i18n.ts).
   const [lang, setLang] = useSiteLang();
   const tx = COPY[lang];
@@ -443,21 +418,23 @@ export default function LandingPage({
     document.documentElement.lang = lang;
   }, [lang]);
   const root = useRef<HTMLDivElement>(null);
-  const categories = useMemo(
-    () => templateCategories(templates),
-    [templates],
-  );
-  // QA TC-151: desain rekomendasi tampil lebih dulu supaya customer yang
-  // bingung memilih langsung melihatnya.
-  const visible = useMemo(() => {
-    const filtered = templates.filter(
-      (t) => matchesTemplateCategory(t, category),
-    );
-    return [
-      ...filtered.filter((t) => t.recommended),
-      ...filtered.filter((t) => !t.recommended),
-    ];
-  }, [templates, category]);
+  useEffect(() => {
+    const update = () => setScrolled(window.scrollY > 20);
+    update();
+    window.addEventListener("scroll", update, { passive: true });
+    return () => window.removeEventListener("scroll", update);
+  }, []);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window) || !hero.current)
+      return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (!entry.isIntersecting) return;
+      setHeroVisible(true);
+      observer.disconnect();
+    }, { threshold: 0.15 });
+    observer.observe(hero.current);
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     if (scrollTarget) {
       scrollToSection(scrollTarget);
@@ -519,7 +496,7 @@ export default function LandingPage({
       <a className="ikr-skip" href="#main-content">
         {tx.skip}
       </a>
-      <header className="ikr-nav">
+      <header className={`ikr-nav${scrolled ? " is-scrolled" : ""}`}>
         <a href="#" aria-label={tx.home} className="ikr-brand">
           <img
             src="/brand/ikrarku-logo.png"
@@ -533,16 +510,16 @@ export default function LandingPage({
           className={menu ? "is-open" : ""}
           id="landing-menu"
         >
-          <a href="#templates" onClick={() => nav("templates")}>
+          <a href="#templates" onClick={() => setMenu(false)}>
             {tx.navDesigns}
           </a>
-          <a href="#how-it-works" onClick={() => nav("how-it-works")}>
+          <a href="#how-it-works" onClick={() => setMenu(false)}>
             {tx.navHow}
           </a>
-          <a href="#features" onClick={() => nav("features")}>
+          <a href="#features" onClick={() => setMenu(false)}>
             {tx.navFeatures}
           </a>
-          <a href="#faq" onClick={() => nav("faq")}>
+          <a href="#faq" onClick={() => setMenu(false)}>
             FAQ
           </a>
           <a
@@ -597,14 +574,12 @@ export default function LandingPage({
         </div>
       </header>
       <main id="main-content">
-        <section className="ikr-hero">
+        <section ref={hero} className={`ikr-hero${heroVisible ? " is-introduced" : ""}`}>
           <div className="ikr-hero-copy">
             <h1>
-              {tx.heroLines[0]}
-              <br />
-              {tx.heroLines[1]}
-              <br />
-              <em>{tx.heroLines[2]}</em>
+              <span>{tx.heroLines[0]}</span>{" "}
+              <span>{tx.heroLines[1]}</span>{" "}
+              <span><em>{tx.heroLines[2]}</em></span>
             </h1>
             <p>{tx.heroBody}</p>
             <div className="ikr-actions">
@@ -633,123 +608,10 @@ export default function LandingPage({
           <i />
           <p>{tx.strip[4]}</p>
         </div>
-        <section id="templates" className="ikr-section" data-reveal>
-          <div className="ikr-section-heading">
-            <div>
-              <span className="ikr-eyebrow">{tx.tplEyebrow}</span>
-              <h2>
-                {tx.tplTitle[0]}
-                <br />
-                <em>{tx.tplTitle[1]}</em>
-              </h2>
-            </div>
-            <p>{tx.tplBody}</p>
-          </div>
-          <div className="ikr-filters" aria-label={tx.tplFilter}>
-            {categories.map((c) => (
-              <button
-                key={c}
-                aria-pressed={category === c}
-                onClick={() => setCategory(c)}
-              >
-                {c === ALL ? tx.all : c}
-              </button>
-            ))}
-          </div>
-          <div className="ikr-template-grid">
-            {visible.slice(0, 9).map((t) => (
-              <article className="ikr-template" key={t.id}>
-                <button
-                  className="ikr-template-preview"
-                  aria-label={`${tx.viewDesign} ${t.name}`}
-                  onClick={() => onTemplate(t)}
-                >
-                  {t.sampleImage || t.preview ? (
-                    /* QA TC-135: gambar sample yang baru diunggah langsung dipakai
-                       sebagai thumbnail di halaman Templates. */
-                    <div
-                      className="ikr-template-sample"
-                      style={{
-                        backgroundImage: `url(${t.sampleImage || t.preview})`,
-                      }}
-                      role="img"
-                      aria-label={`Sample ${t.name}`}
-                    />
-                  ) : t.canvasSections?.length ? (
-                    renderPreview(t)
-                  ) : (
-                    <div
-                      className="ikr-template-fallback"
-                      style={{ background: t.bg, color: t.accent }}
-                    >
-                      <small>{t.category}</small>
-                      <span>
-                        Our story,
-                        <br />
-                        <i>beautifully told.</i>
-                      </span>
-                      <Heart size={24} />
-                      <small>{tx.styleIllustration}</small>
-                    </div>
-                  )}
-                  <span className="ikr-preview-action">
-                    {tx.viewDesign} <ArrowRight size={16} />
-                  </span>
-                  {/* QA 14 TC-318 — label Recommended, New, dan Diskon. */}
-                  {(t.recommended || t.isNew || t.originalPrice) && (
-                    <span className="ikr-template-badges">
-                      {t.recommended && (
-                        <span className="ikr-template-badge">
-                          <Star size={12} /> Recommended
-                        </span>
-                      )}
-                      {t.isNew && (
-                        <span className="ikr-template-badge is-new">New</span>
-                      )}
-                      {t.originalPrice ? (
-                        <span className="ikr-template-badge is-sale">
-                          Diskon{" "}
-                          {Math.round(
-                            (1 - (t.price || 0) / t.originalPrice) * 100,
-                          )}
-                          %
-                        </span>
-                      ) : null}
-                    </span>
-                  )}
-                </button>
-                <div className="ikr-template-info">
-                  <div>
-                    <small>
-                      {t.category}
-                      {t.package ? ` · ${t.package}` : ""}
-                    </small>
-                    <h3>{t.name}</h3>
-                  </div>
-                  <span className="ikr-template-price">
-                    {t.originalPrice ? <s>{rupiah(t.originalPrice)}</s> : null}
-                    {t.isFree ? (lang === "en" ? "Free" : "Gratis") : rupiah(t.price)}
-                  </span>
-                </div>
-              </article>
-            ))}
-          </div>
-          {!visible.length && (
-            <div className="ikr-empty" role="status">
-              {databaseOnline
-                ? tx.tplEmpty
-                : tx.tplOffline}
-            </div>
-          )}
-          {/* Landing menampilkan 9 desain; selebihnya dibuka di halaman khusus. */}
-          {templates.length > 0 && (
-            <div className="ikr-template-more">
-              <button className="ikr-btn" onClick={() => setView("designs")}>
-                {tx.seeAllDesigns} <ArrowRight size={16} />
-              </button>
-            </div>
-          )}
-        </section>
+        <LandingCarousel
+          templates={templates} lang={lang} databaseOnline={databaseOnline}
+          onTemplate={onTemplate} renderPreview={renderPreview} onSeeAll={() => setView("designs")}
+        />
         <section id="features" className="ikr-features" data-reveal>
           <div className="ikr-feature-lead">
             <span className="ikr-eyebrow">{tx.featEyebrow}</span>

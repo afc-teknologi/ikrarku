@@ -5977,7 +5977,10 @@ function App() {
       .finally(() => setDashboardSavingInvitees(false));
   };
 
-  const openTemplateJourney = (template: Template) => {
+  const previewOnOpen = useRef(false);
+  useEffect(() => { previewOnOpen.current = false; }, [view, selectedPublicTemplate?.id]);
+  const openTemplateJourney = (template: Template, preview = false) => {
+    previewOnOpen.current = preview;
     window.scrollTo({ top: 0, behavior: "instant" });
     setSelectedPublicTemplate(template);
     setView("template-detail");
@@ -6324,6 +6327,7 @@ function App() {
         template={selectedPublicTemplate}
         templates={publicTemplates}
         onTemplate={openTemplateJourney}
+        initialPreviewOpen={previewOnOpen.current}
         onBack={() => setView("designs")}
         onOrder={() => beginCheckout(selectedPublicTemplate)}
       />
@@ -7611,7 +7615,7 @@ function LandingPage(props: {
   setView: (view: View) => void;
   articles: ArticleItem[];
   templates: Template[];
-  onTemplate: (template: Template) => void;
+  onTemplate: (template: Template, preview?: boolean) => void;
   databaseOnline: boolean;
   accountName?: string;
   onOpenWorkspace?: () => void;
@@ -8196,17 +8200,19 @@ function TemplateJourneyPage({
   template,
   templates,
   onTemplate,
+  initialPreviewOpen,
   onBack,
   onOrder,
 }: {
   template: Template;
   templates: Template[];
   onTemplate: (template: Template) => void;
+  initialPreviewOpen: boolean;
   onBack: () => void;
   onOrder: () => void;
 }) {
   const t = useT();
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(initialPreviewOpen);
   const [shareStatus, setShareStatus] = useState("");
   const dialogRef = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
