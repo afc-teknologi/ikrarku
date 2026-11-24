@@ -1183,10 +1183,9 @@ app.post(
     db.prepare(
       `INSERT INTO messages(id,conversation_id,sender_type,body,created_at) VALUES(?,?,?,?,?)`,
     ).run(messageId, conversation.id, "customer", String(body).trim(), now());
-    db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
-      now(),
-      conversation.id,
-    );
+    db.prepare(
+      "UPDATE conversations SET status=CASE WHEN status='Resolved' THEN 'Open' ELSE status END,updated_at=? WHERE id=?",
+    ).run(now(), conversation.id);
     notifyCustomerChat(conversation.id, body);
     res.status(201).json({
       conversationId: conversation.id,
@@ -6301,7 +6300,16 @@ app.get("/api/cs/metrics", auth, (req, res) => {
   const runCount = (sql) =>
     scope ? db.prepare(sql).get(params).count : db.prepare(sql).get().count;
   const incoming = runCount(
-    `SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope ? " AND" : " WHERE"} m.sender_type='customer'`,
+    `SELECT COUNT(DISTINCT CASE
+        WHEN trim(coalesce(c.customer_email, '')) <> ''
+          THEN 'email:' || lower(trim(c.customer_email))
+        ELSE 'conversation:' || c.id
+      END) count
+      FROM conversations c
+      JOIN (
+        SELECT DISTINCT conversation_id FROM messages WHERE sender_type='customer'
+      ) inbound ON inbound.conversation_id=c.id
+      ${scope}${scope ? " AND" : " WHERE"} c.status IN ('Open','Pending')`,
   );
   const replies = runCount(
     `SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope ? " AND" : " WHERE"} m.sender_type='support'`,
