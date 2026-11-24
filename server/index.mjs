@@ -1183,10 +1183,9 @@ app.post(
     db.prepare(
       `INSERT INTO messages(id,conversation_id,sender_type,body,created_at) VALUES(?,?,?,?,?)`,
     ).run(messageId, conversation.id, "customer", String(body).trim(), now());
-    db.prepare("UPDATE conversations SET updated_at=? WHERE id=?").run(
-      now(),
-      conversation.id,
-    );
+    db.prepare(
+      "UPDATE conversations SET status=CASE WHEN status='Resolved' THEN 'Open' ELSE status END,updated_at=? WHERE id=?",
+    ).run(now(), conversation.id);
     notifyCustomerChat(conversation.id, body);
     res.status(201).json({
       conversationId: conversation.id,
@@ -1235,7 +1234,14 @@ app.post("/api/auth/login", rateLimit("login", 12, 60_000), (req, res) => {
     return res
       .status(401)
       .json({ error: "Username atau password tidak valid" });
-  if (!row.active || !row.email_verified)
+  if (!row.active)
+    return res.status(403).json({
+      error: "Akun nonaktif. Hubungi Administrator untuk mengaktifkan kembali.",
+    });
+  // QC 24 Nov — verifikasi email hanya untuk akun customer (daftar sendiri).
+  // Akun tim (CS, Web Designer, Admin) dibuat & dikelola Administrator, jadi
+  // mengganti emailnya di Admin Console tidak boleh mengunci login.
+  if (!row.email_verified && row.role_id === "role_user")
     return res.status(403).json({
       error: "Email belum diverifikasi. Silakan cek email konfirmasi Anda.",
     });
@@ -1694,10 +1700,10 @@ function notifyOpsEmail(subject, html, extra = []) {
     }
   });
 }
-// Satu email per percakapan per 15 menit, supaya chat beruntun tidak
-// membanjiri inbox.
-const CHAT_EMAIL_THROTTLE_MS = 15 * 60_000;
-const lastChatEmailAt = new Map();
+// The operations mailbox receives every inbound message. Keep the existing
+// per-conversation limit for the assigned CS's personal mailbox.
+const CS_CHAT_EMAIL_THROTTLE_MS = 15 * 60_000;
+const lastCsChatEmailAt = new Map();
 function notifyCustomerChat(conversationId, body) {
   try {
     const conv = db
@@ -1706,14 +1712,25 @@ function notifyCustomerChat(conversationId, body) {
       )
       .get(conversationId);
     if (!conv) return;
-    const last = lastChatEmailAt.get(conversationId) || 0;
-    if (Date.now() - last < CHAT_EMAIL_THROTTLE_MS) return;
-    lastChatEmailAt.set(conversationId, Date.now());
-    const base = CLIENT_ORIGIN.replace(/\/$/, "");
+    const timestamp = Date.now();
+    const last = lastCsChatEmailAt.get(conversationId) || 0;
+    const assignedCsEmail =
+      conv.cs_email && timestamp - last >= CS_CHAT_EMAIL_THROTTLE_MS
+        ? conv.cs_email
+        : null;
+    if (assignedCsEmail) {
+      lastCsChatEmailAt.set(conversationId, timestamp);
+      const expiry = setTimeout(
+        () => lastCsChatEmailAt.delete(conversationId),
+        CS_CHAT_EMAIL_THROTTLE_MS,
+      );
+      expiry.unref();
+    }
+    const inboxUrl = CLIENT_ORIGIN.replace(/\/$/, "") + "/workspace/customer-service";
     notifyOpsEmail(
       `Chat baru dari ${conv.customer_name || conv.customer_email || "customer"}${conv.order_no ? ` (${conv.order_no})` : ""}`,
-      `<h2>Chat baru di Live Chat ikrarku</h2><p><strong>${escapeHtml(conv.customer_name || "-")}</strong> · ${escapeHtml(conv.customer_email || "-")}${conv.order_no ? ` · ${escapeHtml(conv.order_no)}` : ""}</p><blockquote style="white-space:pre-wrap;border-left:3px solid #155946;margin:12px 0;padding:8px 12px;background:#f4f8f6">${escapeHtml(String(body || "").slice(0, 1200))}</blockquote><p><a href="${base}/login">Balas lewat Support Inbox</a>. Email berikutnya untuk percakapan ini paling cepat 15 menit lagi.</p>`,
-      [conv.cs_email],
+      `<h2>Chat baru di Live Chat ikrarku</h2><p><strong>${escapeHtml(conv.customer_name || "-")}</strong> · ${escapeHtml(conv.customer_email || "-")}${conv.order_no ? ` · ${escapeHtml(conv.order_no)}` : ""}</p><blockquote style="white-space:pre-wrap;border-left:3px solid #155946;margin:12px 0;padding:8px 12px;background:#f4f8f6">${escapeHtml(body)}</blockquote><p><a href="${escapeHtml(inboxUrl)}">Buka Support Inbox</a></p>`,
+      [assignedCsEmail],
     );
   } catch (error) {
     console.error("[chat-email]", error.message);
@@ -3072,22 +3089,26 @@ app.patch("/api/users/:id", auth, permit("users.manage"), (req, res) => {
   const hash = password
     ? bcrypt.hashSync(String(password), 10)
     : row.password_hash;
-  db.prepare(
-    `UPDATE users SET first_name=?,last_name=?,email=?,username=?,password_hash=?,role_id=?,active=?,email_verified=?,updated_at=? WHERE id=?`,
-  ).run(
-    firstName ?? row.first_name,
-    lastName ?? row.last_name,
-    nextEmail,
-    nextUsername,
-    hash,
-    roleId ?? row.role_id,
-    nextActive,
-    emailVerified === undefined ? row.email_verified : emailVerified ? 1 : 0,
-    now(),
-    row.id,
-  );
-  if (password || !nextActive || emailVerified === false)
-    db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
+  policy.transaction(() => {
+    db.prepare(
+      `UPDATE users SET first_name=?,last_name=?,email=?,username=?,password_hash=?,role_id=?,active=?,email_verified=?,reset_token=CASE WHEN ? THEN NULL ELSE reset_token END,reset_expires=CASE WHEN ? THEN NULL ELSE reset_expires END,updated_at=? WHERE id=?`,
+    ).run(
+      firstName ?? row.first_name,
+      lastName ?? row.last_name,
+      nextEmail,
+      nextUsername,
+      hash,
+      roleId ?? row.role_id,
+      nextActive,
+      emailVerified === undefined ? row.email_verified : emailVerified ? 1 : 0,
+      Number(Boolean(password)),
+      Number(Boolean(password)),
+      now(),
+      row.id,
+    );
+    if (password || !nextActive || emailVerified === false)
+      db.prepare("DELETE FROM sessions WHERE user_id=?").run(row.id);
+  });
   auditLog(req.user.id, "user.update", "user", row.id, {
     emailChanged: nextEmail !== String(row.email).toLowerCase(),
     passwordReset: Boolean(password),
@@ -3162,7 +3183,28 @@ app.delete("/api/users/:id", auth, permit("users.manage"), (req, res) => {
         .status(400)
         .json({ error: "Minimal harus ada satu Administrator aktif." });
   }
-  db.prepare("DELETE FROM users WHERE id=?").run(req.params.id);
+  const linkedDataMessage =
+    "Akun masih terkait dengan data Ikrarku. Nonaktifkan akun untuk menghentikan akses dan mempertahankan riwayat.";
+  try {
+    const deleted = policy.transaction(() => {
+      // SQLite would otherwise cascade site and media rows. Orders use a
+      // legacy owner column without a foreign key.
+      const ownsRecords = db.prepare(`
+        SELECT 1 FROM sites WHERE user_id=?
+        UNION ALL SELECT 1 FROM media_assets WHERE owner_user_id=?
+        UNION ALL SELECT 1 FROM orders WHERE user_id=?
+        LIMIT 1
+      `).get(target.id, target.id, target.id);
+      if (ownsRecords) return false;
+      db.prepare("DELETE FROM users WHERE id=?").run(target.id);
+      return true;
+    });
+    if (!deleted) return res.status(409).json({ error: linkedDataMessage });
+  } catch (error) {
+    if (error.errcode === 787)
+      return res.status(409).json({ error: linkedDataMessage });
+    throw error;
+  }
   auditLog(req.user.id, "user.delete", "user", req.params.id, {
     email: target.email,
   });
@@ -6261,7 +6303,16 @@ app.get("/api/cs/metrics", auth, (req, res) => {
   const runCount = (sql) =>
     scope ? db.prepare(sql).get(params).count : db.prepare(sql).get().count;
   const incoming = runCount(
-    `SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope ? " AND" : " WHERE"} m.sender_type='customer'`,
+    `SELECT COUNT(DISTINCT CASE
+        WHEN trim(coalesce(c.customer_email, '')) <> ''
+          THEN 'email:' || lower(trim(c.customer_email))
+        ELSE 'conversation:' || c.id
+      END) count
+      FROM conversations c
+      JOIN (
+        SELECT DISTINCT conversation_id FROM messages WHERE sender_type='customer'
+      ) inbound ON inbound.conversation_id=c.id
+      ${scope}${scope ? " AND" : " WHERE"} c.status IN ('Open','Pending')`,
   );
   const replies = runCount(
     `SELECT COUNT(*) count FROM messages m JOIN conversations c ON c.id=m.conversation_id ${scope}${scope ? " AND" : " WHERE"} m.sender_type='support'`,

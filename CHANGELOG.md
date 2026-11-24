@@ -1,3 +1,10 @@
+## 0.22.1 — 24 November 2026 (QC 24 Nov, di atas branch production)
+
+- QC3: form Ubah akun & Tambah akun di Admin Console tidak lagi diisi otomatis browser dengan email/password Admin yang sedang login (autocomplete dimatikan, password memakai new-password). Sebelumnya password user bisa tergantikan password Admin tanpa disadari.
+- QC4: verifikasi email hanya berlaku untuk akun customer. Akun tim (CS, Web Designer, Admin) yang email-nya diganti Admin tetap bisa login.
+- QC5: foto kartu katalog memenuhi kartu (object-fit cover). Disarankan thumbnail rasio 3:2 (mis. 1500x1000 px).
+- Tes integrasi baru untuk ganti email/password akun tim oleh Admin (43/43).
+
 ## 0.22.0 — 23 November 2026 (QA 16 · TC-365–TC-407 · Paket v1.3)
 
 **Paket layanan (TnC Paket / Panduan Internal Tim v1.3)**
