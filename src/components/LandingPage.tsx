@@ -2,22 +2,19 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   ChevronDown,
-  Menu,
-  X,
   Palette,
   Heart,
   MapPin,
   MousePointer2,
   ChevronLeft,
   ChevronRight,
-  LogIn,
-  UserRound,
-  Globe,
 } from "lucide-react";
 import type { Template, ArticleItem, View } from "../App";
 import { useSiteLang } from "../i18n";
 import LandingCarousel from "./LandingCarousel";
 import weddingHero from "../assets/wedding-home.webp";
+import softBloomPreview from "../assets/carousel/soft-bloom.webp";
+import sundaPreview from "../assets/carousel/sunda-02.webp";
 import "./LandingPage.css";
 
 /** TC-246 — teks landing page dalam dua bahasa. Pilihan tersimpan per
@@ -25,19 +22,6 @@ import "./LandingPage.css";
 export type LandingLang = "id" | "en";
 const COPY = {
   id: {
-    skip: "Lewati ke konten",
-    home: "Ikrarku beranda",
-    mainNav: "Navigasi utama",
-    navDesigns: "Desain undangan",
-    navHow: "Cara memulai",
-    navFeatures: "Fitur",
-    navJournal: "Jurnal ikrarku",
-    workspace: "Buka workspace ikrarku",
-    login: "Masuk",
-    findDesign: "Temukan desain",
-    menuOpen: "Buka menu",
-    menuClose: "Tutup menu",
-    langLabel: "Pilih bahasa",
     heroLines: ["Sebuah janji.", "Sebuah cerita.", "Sebuah undangan."],
     heroBody:
       "Hadirkan hari istimewa kalian dalam undangan digital yang personal. Pilih desain, ceritakan kisahnya, dan sambut setiap tamu dengan hangat.",
@@ -85,19 +69,6 @@ const COPY = {
     footer: "Undangan digital. Cerita yang personal.",
   },
   en: {
-    skip: "Skip to content",
-    home: "ikrarku home",
-    mainNav: "Main navigation",
-    navDesigns: "Invitation designs",
-    navHow: "How it works",
-    navFeatures: "Features",
-    navJournal: "ikrarku Journal",
-    workspace: "Open ikrarku workspace",
-    login: "Log in",
-    findDesign: "Find a design",
-    menuOpen: "Open menu",
-    menuClose: "Close menu",
-    langLabel: "Choose language",
     heroLines: ["A promise.", "A story.", "An invitation."],
     heroBody:
       "Bring your special day to life with a personal digital invitation. Choose a design, tell your story, and welcome every guest warmly.",
@@ -154,8 +125,6 @@ type Props = {
   onTemplate: (template: Template, preview?: boolean) => void;
   renderPreview: (template: Template) => ReactNode;
   onArticle: (article: ArticleItem) => void;
-  accountName?: string;
-  onOpenWorkspace?: () => void;
   scrollTarget?: string | null;
   onScrolled?: () => void;
   databaseOnline: boolean;
@@ -399,31 +368,18 @@ export default function LandingPage({
   articles,
   onTemplate,
   onArticle,
-  accountName,
-  onOpenWorkspace,
   scrollTarget,
   onScrolled,
   databaseOnline,
   renderFooter,
   renderPreview,
 }: Props) {
-  const [menu, setMenu] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
   const [heroVisible, setHeroVisible] = useState(false);
   const hero = useRef<HTMLElement>(null);
   // QA 15 — bahasa dipakai bersama seluruh situs (src/i18n.ts).
-  const [lang, setLang] = useSiteLang();
+  const [lang] = useSiteLang();
   const tx = COPY[lang];
-  useEffect(() => {
-    document.documentElement.lang = lang;
-  }, [lang]);
   const root = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const update = () => setScrolled(window.scrollY > 20);
-    update();
-    window.addEventListener("scroll", update, { passive: true });
-    return () => window.removeEventListener("scroll", update);
-  }, []);
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window) || !hero.current)
       return;
@@ -436,18 +392,15 @@ export default function LandingPage({
     return () => observer.disconnect();
   }, []);
   useEffect(() => {
+    const section = window.location.hash.slice(1);
+    if (section) scrollToSection(section);
+  }, []);
+  useEffect(() => {
     if (scrollTarget) {
       scrollToSection(scrollTarget);
       onScrolled?.();
     }
   }, [scrollTarget, onScrolled]);
-  useEffect(() => {
-    const close = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(false);
-    };
-    window.addEventListener("keydown", close);
-    return () => window.removeEventListener("keydown", close);
-  }, []);
   useEffect(() => {
     if (
       window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
@@ -470,109 +423,8 @@ export default function LandingPage({
     });
     return () => observer.disconnect();
   }, []);
-  const langSwitch = (variant: string) => (
-    <div className={`ikr-lang ${variant}`} role="group" aria-label={tx.langLabel}>
-      <Globe size={14} aria-hidden />
-      {(["id", "en"] as const).map((code) => (
-        <button
-          key={code}
-          type="button"
-          lang={code}
-          aria-pressed={lang === code}
-          className={lang === code ? "is-active" : ""}
-          onClick={() => setLang(code)}
-        >
-          {code.toUpperCase()}
-        </button>
-      ))}
-    </div>
-  );
-  const nav = (id: string) => {
-    setMenu(false);
-    scrollToSection(id);
-  };
   return (
     <div className="ikr-landing" ref={root}>
-      <a className="ikr-skip" href="#main-content">
-        {tx.skip}
-      </a>
-      <header className={`ikr-nav${scrolled ? " is-scrolled" : ""}`}>
-        <a href="#" aria-label={tx.home} className="ikr-brand">
-          <img
-            src="/brand/ikrarku-logo.png"
-            alt="ikrarku"
-            width="152"
-            height="46"
-          />
-        </a>
-        <nav
-          aria-label={tx.mainNav}
-          className={menu ? "is-open" : ""}
-          id="landing-menu"
-        >
-          <a href="#templates" onClick={() => setMenu(false)}>
-            {tx.navDesigns}
-          </a>
-          <a href="#how-it-works" onClick={() => setMenu(false)}>
-            {tx.navHow}
-          </a>
-          <a href="#features" onClick={() => setMenu(false)}>
-            {tx.navFeatures}
-          </a>
-          <a href="#faq" onClick={() => setMenu(false)}>
-            FAQ
-          </a>
-          <a
-            href="/jurnal"
-            onClick={(event) => {
-              event.preventDefault();
-              setMenu(false);
-              setView("journal");
-            }}
-          >
-            {tx.navJournal}
-          </a>
-          {langSwitch("ikr-lang-menu")}
-        </nav>
-        {/* Revisi 24 Okt (2) — pilihan bahasa, Masuk, dan CTA satu baris
-            sejajar dengan logo & menu. Di ponsel pilihan bahasa pindah ke
-            menu agar targetnya bisa 48 px tanpa membuat header sesak. */}
-        <div className="ikr-nav-actions">
-          {langSwitch("ikr-lang-header")}
-          {/* Pengunjung yang sudah login melihat namanya, dan klik namanya
-              membawa langsung ke workspace. */}
-          {accountName ? (
-            <button
-              className="ikr-login is-account"
-              onClick={() => onOpenWorkspace?.()}
-              title={tx.workspace}
-            >
-              <UserRound size={15} />
-              <span>{accountName}</span>
-            </button>
-          ) : (
-            <button className="ikr-login" onClick={() => setView("login")}>
-              <LogIn size={15} />
-              <span>{tx.login}</span>
-            </button>
-          )}
-          <button
-            className="ikr-btn ikr-nav-cta"
-            onClick={() => nav("templates")}
-          >
-            {tx.findDesign} <ArrowRight size={16} />
-          </button>
-          <button
-            className="ikr-menu"
-            aria-label={menu ? tx.menuClose : tx.menuOpen}
-            aria-expanded={menu}
-            aria-controls="landing-menu"
-            onClick={() => setMenu(!menu)}
-          >
-            {menu ? <X /> : <Menu />}
-          </button>
-        </div>
-      </header>
       <main id="main-content">
         <section ref={hero} className={`ikr-hero${heroVisible ? " is-introduced" : ""}`}>
           <div className="ikr-hero-copy">
@@ -583,12 +435,12 @@ export default function LandingPage({
             </h1>
             <p>{tx.heroBody}</p>
             <div className="ikr-actions">
-              <button className="ikr-btn" onClick={() => nav("templates")}>
+              <button className="ikr-btn" onClick={() => scrollToSection("templates")}>
                 {tx.heroCta} <ArrowRight size={18} />
               </button>
               <button
                 className="ikr-text-button"
-                onClick={() => nav("how-it-works")}
+                onClick={() => scrollToSection("how-it-works")}
               >
                 {tx.heroHow} <ChevronDown size={16} />
               </button>
@@ -613,28 +465,39 @@ export default function LandingPage({
           onTemplate={onTemplate} renderPreview={renderPreview} onSeeAll={() => setView("designs")}
         />
         <section id="features" className="ikr-features" data-reveal>
-          <div className="ikr-feature-lead">
-            <span className="ikr-eyebrow">{tx.featEyebrow}</span>
-            <h2>
-              {tx.featTitle[0]}
-              <br />
-              <em>{tx.featTitle[1]}</em>
-            </h2>
-            <p>{tx.featBody}</p>
+          <div>
+            <div className="ikr-feature-lead">
+              <span className="ikr-eyebrow">{tx.featEyebrow}</span>
+              <h2>
+                {tx.featTitle[0]}
+                <br />
+                <em>{tx.featTitle[1]}</em>
+              </h2>
+              <p>{tx.featBody}</p>
+            </div>
+            <div className="ikr-feature-grid">
+              {[Palette, Heart, MapPin, MousePointer2].map((Icon, index) => {
+                const I = Icon as typeof Heart;
+                const [title, description] = tx.features[index];
+                return (
+                  <article key={index}>
+                    <I size={23} />
+                    <h3>{String(title)}</h3>
+                    <p>{String(description)}</p>
+                  </article>
+                );
+              })}
+            </div>
           </div>
-          <div className="ikr-feature-grid">
-            {[Palette, Heart, MapPin, MousePointer2].map((Icon, index) => {
-              const I = Icon as typeof Heart;
-              const [title, description] = tx.features[index];
-              return (
-                <article key={index}>
-                  <I size={23} />
-                  <h3>{String(title)}</h3>
-                  <p>{String(description)}</p>
-                </article>
-              );
-            })}
-          </div>
+          <figure className="ikr-feature-preview">
+            <div className="ikr-feature-screens">
+              <img src={sundaPreview} alt="Sunda 02" width={392} height={830} loading="lazy" decoding="async" />
+              <img src={softBloomPreview} alt="Soft Bloom" width={392} height={830} loading="lazy" decoding="async" />
+            </div>
+            <figcaption>
+              {lang === "id" ? "Preview undangan dari Canvas Ikrarku" : "Invitation previews from Ikrarku Canvas"}
+            </figcaption>
+          </figure>
         </section>
         <section id="how-it-works" className="ikr-section" data-reveal>
           <span className="ikr-eyebrow">{tx.howEyebrow}</span>
@@ -697,7 +560,7 @@ export default function LandingPage({
             <br />
             <em>{tx.finalTitle[1]}</em>
           </h2>
-          <button className="ikr-btn" onClick={() => nav("templates")}>
+          <button className="ikr-btn" onClick={() => scrollToSection("templates")}>
             {tx.finalCta} <ArrowRight size={18} />
           </button>
         </section>
