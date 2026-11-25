@@ -74,7 +74,7 @@ export default function LandingCarousel({
   };
   return (
     <section id="templates" className="ikr-carousel" aria-labelledby="ikr-carousel-heading">
-      <div className="ikr-carousel-intro">
+      <div className="ikr-carousel-intro" data-reveal>
         <h2 id="ikr-carousel-heading">
           {t("Satu undangan.", "One invitation.")} <em>{t("Satu kesan pertama.", "One first impression.")}</em>
         </h2>

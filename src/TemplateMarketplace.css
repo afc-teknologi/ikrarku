@@ -8,18 +8,6 @@
   color: var(--market-ink);
 }
 
-.marketplace-header {
-  min-height: 68px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 12px max(5vw, calc((100vw - 1240px) / 2));
-  border-bottom: 1px solid var(--market-line);
-  background: #fff;
-}
-
-.marketplace-header-actions,
 .marketplace-breadcrumb,
 .marketplace-categories,
 .marketplace-results,
@@ -33,7 +21,6 @@
   flex-wrap: wrap;
 }
 
-.marketplace-brand,
 .marketplace-breadcrumb button {
   padding: 0;
   border: 0;

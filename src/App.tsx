@@ -165,6 +165,7 @@ import {
   type SiteLang,
 } from "./i18n";
 import LandingPageView, { JournalCard } from "./components/LandingPage";
+import PublicHeader from "./components/PublicHeader";
 import DesignerControls from "./components/DesignerControls";
 import {
   designerStyle,
@@ -6290,8 +6291,33 @@ function App() {
 
   if (publicSiteData) return <PublicWeddingPage site={publicSiteData} />;
 
+  const renderPublic = (content: React.ReactNode) => (
+    <>
+      <PublicHeader
+        accountName={currentAccountId ? currentAccount?.name : undefined}
+        onHome={() => {
+          setArticleSlug(null);
+          setView("landing");
+          window.scrollTo({ top: 0 });
+        }}
+        onSection={(id) => {
+          setArticleSlug(null);
+          setLandingScrollTarget(id);
+          setView("landing");
+        }}
+        onJournal={() => {
+          setArticleSlug(null);
+          setView("journal");
+          window.scrollTo({ top: 0 });
+        }}
+        onAccount={() => setView(currentAccountId ? "dashboard" : "login")}
+      />
+      {content}
+    </>
+  );
+
   if (view === "landing")
-    return (
+    return renderPublic(
       <>
         <LandingPage
           setView={setView}
@@ -6302,8 +6328,6 @@ function App() {
           templates={publicTemplates}
           onTemplate={openTemplateJourney}
           databaseOnline={databaseOnline}
-          accountName={currentAccountId ? currentAccount?.name : undefined}
-          onOpenWorkspace={() => setView("dashboard")}
           scrollTarget={landingScrollTarget}
           onScrolled={() => setLandingScrollTarget(null)}
         />
@@ -6321,7 +6345,7 @@ function App() {
     );
 
   if (view === "template-detail" && selectedPublicTemplate)
-    return (
+    return renderPublic(
       <TemplateJourneyPage
         key={selectedPublicTemplate.id}
         template={selectedPublicTemplate}
@@ -6391,19 +6415,18 @@ function App() {
       />
     );
   if (view === "designs")
-    return (
+    return renderPublic(
       <AllDesignsPage
-        templates={publicTemplates}
         setView={setView}
+        templates={publicTemplates}
         onTemplate={openTemplateJourney}
         databaseOnline={databaseOnline}
         filters={catalogFilters}
         setFilters={setCatalogFilters}
-        accountName={currentAccountId ? currentAccount?.name : undefined}
       />
     );
   if (view === "journal")
-    return (
+    return renderPublic(
       <JournalPage
         articles={publicArticles}
         articleSlug={articleSlug}
@@ -6413,7 +6436,7 @@ function App() {
       />
     );
   if (view === "privacy" || view === "terms" || view === "faq")
-    return <PublicInfoPage page={view} setView={setView} contact={siteContact} />;
+    return renderPublic(<PublicInfoPage page={view} setView={setView} contact={siteContact} />);
   if (view === "forgot-password")
     return <ForgotPasswordPage setView={setView} />;
   if (view === "reset-password") return <ResetPasswordPage setView={setView} />;
@@ -7313,21 +7336,19 @@ function MarketplaceTemplateCard({
 }
 
 function AllDesignsPage({
-  templates,
   setView,
+  templates,
   onTemplate,
   databaseOnline,
   filters,
   setFilters,
-  accountName,
 }: {
-  templates: Template[];
   setView: (view: View) => void;
+  templates: Template[];
   onTemplate: (template: Template) => void;
   databaseOnline: boolean;
   filters: typeof initialCatalogFilters;
   setFilters: React.Dispatch<React.SetStateAction<typeof initialCatalogFilters>>;
-  accountName?: string;
 }) {
   const t = useT();
   const { category, query, sort } = filters;
@@ -7354,18 +7375,7 @@ function AllDesignsPage({
   const paged = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   return (
     <div className="marketplace-page">
-      <header className="marketplace-header">
-        <button className="marketplace-brand" aria-label={t("Beranda Ikrarku", "Ikrarku home")} onClick={() => setView("landing")}>
-          <Brand />
-        </button>
-        <div className="marketplace-header-actions">
-          <LangSwitch />
-          <button className="secondary-btn" onClick={() => setView(accountName ? "dashboard" : "login")}>
-            {accountName ? t("Workspace", "Workspace") : t("Masuk", "Sign in")}
-          </button>
-        </div>
-      </header>
-      <main className="marketplace-main">
+      <main id="main-content" className="marketplace-main">
         <section className="marketplace-catalog-heading">
           <h1>{t("Template undangan pernikahan", "Wedding invitation templates")}</h1>
           <p>{t("Temukan desain yang sesuai dengan gaya dan anggaran Anda.", "Find a design that fits your style and budget.")}</p>
@@ -7525,22 +7535,7 @@ function JournalPage({
     );
   return (
     <div className="journal-page">
-      <header className="journal-topbar">
-        <button className="secondary-btn" onClick={() => setView("landing")}>
-          <ArrowLeft size={16} /> {t("Kembali ke beranda", "Back to home")}
-        </button>
-        <Brand />
-        <div className="journal-topbar-actions">
-          <LangSwitch />
-          <button className="secondary-btn" onClick={() => setView("login")}>
-            {t("Masuk", "Sign in")}
-          </button>
-          <button className="primary-btn" onClick={() => setView("designs")}>
-            {t("Temukan desain", "Find a design")} <ArrowRight size={15} />
-          </button>
-        </div>
-      </header>
-      <main>
+      <main id="main-content">
         <section className="journal-hero">
           <span className="eyebrow">{t("JURNAL IKRARKU", "IKRARKU JOURNAL")}</span>
           <h1>
@@ -7617,8 +7612,6 @@ function LandingPage(props: {
   templates: Template[];
   onTemplate: (template: Template, preview?: boolean) => void;
   databaseOnline: boolean;
-  accountName?: string;
-  onOpenWorkspace?: () => void;
   scrollTarget?: string | null;
   onScrolled?: () => void;
   articleSlug?: string | null;
@@ -8262,13 +8255,7 @@ function TemplateJourneyPage({
   ].slice(0, 3);
   return (
     <div className="marketplace-page marketplace-detail">
-      <header className="marketplace-header">
-        <button className="marketplace-brand" aria-label={t("Katalog template Ikrarku", "Ikrarku template catalog")} onClick={onBack}>
-          <Brand />
-        </button>
-        <LangSwitch />
-      </header>
-      <main className="marketplace-main">
+      <main id="main-content" className="marketplace-main">
         <nav className="marketplace-breadcrumb" aria-label={t("Lokasi halaman", "Breadcrumb")}>
           <button onClick={onBack}><ArrowLeft size={16} /> {t("Katalog template", "Template catalog")}</button>
           <ChevronRight size={14} aria-hidden="true" />
@@ -9849,19 +9836,7 @@ function PublicInfoPage({
   const copy = PUBLIC_INFO[page][lang];
   return (
     <div className="journal-page public-info-page">
-      <header className="journal-topbar">
-        <button className="secondary-btn" onClick={() => setView("landing")}>
-          <ArrowLeft size={16} /> {t("Kembali ke beranda", "Back to home")}
-        </button>
-        <Brand />
-        <div className="journal-topbar-actions">
-          <LangSwitch />
-          <button className="primary-btn" onClick={() => setView("designs")}>
-            {t("Temukan desain", "Find a design")} <ArrowRight size={15} />
-          </button>
-        </div>
-      </header>
-      <main className="public-info-main">
+      <main id="main-content" className="public-info-main">
         <span className="eyebrow">ikrarku</span>
         <h1>{copy.title}</h1>
         <p className="public-info-lead">{copy.lead}</p>
@@ -9945,6 +9920,7 @@ export function SiteFooter({
             {socials.map(([kind, value, label]) => (
               <a
                 key={kind}
+                data-social={kind}
                 href={socialLink(kind, value as string)}
                 target="_blank"
                 rel="noopener noreferrer"
@@ -32215,7 +32191,7 @@ function ArticleReaderPage({
         {publicMode ? <Brand /> : <span>IKRARKU ARTICLE</span>}
         <div>{article.category}</div>
       </header>
-      <main>
+      <main id={publicMode ? "main-content" : undefined}>
         <section
           className="reader-hero-wide"
           style={{

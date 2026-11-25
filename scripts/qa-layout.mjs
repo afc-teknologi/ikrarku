@@ -312,6 +312,7 @@ const serverMjs = readFileSync(
   new URL("../server/index.mjs", import.meta.url),
   "utf8",
 );
+const publicHeaderTsx = readFileSync(new URL("../src/components/PublicHeader.tsx", import.meta.url), "utf8");
 const landingCss = readFileSync(new URL("../src/components/LandingPage.css", import.meta.url), "utf8");
 const landingTsx = readFileSync(
   new URL("../src/components/LandingPage.tsx", import.meta.url),
@@ -349,7 +350,7 @@ test("SEO: kartu jurnal adalah anchor, bukan button", () => {
   assert.match(landingTsx, /href=\{`\/articles\/\$\{encodeURIComponent\(article\.slug\)\}`\}/);
   assert.match(landingTsx, /className="ikr-journal-card"\s*\n\s*href=/);
   // Tautan daftar pada navigasi tetap menunjuk /jurnal.
-  assert.match(landingTsx, /href="\/jurnal"/);
+  assert.match(publicHeaderTsx, /href="\/jurnal"/);
 });
 
 test("SEO: server menyuntikkan meta per artikel ke HTML mentah", () => {
@@ -1062,7 +1063,7 @@ test("QA10 TC-239/242/243/244: live motion elemen, 70/30, video layer 1, preview
 test("QA10 TC-226/246: nama pengirim catatan internal, landing ID/EN", () => {
   assert.match(serverMjs, /sender_name, r\.name sender_role FROM messages m/);
   assert.match(appTsx, /className="cs-message-sender"/);
-  assert.match(landingTsx, /className={`ikr-lang \${variant}`} role="group"/);
+  assert.match(publicHeaderTsx, /className={`ikr-lang \${variant}`} role="group"/);
   assert.match(landingTsx, /heroLines: \["A promise\.", "A story\.", "An invitation\."\]/);
 });
 
@@ -1111,8 +1112,8 @@ test("Revisi 22 Okt: ikon bottom navigation bisa diupload per menu", () => {
 test("Revisi 24 Okt: header landing, preview template penuh, sampul tanpa gambar sample", () => {
   // 1. Bahasa, Masuk, CTA satu baris sejajar logo & menu; di ponsel bahasa
   //    pindah ke menu dengan target 48 px (web.dev: ±48 px, jarak 8 px).
-  assert.match(landingTsx, /\{langSwitch\("ikr-lang-header"\)\}/);
-  assert.match(landingTsx, /\{langSwitch\("ikr-lang-menu"\)\}/);
+  assert.match(publicHeaderTsx, /\{langSwitch\("ikr-lang-header"\)\}/);
+  assert.match(publicHeaderTsx, /\{langSwitch\("ikr-lang-menu"\)\}/);
   assert.match(landingCss, /\.ikr-lang button\{font-size:12px;font-weight:700;letter-spacing:\.5px;min-width:40px;min-height:34px;/);
   assert.match(landingCss, /\.ikr-lang-menu button\{min-width:56px;min-height:48px;/);
   // 2 & 4. Preview template (landing, Safe Preview, review) selebar kotak preview.
