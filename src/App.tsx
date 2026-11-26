@@ -619,7 +619,167 @@ type SectionDecoration = {
   scrollMotion?: DecorScrollMotion;
   /** QA 13 TC-282 — boleh keluar dari batas atas/bawah canvas. */
   overflow?: boolean;
+  /** QC 26 Nov — jeda mulai gerak (detik) & fase siklus (0–100%), supaya
+   *  ornamen tidak bergerak serempak. */
+  delay?: number;
+  phase?: number;
+  /** QC 26 Nov — besar gerakan (1 = bawaan; 0.25–3). */
+  intensity?: number;
+  /** QC 26 Nov — gerak kedua yang berjalan bersamaan (cahaya/denyut). */
+  motion2?: DecorMotion2;
+  /** QC 26 Nov — animasi masuk khusus ornamen saat canvas-nya terlihat. */
+  entrance?: DecorEntrance;
+  entranceDuration?: number;
+  entranceDelay?: number;
 };
+type DecorMotion2 = "none" | "glow" | "shine" | "pulse" | "heartbeat" | "twinkle";
+type DecorEntrance =
+  | "none"
+  | "corner"
+  | "rise"
+  | "drop"
+  | "fade"
+  | "zoom"
+  | "unfold"
+  | "spin-in";
+const DECOR_MOTION2_OPTIONS: [DecorMotion2, string][] = [
+  ["none", "Tidak ada"],
+  ["shine", "Kilau menyapu (cahaya lewat)"],
+  ["glow", "Bercahaya"],
+  ["twinkle", "Berkelip"],
+  ["pulse", "Berdenyut halus"],
+  ["heartbeat", "Detak jantung"],
+];
+const DECOR_ENTRANCE_OPTIONS: [DecorEntrance, string][] = [
+  ["none", "Tidak ada"],
+  ["corner", "Masuk dari pojoknya"],
+  ["rise", "Naik dari bawah"],
+  ["drop", "Turun dari atas"],
+  ["fade", "Muncul perlahan"],
+  ["zoom", "Membesar"],
+  ["unfold", "Membuka (mekar)"],
+  ["spin-in", "Berputar masuk"],
+];
+/** Ornamen dengan animasi masuk ditandai `data-entered` saat terlihat. Atribut
+ *  ini tidak dikelola React, jadi tidak hilang saat editor merender ulang. */
+let decorEntranceObserver: IntersectionObserver | null = null;
+function observeDecorEntrance(element: HTMLElement | null) {
+  if (!element || element.dataset.entered) return;
+  if (typeof IntersectionObserver === "undefined") {
+    element.dataset.entered = "1";
+    return;
+  }
+  decorEntranceObserver ||= new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (!entry.isIntersecting) continue;
+        (entry.target as HTMLElement).dataset.entered = "1";
+        decorEntranceObserver?.unobserve(entry.target);
+      }
+    },
+    { threshold: 0.01, rootMargin: "0px 0px -8% 0px" },
+  );
+  decorEntranceObserver.observe(element);
+}
+/** Putar ulang animasi masuk ornamen tertentu (tombol di editor). */
+function replayDecorEntrance(id: string) {
+  document
+    .querySelectorAll<HTMLElement>(`.section-decoration[data-deco-id="${CSS.escape(id)}"]`)
+    .forEach((element) => {
+      delete element.dataset.entered;
+      void element.offsetWidth;
+      requestAnimationFrame(() => {
+        element.dataset.entered = "1";
+      });
+    });
+}
+type SiteAmbienceEffect =
+  | "none"
+  | "petals"
+  | "gold"
+  | "sparkle"
+  | "snow"
+  | "bokeh"
+  | "fog";
+type SiteAmbience = {
+  effect: SiteAmbienceEffect;
+  density?: number; // jumlah partikel 4–40
+  speed?: number; // detik per siklus 4–30
+  size?: number; // ukuran partikel (px)
+  color?: string;
+  opacity?: number; // 0–100
+  layer?: "front" | "back";
+  mobile?: boolean; // false = disembunyikan di layar ≤ 900px
+};
+const SITE_AMBIENCE_OPTIONS: [SiteAmbienceEffect, string, string][] = [
+  ["none", "Tidak ada", "#ffffff"],
+  ["petals", "Kelopak bunga berguguran", "#f2b8c2"],
+  ["gold", "Partikel emas melayang", "#e8c46a"],
+  ["sparkle", "Kilau bintang", "#fff3c4"],
+  ["snow", "Salju turun", "#ffffff"],
+  ["bokeh", "Bokeh cahaya", "#ffe9c2"],
+  ["fog", "Kabut tipis", "#ffffff"],
+];
+const AMBIENCE_DEFAULT_SIZE: Record<SiteAmbienceEffect, number> = {
+  none: 12,
+  petals: 13,
+  snow: 12,
+  gold: 18,
+  sparkle: 18,
+  bokeh: 46,
+  fog: 420,
+};
+/** Angka semu-acak yang stabil per indeks (supaya posisi partikel sama di
+ *  editor, preview, dan undangan publik). */
+function ambienceRand(index: number, salt: number) {
+  const value = Math.sin(index * 127.1 + salt * 311.7) * 43758.5453;
+  return value - Math.floor(value);
+}
+function SiteAmbienceLayer({
+  ambience,
+  viewportHeight,
+}: {
+  ambience?: SiteAmbience;
+  viewportHeight?: number;
+}) {
+  if (!ambience || !ambience.effect || ambience.effect === "none") return null;
+  const effect = ambience.effect;
+  const count =
+    effect === "fog" ? 4 : Math.max(4, Math.min(40, ambience.density ?? 16));
+  const speed = Math.max(3, ambience.speed ?? (effect === "fog" ? 24 : 12));
+  const size = ambience.size ?? AMBIENCE_DEFAULT_SIZE[effect] ?? 12;
+  const fallback = SITE_AMBIENCE_OPTIONS.find(([value]) => value === effect)?.[2];
+  return (
+    <div
+      className={`site-ambience amb-${effect} layer-${ambience.layer || "front"}${ambience.mobile === false ? " amb-desktop-only" : ""}`}
+      aria-hidden
+      style={
+        {
+          "--amb-color": ambience.color || fallback,
+          "--amb-opacity": (ambience.opacity ?? 80) / 100,
+          ...(viewportHeight ? { "--site-viewport-h": `${viewportHeight}px` } : {}),
+        } as React.CSSProperties
+      }
+    >
+      {Array.from({ length: count }, (_, index) => (
+        <i
+          key={index}
+          style={
+            {
+              "--x": `${Math.round(ambienceRand(index, 1) * 1000) / 10}%`,
+              "--y": `${Math.round(ambienceRand(index, 2) * 1000) / 10}%`,
+              "--s": `${Math.round(size * (0.55 + ambienceRand(index, 3) * 0.9))}px`,
+              "--d": `${Math.round(speed * (0.7 + ambienceRand(index, 4) * 0.6) * 10) / 10}s`,
+              "--delay": `${-Math.round(speed * ambienceRand(index, 5) * 10) / 10}s`,
+              "--sx": `${Math.round((ambienceRand(index, 6) - 0.5) * 160)}px`,
+              "--r": `${Math.round(ambienceRand(index, 7) * 360)}deg`,
+            } as React.CSSProperties
+          }
+        />
+      ))}
+    </div>
+  );
+}
 type DecorScrollMotion = "none" | "up" | "down" | "rotate" | "zoom" | "fade";
 /** Kelas tambahan section untuk ornamen dengan pengaturan QA 13. */
 function decorationSectionClasses(decorations?: SectionDecoration[]) {
@@ -1213,6 +1373,9 @@ type CanvasSection = {
   desktopSideSlides?: { url: string; key?: string }[];
   /** QA 15 TC-345 — ornamen di sisi 70% tata letak 70:30. */
   desktopSideDecorations?: SectionDecoration[];
+  /** QC 26 Nov — efek suasana global (kelopak, partikel emas, kabut, …)
+   *  untuk seluruh undangan; disimpan di canvas pertama. */
+  siteAmbience?: SiteAmbience;
   desktopSideSlideSeconds?: number;
   desktopSideVideoUrl?: string;
   desktopSideVideoKey?: string;
@@ -15271,6 +15434,12 @@ function Editor({
               />
             )}
             {sections[0] && (
+              <SiteAmbiencePanel
+                first={sections[0]}
+                update={(patch) => updateSectionShared(sections[0].id, patch)}
+              />
+            )}
+            {sections[0] && (
               <BottomNavPanel
                 sections={sections}
                 first={sections[0]}
@@ -19497,7 +19666,11 @@ function NumberRange({
   const commitDraft = () => {
     const parsed = Number(draft);
     if (!Number.isFinite(parsed)) return setDraft(String(value));
-    const next = Math.max(lo, Math.min(hi, Math.round(parsed)));
+    // Pecahan (mis. jeda 0.5 s) dibulatkan ke kelipatan step, bukan ke bilangan bulat.
+    const next = Math.max(
+      lo,
+      Math.min(hi, step >= 1 ? Math.round(parsed) : Math.round(Math.round(parsed / step) * step * 100) / 100),
+    );
     setDraft(String(next));
     if (next !== value) onChange(next);
   };
@@ -19508,10 +19681,11 @@ function NumberRange({
         <span className="number-range-box">
           <input
             type="number"
-            inputMode="numeric"
+            inputMode={step >= 1 ? "numeric" : "decimal"}
             aria-label={`${label} (${unit || "nilai"})`}
             min={lo}
             max={hi}
+            step={step}
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
             onBlur={commitDraft}
@@ -19843,6 +20017,119 @@ function SectionDecorationEditor({
               }
             />
           </label>
+          {/* QC 26 Nov — efek ornamen: jeda/fase, intensitas, gerak kedua,
+              dan animasi masuk khusus ornamen. */}
+          <div className="decor-advanced">
+            <b>Efek lanjutan</b>
+            <div className="two-inputs">
+              <NumberRange
+                label="Jeda mulai"
+                unit="s"
+                min={0}
+                max={10}
+                step={0.1}
+                value={item.delay ?? 0}
+                onChange={(delay) => patch(item.id, { delay })}
+                onReset={() => patch(item.id, { delay: 0 })}
+              />
+              <NumberRange
+                label="Fase siklus"
+                unit="%"
+                min={0}
+                max={100}
+                value={item.phase ?? 0}
+                onChange={(phase) => patch(item.id, { phase })}
+                onReset={() => patch(item.id, { phase: 0 })}
+              />
+            </div>
+            <label className="range-field">
+              <span className="range-head">
+                Intensitas gerak<b>{Math.round((item.intensity ?? 1) * 100)}%</b>
+              </span>
+              <input
+                type="range"
+                min="0.25"
+                max="3"
+                step="0.05"
+                value={item.intensity ?? 1}
+                onChange={(event) =>
+                  patch(item.id, { intensity: Number(event.target.value) })
+                }
+                onDoubleClick={() => patch(item.id, { intensity: 1 })}
+              />
+            </label>
+            <label>
+              Gerak kedua (bersamaan)
+              <select
+                value={item.motion2 || "none"}
+                onChange={(event) =>
+                  patch(item.id, { motion2: event.target.value as DecorMotion2 })
+                }
+              >
+                {DECOR_MOTION2_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {!item.imageUrl &&
+              (item.motion2 === "shine" || item.motion === "shimmer") && (
+                <small className="form-hint">
+                  Sapuan kilau mengikuti bentuk gambar — pakai ornamen PNG
+                  transparan. Bentuk bawaan memakai efek bercahaya.
+                </small>
+              )}
+            <label>
+              Animasi masuk
+              <select
+                value={item.entrance || "none"}
+                onChange={(event) => {
+                  patch(item.id, { entrance: event.target.value as DecorEntrance });
+                  requestAnimationFrame(() => replayDecorEntrance(item.id));
+                }}
+              >
+                {DECOR_ENTRANCE_OPTIONS.map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {item.entrance && item.entrance !== "none" && (
+              <>
+                <div className="two-inputs">
+                  <NumberRange
+                    label="Durasi masuk"
+                    unit="s"
+                    min={0.3}
+                    max={4}
+                    step={0.1}
+                    value={item.entranceDuration ?? 1.2}
+                    onChange={(entranceDuration) => patch(item.id, { entranceDuration })}
+                    onReset={() => patch(item.id, { entranceDuration: 1.2 })}
+                  />
+                  <NumberRange
+                    label="Jeda masuk"
+                    unit="s"
+                    min={0}
+                    max={5}
+                    step={0.1}
+                    value={item.entranceDelay ?? 0}
+                    onChange={(entranceDelay) => patch(item.id, { entranceDelay })}
+                    onReset={() => patch(item.id, { entranceDelay: 0 })}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="decor-replay"
+                  onClick={() => replayDecorEntrance(item.id)}
+                >
+                  ▶ Putar ulang animasi masuk
+                </button>
+              </>
+            )}
+          </div>
           <label className="checkbox-row">
             <span>Cermin horizontal</span>
             <input
@@ -21915,6 +22202,141 @@ function BottomNavBar({
   );
 }
 
+/** QC 26 Nov — efek suasana global untuk seluruh undangan. */
+function SiteAmbiencePanel({
+  first,
+  update,
+}: {
+  first: CanvasSection;
+  update: (patch: Partial<CanvasSection>) => void;
+}) {
+  const config: SiteAmbience = first.siteAmbience || { effect: "none" };
+  const on = config.effect !== "none";
+  const set = (next: Partial<SiteAmbience>) =>
+    update({ siteAmbience: { ...config, ...next } });
+  const fallbackColor =
+    SITE_AMBIENCE_OPTIONS.find(([value]) => value === config.effect)?.[2] || "#ffffff";
+  return (
+    <div className="desktop-layout-panel ambience-panel">
+      <div className="setting-row compact">
+        <div>
+          <Sparkles size={16} />
+          <span>
+            <strong>Efek suasana global</strong>
+            <small>Kelopak, partikel emas, kabut, dll. di seluruh undangan saat digulir.</small>
+          </span>
+        </div>
+        <button
+          className={`toggle ${on ? "on" : ""}`}
+          aria-pressed={on}
+          aria-label="Aktifkan efek suasana global"
+          onClick={() => set({ effect: on ? "none" : "petals" })}
+        >
+          <i />
+        </button>
+      </div>
+      {on && (
+        <>
+          <label>
+            Efek
+            <select
+              value={config.effect}
+              onChange={(event) =>
+                set({
+                  effect: event.target.value as SiteAmbienceEffect,
+                  color: undefined,
+                  size: undefined,
+                  speed: undefined,
+                })
+              }
+            >
+              {SITE_AMBIENCE_OPTIONS.filter(([value]) => value !== "none").map(
+                ([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+          {config.effect !== "fog" && (
+            <NumberRange
+              label="Kepadatan (jumlah)"
+              min={4}
+              max={40}
+              value={config.density ?? 16}
+              onChange={(density) => set({ density })}
+              onReset={() => set({ density: 16 })}
+            />
+          )}
+          <div className="two-inputs">
+            <NumberRange
+              label="Durasi siklus"
+              unit="s"
+              min={3}
+              max={40}
+              value={config.speed ?? (config.effect === "fog" ? 24 : 12)}
+              onChange={(speed) => set({ speed })}
+              onReset={() => set({ speed: undefined })}
+            />
+            <NumberRange
+              label="Ukuran"
+              unit="px"
+              min={4}
+              max={config.effect === "fog" ? 900 : 120}
+              value={
+                config.size ?? AMBIENCE_DEFAULT_SIZE[config.effect] ?? 12
+              }
+              onChange={(size) => set({ size })}
+              onReset={() => set({ size: undefined })}
+            />
+          </div>
+          <div className="two-inputs">
+            <label>
+              Warna
+              <ColorInput
+                value={config.color}
+                fallback={fallbackColor}
+                label="Warna efek suasana"
+                onChange={(color) => set({ color })}
+              />
+            </label>
+            <NumberRange
+              label="Opacity"
+              unit="%"
+              min={5}
+              max={100}
+              value={config.opacity ?? 80}
+              onChange={(opacity) => set({ opacity })}
+              onReset={() => set({ opacity: 80 })}
+            />
+          </div>
+          <label>
+            Lapisan
+            <select
+              value={config.layer || "front"}
+              onChange={(event) =>
+                set({ layer: event.target.value as SiteAmbience["layer"] })
+              }
+            >
+              <option value="front">Di depan isi undangan</option>
+              <option value="back">Di belakang isi undangan</option>
+            </select>
+          </label>
+          <label className="checkbox-row">
+            <span>Tampilkan juga di mobile</span>
+            <input
+              type="checkbox"
+              checked={config.mobile !== false}
+              onChange={(event) => set({ mobile: event.target.checked })}
+            />
+          </label>
+        </>
+      )}
+    </div>
+  );
+}
+
 function BottomNavPanel({
   sections,
   first,
@@ -22735,6 +23157,13 @@ function DesktopSideEditor({
       )}
       {/* QA 15 TC-345 — ornamen sisi 70%: pengaturan sama dengan ornamen
           canvas (bentuk/gambar, posisi, ukuran, geser, rotasi, gerak). */}
+      <small className="form-hint desktop-side-deco-hint">
+        Ornamen cover desktop yang menyatu di satu gambar tidak bisa digerakkan.
+        Unggah background/slideshow <b>tanpa ornamen</b>, lalu tambahkan tiap
+        ornamen (bunga, rumah adat, pojok) sebagai <b>PNG transparan</b> di
+        bawah ini — masing-masing bisa diberi gerak, jeda, intensitas, kilau,
+        dan animasi masuk sendiri.
+      </small>
       <SectionDecorationEditor
         section={{ ...first, decorations: first.desktopSideDecorations || [] }}
         updateLive={(produce) =>
@@ -23624,6 +24053,11 @@ function WeddingCanvasBody({
   // cara lama karena isinya hanya satu section yang diperkecil.
   const fixedBackdrop = !thumbnail ? globalBackgroundSource : null;
   const [scrollViewportHeight, setScrollViewportHeight] = useState(0);
+  // QC 26 Nov — lapisan setinggi layar (ornamen tetap & efek suasana) juga
+  // perlu tinggi jendela gulir yang sebenarnya di kotak preview/editor.
+  const needsViewportLayer =
+    sections.some((entry) => entry.decorations?.some((item) => item.pinned)) ||
+    Boolean(sections[0]?.siteAmbience?.effect && sections[0].siteAmbience.effect !== "none");
   const previewZoom = useContext(PreviewZoomContext);
   const siteNavRef = useRef<HTMLElement>(null);
   const fixedBackdropRef = useRef<HTMLDivElement>(null);
@@ -23903,7 +24337,7 @@ function WeddingCanvasBody({
   }, [editable, thumbnail, opened, sections, animationNonce]);
 
   useEffect(() => {
-    if (!fixedBackdrop) return;
+    if (!fixedBackdrop && !needsViewportLayer) return;
     const root = revealRootRef.current;
     if (!root) return;
     // Tinggi backdrop harus sama dengan jendela gulirnya. Di halaman publik
@@ -23927,7 +24361,7 @@ function WeddingCanvasBody({
     return () => observer.disconnect();
     // `opened`: bila ada cover, root halaman baru terpasang setelah cover
     // dibuka, jadi pengukuran harus diulang saat itu.
-  }, [fixedBackdrop, opened, previewZoom]);
+  }, [fixedBackdrop, needsViewportLayer, opened, previewZoom]);
   // QA 1 Nov — Background tetap terpotong di bawah. Backdrop sticky
   // setinggi jendela gulir, tetapi posisi awalnya DI BAWAH header undangan
   // (logo · Our Story · Event …). Selama header masih terlihat, bagian bawah
@@ -24236,7 +24670,7 @@ function WeddingCanvasBody({
   return (
     <div
       ref={revealRootRef}
-      className={`wedding-site device-${device}${warming ? " is-warming" : ""}${draftWatermark && !editable && !thumbnail ? " has-draft-watermark" : ""} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${sections.some((entry) => entry.decorations?.some((item) => item.pinned)) ? "has-pinned-deco" : ""} ${showBottomNav && !lockedCover ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}${lockedCover ? ` invitation-locked cover-as-canvas${opening ? ` cover-opening cover-exit-${coverExit?.coverExitEffect || "fade"}` : ""}` : ""}`}
+      className={`wedding-site device-${device}${warming ? " is-warming" : ""}${draftWatermark && !editable && !thumbnail ? " has-draft-watermark" : ""} ${thumbnail ? "is-thumbnail" : ""} ${fixedBackdrop ? "has-fixed-backdrop" : ""} ${sections.some((entry) => entry.decorations?.some((item) => item.pinned)) || (sections[0]?.siteAmbience?.effect && sections[0].siteAmbience.effect !== "none") ? "has-pinned-deco" : ""} ${showBottomNav && !lockedCover ? "has-bottom-nav" : ""} theme-${selectedTemplate.preset || "classic"}${lockedCover ? ` invitation-locked cover-as-canvas${opening ? ` cover-opening cover-exit-${coverExit?.coverExitEffect || "fade"}` : ""}` : ""}`}
       style={
         {
           "--accent": selectedTemplate.accent,
@@ -24304,6 +24738,10 @@ function WeddingCanvasBody({
       {/* QA 13 TC-298 — ornamen "tetap di layar": seperti Background tetap,
           satu lapisan sticky setinggi layar untuk seluruh undangan; ornamen
           ditambatkan ke pojok layar dan tidak ikut tergulir. */}
+      <SiteAmbienceLayer
+        ambience={sections[0]?.siteAmbience}
+        viewportHeight={scrollViewportHeight || undefined}
+      />
       {(["back", "front"] as const).map((layer) => {
           const list = pinnedDecorations.filter(
             (decoration) =>
@@ -24977,10 +25415,26 @@ function SectionDecorations({
               .filter((decoration) => Boolean(decoration.pinned) === pinned)
               .map((decoration) => {
               const cutSide = decorationCutSide(decoration, sectionOverflows);
+              const speed = decoration.speed || 7;
+              // QC 26 Nov — jeda & fase: fase negatif = animasi dimulai dari
+              // tengah siklus, jadi ornamen sejenis tidak bergerak serempak.
+              const startAt =
+                (decoration.delay ?? 0) -
+                ((decoration.phase ?? 0) / 100) * speed;
+              const motion2 = decoration.motion2 && decoration.motion2 !== "none" ? decoration.motion2 : "";
+              const entrance =
+                decoration.entrance && decoration.entrance !== "none" ? decoration.entrance : "";
+              // "Berkilau" (motion utama) & "Kilau menyapu" sama-sama memakai
+              // sapuan cahaya yang dipotong mengikuti bentuk gambar ornamen.
+              const shine =
+                !!decoration.imageUrl &&
+                (motion2 === "shine" || decoration.motion === "shimmer");
               const node = (
               <span
                 key={decoration.id}
-                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"} deco-${decoration.layer || "front"}${decoration.scrollMotion && decoration.scrollMotion !== "none" ? ` scroll-${decoration.scrollMotion}` : ""}${cutSide ? ` deco-cut-${cutSide}` : ""}${onPatch ? " deco-editable" : ""}`}
+                className={`section-decoration corner-${decoration.corner} loop-${decoration.motion || "sway"} deco-${decoration.layer || "front"}${decoration.scrollMotion && decoration.scrollMotion !== "none" ? ` scroll-${decoration.scrollMotion}` : ""}${cutSide ? ` deco-cut-${cutSide}` : ""}${onPatch ? " deco-editable" : ""}${motion2 === "shine" ? (decoration.imageUrl ? "" : " deco-m2-glow") : motion2 ? ` deco-m2-${motion2}` : ""}${entrance ? ` deco-enter deco-enter-${entrance}` : ""}`}
+                data-deco-id={decoration.id}
+                ref={entrance ? observeDecorEntrance : undefined}
                 onPointerDown={
                   onPatch
                     ? (event) =>
@@ -25016,7 +25470,19 @@ function SectionDecorations({
                     "--deco-w": `${decoration.size}px`,
                     "--deco-dx": `${decoration.offsetX ?? 0}px`,
                     "--deco-dy": `${decoration.offsetY ?? 0}px`,
-                    "--loop-speed": `${decoration.speed || 7}s`,
+                    "--loop-speed": `${speed}s`,
+                    "--deco-amp": decoration.intensity ?? 1,
+                    ...(startAt ? { animationDelay: `${startAt}s` } : {}),
+                    ...(entrance
+                      ? {
+                          "--deco-enter-dur": `${decoration.entranceDuration ?? 1.2}s`,
+                          "--deco-enter-delay": `${decoration.entranceDelay ?? 0}s`,
+                        }
+                      : {}),
+                    ...(motion2 ? { "--deco-m2-delay": `${startAt}s` } : {}),
+                    ...(shine
+                      ? { "--deco-mask": `url("${assetUrl(decoration.imageUrl!)}")` }
+                      : {}),
                   } as React.CSSProperties
                 }
                 aria-hidden
@@ -25039,6 +25505,7 @@ function SectionDecorations({
                 ) : (
                   <DecorGlyphIcon glyph={decoration.glyph} />
                 )}
+                {shine && <i className="deco-shine" />}
                 {onPatch && (
                   <i
                     className="deco-resize-handle"

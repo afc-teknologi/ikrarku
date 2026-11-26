@@ -1,3 +1,14 @@
+## 0.23.0 — 26 November 2026 (QC efek ornamen dari video)
+
+- Jeda & fase per ornamen: "Jeda mulai" (detik) dan "Fase siklus" (%) supaya ornamen sejenis tidak bergerak serempak.
+- Intensitas gerak per ornamen (25–300%): besar goyang/ayun/melayang/denyut/cahaya kini bisa diatur, tidak lagi tetap ±3°/±8°/10px.
+- "Berkilau" = sapuan cahaya yang lewat di permukaan ornamen, dipotong mengikuti bentuk PNG transparan (bentuk bawaan memakai efek bercahaya).
+- Gerak kedua yang berjalan bersamaan: Kilau menyapu, Bercahaya, Berkelip, Berdenyut, Detak jantung (mis. Melayang + Bercahaya, Bergoyang + Kilau).
+- Animasi masuk khusus ornamen saat canvas terlihat: Masuk dari pojoknya, Naik dari bawah, Turun dari atas, Muncul, Membesar, Membuka (mekar), Berputar masuk — dengan durasi, jeda, dan tombol "Putar ulang".
+- Ornamen cover desktop: panduan di editor sisi 70% — unggah background tanpa ornamen lalu tiap ornamen sebagai PNG transparan; semua efek di atas berlaku di sana.
+- Efek suasana global (Struktur halaman → "Efek suasana global"): kelopak bunga, partikel emas, kilau bintang, salju, bokeh, kabut — kepadatan, durasi, ukuran, warna, opacity, lapisan depan/belakang, opsi sembunyikan di mobile.
+- Kolom angka di editor kini menerima pecahan (mis. 0.5 s).
+
 ## 0.22.2 — 26 November 2026
 
 - Google Tag Manager (GTM-NK3X2QVQ) yang dipasang langsung di server kini masuk kode `index.html`, aktif hanya di ikrarku.id (dev.ikrarku.id & localhost tidak terlacak).

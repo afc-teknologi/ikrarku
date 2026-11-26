@@ -3210,3 +3210,102 @@ body:has(.cs-layout) .chat-widget{display:none}
 @media (max-width:700px){.canvas-columns.columns-2>.column-connector{position:static;transform:none;display:block;text-align:center;order:1;margin:-4px 0}.canvas-columns.columns-2>.canvas-column:last-of-type{order:2}}
 @container (max-width:560px){.canvas-columns.columns-2>.column-connector{position:static;transform:none;display:block;text-align:center;order:1;margin:-4px 0}.canvas-columns.columns-2>.canvas-column:last-of-type{order:2}}
 .free-position-controls button:not(.toggle){border:1px solid var(--line);background:#fff;border-radius:7px;padding:6px 10px;font-size:10px;color:#315e51}
+
+/* ===== QC 26 Nov — efek ornamen (v0.23) =====
+   1) Intensitas: keyframes khusus ornamen dikali --deco-amp (1 = bawaan).
+      Selektor diulang supaya menang dari :is(.loop-x,.feature-block.revealed.loop-x). */
+@keyframes decoFade{0%,100%{opacity:var(--deco-fade-base,1)}50%{opacity:calc(var(--deco-fade-base,1) * max(.05,1 - .45 * var(--deco-amp,1)))}}
+@keyframes decoFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(calc(var(--deco-amp,1) * -10px))}}
+@keyframes decoSway{0%,100%{transform:rotate(calc(var(--deco-amp,1) * -3deg))}50%{transform:rotate(calc(var(--deco-amp,1) * 3deg))}}
+@keyframes decoSwing{0%,100%{transform:rotate(calc(var(--deco-amp,1) * -8deg))}50%{transform:rotate(calc(var(--deco-amp,1) * 8deg))}}
+@keyframes decoPulse{0%,100%{transform:scale(1)}50%{transform:scale(calc(1 + var(--deco-amp,1) * .035))}}
+@keyframes decoKenburns{0%,100%{transform:scale(1)}50%{transform:scale(calc(1 + var(--deco-amp,1) * .08))}}
+@keyframes decoHeartbeat{0%,40%,100%{transform:scale(1)}10%,30%{transform:scale(calc(1 + var(--deco-amp,1) * .06))}20%{transform:scale(calc(1 - var(--deco-amp,1) * .02))}}
+@keyframes decoBounce{0%,50%,80%,100%{transform:translateY(0)}30%{transform:translateY(calc(var(--deco-amp,1) * -14px))}65%{transform:translateY(calc(var(--deco-amp,1) * -6px))}}
+@keyframes decoDrift{0%,100%{transform:translate3d(0,0,0)}25%{transform:translate3d(calc(var(--deco-amp,1) * 6px),calc(var(--deco-amp,1) * -6px),0)}50%{transform:translate3d(0,calc(var(--deco-amp,1) * -11px),0)}75%{transform:translate3d(calc(var(--deco-amp,1) * -6px),calc(var(--deco-amp,1) * -6px),0)}}
+@keyframes decoShimmer{0%,100%{filter:brightness(1)}50%{filter:brightness(calc(1 + var(--deco-amp,1) * .18))}}
+@keyframes decoGlow{0%,100%{filter:drop-shadow(0 0 0 rgba(255,236,190,0))}50%{filter:drop-shadow(0 0 calc(var(--deco-amp,1) * 14px) rgba(255,236,190,.85))}}
+.section-decoration.section-decoration.loop-fade{animation-name:decoFade}
+.section-decoration.section-decoration.loop-float{animation-name:decoFloat}
+.section-decoration.section-decoration.loop-sway{animation-name:decoSway}
+.section-decoration.section-decoration.loop-swing{animation-name:decoSwing}
+.section-decoration.section-decoration.loop-pulse{animation-name:decoPulse}
+.section-decoration.section-decoration.loop-kenburns{animation-name:decoKenburns}
+.section-decoration.section-decoration.loop-heartbeat{animation-name:decoHeartbeat}
+.section-decoration.section-decoration.loop-bounce{animation-name:decoBounce}
+.section-decoration.section-decoration.loop-drift{animation-name:decoDrift}
+.section-decoration.section-decoration.loop-shimmer{animation-name:decoShimmer}
+.section-decoration.section-decoration.loop-glow{animation-name:decoGlow}
+
+/* 2) Gerak kedua (dijalankan di gambar, bukan di span) + 3) animasi masuk.
+      Keduanya dirangkai dalam satu deklarasi animation; animasi masuk diletakkan
+      terakhir & fill "backwards" supaya setelah selesai gerak kedua jalan lagi. */
+@keyframes decoM2Glow{0%,100%{filter:drop-shadow(0 0 0 rgba(255,236,190,0))}50%{filter:drop-shadow(0 0 calc(var(--deco-amp,1) * 12px) rgba(255,232,170,.9))}}
+@keyframes decoM2Twinkle{0%,100%{opacity:1;filter:brightness(1)}45%{opacity:max(.15,1 - .4 * var(--deco-amp,1));filter:brightness(calc(1 + .25 * var(--deco-amp,1)))}55%{opacity:1;filter:brightness(calc(1 + .35 * var(--deco-amp,1)))}}
+@keyframes decoM2Pulse{0%,100%{scale:1}50%{scale:calc(1 + var(--deco-amp,1) * .05)}}
+@keyframes decoM2Heartbeat{0%,40%,100%{scale:1}10%,30%{scale:calc(1 + var(--deco-amp,1) * .07)}20%{scale:calc(1 - var(--deco-amp,1) * .02)}}
+.section-decoration.deco-m2-glow{--deco-m2-anim:decoM2Glow var(--loop-speed,6s) ease-in-out var(--deco-m2-delay,0s) infinite}
+.section-decoration.deco-m2-twinkle{--deco-m2-anim:decoM2Twinkle calc(var(--loop-speed,6s) * .6) ease-in-out var(--deco-m2-delay,0s) infinite}
+.section-decoration.deco-m2-pulse{--deco-m2-anim:decoM2Pulse var(--loop-speed,6s) ease-in-out var(--deco-m2-delay,0s) infinite}
+.section-decoration.deco-m2-heartbeat{--deco-m2-anim:decoM2Heartbeat calc(var(--loop-speed,6s) * .4) ease-in-out var(--deco-m2-delay,0s) infinite}
+@keyframes decoEnterCorner{from{opacity:0;translate:calc(var(--deco-pin-x,0) * 70%) calc(var(--deco-pin-y,0) * 70%)}}
+@keyframes decoEnterRise{from{opacity:0;translate:0 45%}}
+@keyframes decoEnterDrop{from{opacity:0;translate:0 -45%}}
+@keyframes decoEnterFade{from{opacity:0}}
+@keyframes decoEnterZoom{from{opacity:0;scale:.35}}
+@keyframes decoEnterUnfold{from{opacity:0;scale:.15;rotate:-18deg}70%{opacity:1;scale:1.06;rotate:3deg}}
+@keyframes decoEnterSpin{from{opacity:0;scale:.3;rotate:-200deg}}
+.section-decoration.deco-enter[data-entered]{--deco-enter-anim:var(--deco-enter-name) var(--deco-enter-dur,1.2s) cubic-bezier(.2,.8,.2,1) var(--deco-enter-delay,0s) backwards}
+.section-decoration.deco-enter-corner{--deco-enter-name:decoEnterCorner}
+.section-decoration.deco-enter-rise{--deco-enter-name:decoEnterRise}
+.section-decoration.deco-enter-drop{--deco-enter-name:decoEnterDrop}
+.section-decoration.deco-enter-fade{--deco-enter-name:decoEnterFade}
+.section-decoration.deco-enter-zoom{--deco-enter-name:decoEnterZoom}
+.section-decoration.deco-enter-unfold{--deco-enter-name:decoEnterUnfold}
+.section-decoration.deco-enter-spin-in{--deco-enter-name:decoEnterSpin}
+.section-decoration:is(.deco-enter,[class*="deco-m2-"])>:is(img,svg){animation:var(--deco-m2-anim,none),var(--deco-enter-anim,none)}
+.section-decoration.deco-enter:not([data-entered])>:is(img,svg,.deco-shine){visibility:hidden}
+
+/* 4) "Berkilau" — sapuan cahaya yang dipotong mengikuti bentuk gambar ornamen
+      (mask = gambar PNG transparan itu sendiri), bukan sekadar lebih terang. */
+@keyframes decoShine{0%,8%{background-position:100% 0}62%,100%{background-position:0 0}}
+.section-decoration>.deco-shine{position:absolute;inset:0;display:block;pointer-events:none;
+  transform:translate(var(--deco-dx,0px),var(--deco-dy,0px)) translate(calc(var(--deco-pin-x) * (1 - var(--deco-scale)) * 50%),calc(var(--deco-pin-y) * (1 - var(--deco-scale)) * 50%)) scale(var(--deco-scale)) rotate(var(--deco-rotate,0deg)) scaleX(var(--deco-flip,1));
+  -webkit-mask:var(--deco-mask) center/100% 100% no-repeat;mask:var(--deco-mask) center/100% 100% no-repeat;
+  background:linear-gradient(110deg,transparent 38%,rgba(255,255,255,.15) 44%,rgba(255,251,230,.95) 50%,rgba(255,255,255,.15) 56%,transparent 62%) no-repeat;
+  background-size:260% 100%;background-position:100% 0;mix-blend-mode:screen;opacity:min(1,calc(.45 + .35 * var(--deco-amp,1)));
+  animation:decoShine calc(var(--loop-speed,6s) * .75) ease-in-out var(--deco-m2-delay,0s) infinite,var(--deco-enter-anim,none)}
+@media (prefers-reduced-motion:reduce){.section-decoration>.deco-shine{animation:none;opacity:0}}
+
+/* 5) Efek suasana global — satu lapisan sticky setinggi layar seperti ornamen
+      tetap; partikel bergerak di atas/di belakang seluruh undangan. */
+.site-ambience{position:sticky;top:0;z-index:5;height:var(--site-viewport-h,100vh);margin-bottom:calc(-1 * var(--site-viewport-h,100vh));pointer-events:none;overflow:hidden;opacity:var(--amb-opacity,.8);container-type:size}
+.site-ambience.layer-back{z-index:1}
+.wedding-site.cover-as-canvas>.site-ambience{flex:none}
+.site-ambience i{position:absolute;display:block;left:var(--x);top:0;width:var(--s);height:var(--s);animation-duration:var(--d);animation-delay:var(--delay);animation-iteration-count:infinite;will-change:transform,opacity}
+@keyframes ambFall{from{transform:translate3d(0,-12cqh,0) rotate(var(--r))}50%{transform:translate3d(calc(var(--sx) * .5),50cqh,0) rotate(calc(var(--r) + 200deg))}to{transform:translate3d(var(--sx),112cqh,0) rotate(calc(var(--r) + 420deg))}}
+@keyframes ambRise{0%{transform:translate3d(0,108cqh,0);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translate3d(var(--sx),-8cqh,0);opacity:0}}
+@keyframes ambTwinkle{0%,100%{opacity:0;transform:scale(.3) rotate(0)}50%{opacity:1;transform:scale(1) rotate(45deg)}}
+@keyframes ambBokeh{0%,100%{opacity:.15;transform:translate3d(0,0,0) scale(.8)}50%{opacity:.75;transform:translate3d(calc(var(--sx) * .4),-6cqh,0) scale(1.1)}}
+@keyframes ambFog{0%,100%{transform:translate3d(-18%,0,0)}50%{transform:translate3d(18%,0,0)}}
+.site-ambience.amb-petals i{background:var(--amb-color);border-radius:70% 0 70% 0;height:calc(var(--s) * .72);animation-name:ambFall;animation-timing-function:linear;box-shadow:inset -2px -2px 4px rgba(0,0,0,.08)}
+.site-ambience.amb-snow i{background:var(--amb-color);border-radius:50%;width:calc(var(--s) * .55);height:calc(var(--s) * .55);animation-name:ambFall;animation-timing-function:linear;filter:blur(.4px)}
+.site-ambience.amb-gold i{width:calc(var(--s) * .45);height:calc(var(--s) * .45);border-radius:50%;background:radial-gradient(circle,#fff 0 18%,var(--amb-color) 40%,transparent 72%);box-shadow:0 0 calc(var(--s) * .8) var(--amb-color);animation-name:ambRise;animation-timing-function:ease-in-out}
+.site-ambience.amb-sparkle i{top:var(--y);background:var(--amb-color);clip-path:polygon(50% 0,61% 39%,100% 50%,61% 61%,50% 100%,39% 61%,0 50%,39% 39%);filter:drop-shadow(0 0 4px var(--amb-color));animation-name:ambTwinkle;animation-timing-function:ease-in-out;animation-duration:calc(var(--d) * .35)}
+.site-ambience.amb-bokeh i{top:var(--y);border-radius:50%;background:radial-gradient(circle,color-mix(in srgb,var(--amb-color) 85%,transparent) 0,color-mix(in srgb,var(--amb-color) 30%,transparent) 60%,transparent 72%);filter:blur(2px);animation-name:ambBokeh;animation-timing-function:ease-in-out}
+.site-ambience.amb-fog i{top:calc(var(--y) * .8 - 10%);left:calc(var(--x) - 40%);width:calc(var(--s) * 2.2);height:var(--s);border-radius:50%;background:radial-gradient(ellipse at center,color-mix(in srgb,var(--amb-color) 55%,transparent) 0,transparent 70%);filter:blur(24px);animation-name:ambFog;animation-timing-function:ease-in-out;animation-duration:calc(var(--d) * 1.4)}
+@media(max-width:900px){.site-ambience.amb-desktop-only{display:none}}
+.wedding-site.is-warming .site-ambience i{animation-play-state:paused}
+@media (prefers-reduced-motion:reduce){.site-ambience{display:none}}
+.decor-advanced{border-top:1px dashed #dfe6e2;margin-top:10px;padding-top:10px;display:grid;gap:8px}
+.decor-advanced>b{font-size:11px;letter-spacing:.4px;color:#58716a;text-transform:uppercase}
+.decor-advanced .decor-replay{justify-self:start;border:1px solid #cfdcd6;background:#fff;border-radius:8px;padding:5px 10px;font-size:12px;cursor:pointer}
+.ambience-panel{display:grid;gap:8px}
+.wedding-site.device-mobile .site-ambience.amb-desktop-only{display:none}
+.ambience-panel label{display:grid;gap:5px;font-size:11px;font-weight:600;color:#52635d}
+.ambience-panel label.checkbox-row{display:flex}
+.ambience-panel .range-head{font-size:11px;font-weight:600}
+.ambience-panel select{height:32px;border:1px solid #dfe5e1;border-radius:7px;padding:0 8px;background:#fff;color:#25463b}
+.ambience-panel input[type=color]{height:30px;padding:2px;border:1px solid #dfe5e1;border-radius:7px;background:#fff}
+.ambience-panel .number-range-box input{width:58px}
+.desktop-side-deco-hint{display:block;font-size:11px;line-height:1.45;color:#5f716b;background:#f4f8f6;border:1px dashed #cfdcd6;border-radius:8px;padding:8px 10px}

@@ -816,7 +816,7 @@ test("TC-197: Background tetap memakai satu lapisan sticky, bukan attachment:fix
   // hidden backdrop tergulir -440 px; dengan clip menempel di 0 px.
   assert.match(appCss, /\.wedding-site\.has-fixed-backdrop\{overflow:visible;overflow:clip\}/);
   // Pengukuran tinggi diulang setelah cover dibuka (root baru terpasang).
-  assert.match(appTsx, /\}, \[fixedBackdrop, opened, previewZoom\]\);/);
+  assert.match(appTsx, /\}, \[fixedBackdrop, needsViewportLayer, opened, previewZoom\]\);/);
   assert.match(appTsx, /<strong>Background tetap<\/strong>/);
 });
 
@@ -1704,4 +1704,33 @@ test("QA16 TC-365..407: editor, dashboard WD, keamanan, paket & notifikasi", () 
   assert.match(serverMjs, /function notifyCustomerChat\(conversationId, body\)/);
   assert.match(serverMjs, /process\.env\.OPS_NOTIFY_EMAIL \|\| "hello@afarcoteknologi\.com"/);
   assert.match(serverMjs, /const SITE_BASIC_AUTH = String\(process\.env\.SITE_BASIC_AUTH/);
+});
+
+test("QC 26 Nov: efek ornamen — jeda/fase, intensitas, gerak kedua, kilau, animasi masuk, suasana global", () => {
+  // 1) Jeda & fase per ornamen
+  assert.match(appTsx, /delay\?: number;\n\s*phase\?: number;/);
+  assert.match(appTsx, /\(decoration\.delay \?\? 0\) -\n\s*\(\(decoration\.phase \?\? 0\) \/ 100\) \* speed;/);
+  // 2) Intensitas mengalikan besar gerak lewat --deco-amp
+  assert.match(appTsx, /"--deco-amp": decoration\.intensity \?\? 1,/);
+  assert.match(appCss, /@keyframes decoSway\{0%,100%\{transform:rotate\(calc\(var\(--deco-amp,1\) \* -3deg\)\)\}/);
+  assert.match(appCss, /\.section-decoration\.section-decoration\.loop-swing\{animation-name:decoSwing\}/);
+  // 3) Berkilau = sapuan cahaya ber-mask bentuk ornamen
+  assert.match(appTsx, /\{shine && <i className="deco-shine" \/>\}/);
+  assert.match(appCss, /@keyframes decoShine\{/);
+  assert.match(appCss, /mask:var\(--deco-mask\) center\/100% 100% no-repeat/);
+  // 4) Gerak kedua berjalan di gambar, tidak bentrok dengan gerak utama di span
+  assert.match(appCss, /animation:var\(--deco-m2-anim,none\),var\(--deco-enter-anim,none\)/);
+  // 5) Animasi masuk khusus ornamen, dipicu saat terlihat
+  assert.match(appTsx, /function observeDecorEntrance\(element: HTMLElement \| null\)/);
+  assert.match(appTsx, /function replayDecorEntrance\(id: string\)/);
+  assert.match(appCss, /@keyframes decoEnterCorner\{from\{opacity:0;translate:calc\(var\(--deco-pin-x,0\) \* 70%\)/);
+  // 6) Ornamen cover desktop: panduan PNG transparan di editor sisi 70%
+  assert.match(appTsx, /className="form-hint desktop-side-deco-hint"/);
+  // 7) Efek suasana global
+  assert.match(appTsx, /siteAmbience\?: SiteAmbience;/);
+  assert.match(appTsx, /<SiteAmbienceLayer\n\s*ambience=\{sections\[0\]\?\.siteAmbience\}/);
+  assert.match(appTsx, /function SiteAmbiencePanel\(/);
+  assert.match(appCss, /\.site-ambience\{position:sticky;top:0;/);
+  // NumberRange menerima pecahan (jeda 0.5 s)
+  assert.match(appTsx, /step >= 1 \? Math\.round\(parsed\) :/);
 });
