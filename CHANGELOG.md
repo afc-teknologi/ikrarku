@@ -1,3 +1,8 @@
+## 0.22.2 — 26 November 2026
+
+- Google Tag Manager (GTM-NK3X2QVQ) yang dipasang langsung di server kini masuk kode `index.html`, aktif hanya di ikrarku.id (dev.ikrarku.id & localhost tidak terlacak).
+- `.gitignore`: folder `backups/` dan cadangan `.env*.bak*` di VPS tidak lagi muncul di `git status`.
+
 ## 0.22.1 — 24 November 2026 (QC 24 Nov, di atas branch production)
 
 - QC3: form Ubah akun & Tambah akun di Admin Console tidak lagi diisi otomatis browser dengan email/password Admin yang sedang login (autocomplete dimatikan, password memakai new-password). Sebelumnya password user bisa tergantikan password Admin tanpa disadari.

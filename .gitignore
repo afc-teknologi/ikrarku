@@ -33,3 +33,7 @@ server/receipts/*
 .env.staging
 .env.production
 .npm-cache
+
+# VPS: backup database & cadangan env (jangan masuk Git)
+/backups/
+.env*.bak*
