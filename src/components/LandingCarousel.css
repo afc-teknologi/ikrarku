@@ -42,7 +42,7 @@
 }
 .ikr-carousel-actions .ikr-carousel-primary:hover { background: #fff6df; }
 .ikr-carousel-stage {
-  position: relative; overflow: hidden; isolation: isolate; touch-action: pan-y;
+  position: relative; overflow: hidden; isolation: isolate; touch-action: pan-y pinch-zoom;
   height: clamp(320px, 34vw, 396px);
   --step: clamp(115px, 17.6vw, 245px); --card-width: clamp(132px, 19vw, 244px);
   transition: --glow .58s ease-out;
@@ -73,10 +73,14 @@
   position: absolute; left: 50%; top: calc(50% - 3px); width: var(--card-width);
   aspect-ratio: .74; display: grid; place-items: center; padding: 0; overflow: hidden;
   border: 1px solid #fff3c878; border-radius: 12px; background: var(--tone, #214338);
-  color: var(--carousel-bg); touch-action: pan-y; user-select: none;
+  color: var(--carousel-bg); touch-action: pan-y pinch-zoom; user-select: none;
   box-shadow: 0 14px 28px #071e18a0; z-index: var(--depth); opacity: .86;
-  transform: translate(-50%, -50%) translate(var(--x), var(--y)) rotate(var(--rotation)) scale(calc(var(--scale) * var(--hover-scale, 1)));
-  transition: transform .64s cubic-bezier(.22, .78, .25, 1), opacity .48s ease-out, box-shadow .33s ease;
+  transform: translate(-50%, -50%) translate(calc(var(--x) + var(--drag-x, 0px)), var(--y)) rotate(var(--rotation)) scale(calc(var(--scale) * var(--hover-scale, 1)));
+  transition: transform .62s cubic-bezier(.22, .72, .28, 1), opacity .48s ease-out, box-shadow .33s ease;
+}
+.ikr-carousel-stage[data-dragging] .ikr-carousel-poster { transition: none; }
+@media (prefers-reduced-motion: reduce) {
+  .ikr-carousel-stage[data-dragging] { --drag-x: 0px !important; }
 }
 .ikr-carousel-poster[data-distance="2"] { opacity: .49; }
 .ikr-carousel-poster[data-distance="3"] { opacity: 0; pointer-events: none; }

@@ -88,3 +88,58 @@ test("Designer: actual CSS docks image to corners, mobile inherits and overrides
     "mobile override must not move desktop",
   );
 });
+
+test("Landing on touch: design follows the finger, and the journal reaches its last card", async (t) => {
+  const browser = await chromium.launch();
+  t.after(() => browser.close());
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  const titles = ["Alpha", "Beta", "Gamma", "Delta"];
+  await page.route("**/api/**", route => route.fulfill({
+    json: route.request().url().endsWith("/public/bootstrap") ? {
+      templates: titles.map((name, index) => ({
+        id: `design-${index}`, name, category: "Modern", package: "Basic", price: 79000,
+      })),
+      articles: titles.map((title, index) => ({
+        id: `article-${index}`, slug: title.toLowerCase(), title, category: "Planning", status: "Published",
+      })),
+      sounds: [],
+      paymentMethods: [],
+    } : { ok: true },
+  }));
+  await page.goto(base);
+  const stage = page.locator(".ikr-carousel-stage");
+  await stage.scrollIntoViewIfNeeded();
+  const box = await stage.boundingBox();
+  assert.ok(box);
+  const session = await page.context().newCDPSession(page);
+  const touch = (type, x) => session.send("Input.dispatchTouchEvent", {
+    type,
+    touchPoints: type === "touchEnd" ? [] : [{ x, y: Math.round(box.y + box.height / 2) }],
+  });
+  await touch("touchStart", 245);
+  await touch("touchMove", 225);
+  await touch("touchMove", 200);
+  await touch("touchMove", 155);
+  assert.ok(await stage.evaluate(el => parseFloat(el.style.getPropertyValue("--drag-x")) < -20));
+  await touch("touchEnd");
+  await page.locator(".ikr-carousel-position").filter({ hasText: "Beta" }).waitFor();
+  assert.equal(new URL(page.url()).pathname, "/");
+
+  const dots = page.locator(".ikr-journal-dots button");
+  assert.equal(await dots.count(), titles.length);
+  await dots.last().scrollIntoViewIfNeeded();
+  await page.waitForFunction(() =>
+    getComputedStyle(document.querySelector(".ikr-journal-dots")).opacity === "1",
+  );
+  await dots.last().tap();
+  await page.waitForFunction(() => {
+    const rail = document.querySelector(".ikr-journal-viewport");
+    const card = rail?.querySelector(".ikr-journal-card:last-child");
+    return card && Math.abs(card.getBoundingClientRect().left - rail.getBoundingClientRect().left) < 3;
+  });
+  await page.waitForFunction(() => document.querySelector(".ikr-journal-nav.next")?.disabled);
+});

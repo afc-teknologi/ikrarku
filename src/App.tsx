@@ -32691,6 +32691,7 @@ function ArticleReaderPage({
     () => prepareArticleReading(resolveArticleLinks(article.content, articles)),
     [article.content, articles],
   );
+  const articleMarkup = useMemo(() => ({ __html: reading.html }), [reading.html]);
   const [activeHeading, setActiveHeading] = useState("");
   const openArticleAtTop = (slug: string) => {
     onOpenArticle?.(slug);
@@ -32703,28 +32704,52 @@ function ArticleReaderPage({
   useEffect(() => {
     if (!publicMode || !reading.headings.length) return;
     const entries = reading.headings.map(heading => document.getElementById(heading.id));
+    let frame = 0;
     const update = () => {
-      const offset = (document.querySelector("header.ikr-nav")?.getBoundingClientRect().height || 0) + 44;
+      frame = 0;
+      const first = entries.find(element => element !== null);
+      if (!first) return;
+      const offset = parseFloat(getComputedStyle(first).scrollMarginTop) + 4;
       const current = entries.findLast(element => element && element.getBoundingClientRect().top <= offset);
       setActiveHeading(current?.id || "");
     };
-    window.addEventListener("scroll", update, { passive: true });
-    window.addEventListener("resize", update);
+    const schedule = () => { if (!frame) frame = requestAnimationFrame(update); };
+    window.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
     update();
     return () => {
-      window.removeEventListener("scroll", update);
-      window.removeEventListener("resize", update);
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
     };
   }, [publicMode, reading.headings]);
   useEffect(() => {
     const fragment = window.location.hash.slice(1);
     if (!publicMode || !fragment || window.location.pathname !== articleHref(article.slug)) return;
     try {
-      document.getElementById(decodeURIComponent(fragment))?.scrollIntoView();
+      document.getElementById(decodeURIComponent(fragment))?.scrollIntoView({ block: "start", behavior: "instant" });
     } catch {
       /* An invalid fragment should not block the article. */
     }
   }, [publicMode, article.slug]);
+  const jumpToHeading = (event: React.MouseEvent, hash: string) => {
+    if (!publicMode || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    let target: HTMLElement | null;
+    try {
+      target = document.getElementById(decodeURIComponent(hash.slice(1)));
+    } catch {
+      return;
+    }
+    if (!target?.closest(".reader-page-content")) return;
+    event.preventDefault();
+    if (window.location.hash !== hash) window.history.pushState(window.history.state, "", hash);
+    target.tabIndex = -1;
+    target.focus({ preventScroll: true });
+    target.scrollIntoView({
+      block: "start",
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+    });
+  };
   // Tautan internal dibuka di dalam aplikasi (tanpa muat ulang halaman).
   const onContentClick = (event: React.MouseEvent<HTMLElement>) => {
     const anchor = (event.target as HTMLElement).closest("a");
@@ -32739,6 +32764,10 @@ function ArticleReaderPage({
     )
       return;
     const href = anchor.getAttribute("href") || "";
+    if (href.startsWith("#")) {
+      jumpToHeading(event, href);
+      return;
+    }
     if (!href.startsWith("/")) return;
     const parts = href.split(/[?#]/)[0].replace(/^\/+|\/+$/g, "").split("/");
     if (parts[0] === ARTICLE_PATH_SEGMENT && parts[1] && onOpenArticle) {
@@ -32793,7 +32822,9 @@ function ArticleReaderPage({
                   <ol>
                     {reading.headings.map(heading => (
                       <li key={heading.id} className={heading.level === 3 ? "reader-toc-subheading" : undefined}>
-                        <a href={`#${encodeURIComponent(heading.id)}`} aria-current={activeHeading === heading.id ? "location" : undefined}>
+                        <a href={`#${encodeURIComponent(heading.id)}`}
+                          onClick={event => jumpToHeading(event, event.currentTarget.hash)}
+                          aria-current={activeHeading === heading.id ? "location" : undefined}>
                           {heading.text}
                         </a>
                       </li>
@@ -32812,7 +32843,7 @@ function ArticleReaderPage({
             <div
               className="reader-page-content"
               onClick={onContentClick}
-              dangerouslySetInnerHTML={{ __html: reading.html }}
+              dangerouslySetInnerHTML={articleMarkup}
             />
             {publicMode && <ArticleShare key={article.slug} article={article} />}
             {article.tags.length > 0 && (
@@ -32882,7 +32913,10 @@ function ArticleShare({ article }: { article: ArticleItem }) {
   };
   const links = [
     { name: "WhatsApp", icon: <SocialGlyph name="whatsapp" size={18} />, url: `https://wa.me/?text=${shareText}` },
-    { name: "LinkedIn", icon: <span className="reader-linkedin-icon" aria-hidden="true">in</span>, url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}` },
+    { name: "LinkedIn", icon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <path d="M8 10.5v6m0-9h.01m4 9v-6m0 2a2 2 0 0 1 4 0v4" />
+    </svg>, url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}` },
     { name: "Threads", icon: <SocialGlyph name="threads" size={18} />, url: `https://www.threads.com/intent/post?text=${shareText}` },
     { name: "Facebook", icon: <SocialGlyph name="facebook" size={18} />, url: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
   ];
