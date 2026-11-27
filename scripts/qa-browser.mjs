@@ -131,10 +131,15 @@ test("Landing on touch: design follows the finger, and the journal reaches its l
 
   const dots = page.locator(".ikr-journal-dots button");
   assert.equal(await dots.count(), titles.length);
-  await dots.last().click();
+  await dots.last().scrollIntoViewIfNeeded();
+  await page.waitForFunction(() =>
+    getComputedStyle(document.querySelector(".ikr-journal-dots")).opacity === "1",
+  );
+  await dots.last().tap();
   await page.waitForFunction(() => {
     const rail = document.querySelector(".ikr-journal-viewport");
-    return rail && rail.scrollWidth - rail.clientWidth - rail.scrollLeft < 2;
+    const card = rail?.querySelector(".ikr-journal-card:last-child");
+    return card && Math.abs(card.getBoundingClientRect().left - rail.getBoundingClientRect().left) < 3;
   });
-  assert.equal(await page.locator(".ikr-journal-nav.next").isDisabled(), true);
+  await page.waitForFunction(() => document.querySelector(".ikr-journal-nav.next")?.disabled);
 });
