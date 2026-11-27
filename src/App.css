@@ -1061,14 +1061,15 @@ label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8p
    Jurnal ikrarku — kartu seragam, carousel landing, halaman tersendiri
    ===================================================================== */
 .ikr-journal-stage{position:relative}
-.ikr-journal-viewport{overflow:hidden;touch-action:pan-y;cursor:grab}
-.ikr-journal-viewport:active{cursor:grabbing}
+.ikr-journal-viewport{overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;scrollbar-width:none}
+.ikr-journal-viewport::-webkit-scrollbar{display:none}
 .ikr-journal-nav{position:absolute;top:calc(50% - 20px);z-index:3;width:40px;height:40px;border-radius:50%;border:1px solid rgba(18,89,70,.18);background:#fff;color:#123f33;display:grid;place-items:center;cursor:pointer;box-shadow:0 6px 18px rgba(12,40,32,.12)}
 .ikr-journal-nav.prev{left:-18px}
 .ikr-journal-nav.next{right:-18px}
 .ikr-journal-nav:hover{background:#123f33;color:#fff}
 @media(max-width:1100px){.ikr-journal-nav.prev{left:2px}.ikr-journal-nav.next{right:2px}}
-.ikr-journal-track{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 44px)/3);gap:22px;transition:transform .6s cubic-bezier(.4,0,.2,1)}
+.ikr-journal-track{display:grid;grid-auto-flow:column;grid-auto-columns:calc((100% - 44px)/3);gap:22px}
+.ikr-journal-track>.ikr-journal-card{scroll-snap-align:start}
 
 /* Kartu artikel: tinggi seragam berapa pun panjang judulnya */
 .ikr-journal-card{display:grid;grid-template-rows:180px 1fr auto;text-align:left;background:#fff;border:1px solid rgba(18,89,70,.12);border-radius:16px;overflow:hidden;cursor:pointer;padding:0;transition:.2s;min-width:0;color:inherit;text-decoration:none;font:inherit}
@@ -1086,7 +1087,13 @@ label.range-field>.range-scale{display:flex;justify-content:space-between;gap:8p
 .ikr-journal-dots button.is-active{width:22px;background:#123f33}
 .ikr-journal-more{display:flex;justify-content:center;margin-top:22px}
 .ikr-journal-empty{padding:40px;text-align:center;color:#6f817b}
-@media(max-width:900px){.ikr-journal-track{grid-auto-columns:calc(100% - 20px)}}
+@media(max-width:900px){
+  .ikr-journal-track{grid-auto-columns:100%;gap:16px}
+  .ikr-journal-stage:has(.ikr-journal-nav){padding-bottom:52px}
+  .ikr-journal-nav{top:auto;bottom:0;width:44px;height:44px}
+  .ikr-journal-stage + .ikr-journal-dots{position:relative;width:fit-content;margin:-26px auto 0}
+}
+.ikr-journal-nav:disabled{opacity:.4;cursor:default}
 
 /* Halaman Jurnal tersendiri */
 .journal-page{min-height:100vh;background:linear-gradient(180deg,#fffdf8,#f4f7f4)}
@@ -3366,7 +3373,7 @@ body:has(.cs-layout) .chat-widget{display:none}
 }
 
 /* Public article layout and section navigation. */
-.article-reader-page.public { background: #f8f7f2; }
+.article-reader-page.public { background: #f8f7f2; --reader-offset: 106px; }
 .article-reader-page.public > header { height: 55px; }
 .article-reader-page.public .reader-hero-wide {
   min-height: clamp(300px, 34vw, 490px);
@@ -3390,12 +3397,12 @@ body:has(.cs-layout) .chat-widget{display:none}
 .article-reader-page.public .reader-no-toc { grid-template-columns: minmax(0, 780px); }
 .article-reader-page.public .reader-body-wide article { width: 100%; padding: clamp(20px, 4vw, 45px); }
 .article-reader-page.public .reader-page-content { font-size: clamp(15px, 1.35vw, 17px); line-height: 1.78; overflow-wrap: anywhere; }
-.article-reader-page.public .reader-page-content :is(h2, h3) { line-height: 1.25; scroll-margin-top: 110px; }
+.article-reader-page.public .reader-page-content :is(h2, h3) { line-height: 1.25; scroll-margin-top: var(--reader-offset); }
 .article-reader-page.public .reader-page-content img { height: auto; }
 .article-reader-page.public .reader-page-content a { text-decoration: underline; text-underline-offset: 3px; }
 .article-reader-page.public .reader-toc {
   position: sticky;
-  top: 108px;
+  top: var(--reader-offset);
   max-height: calc(100dvh - 132px);
   overflow: auto;
   overscroll-behavior: contain;
@@ -3426,7 +3433,7 @@ body:has(.cs-layout) .chat-widget{display:none}
   font-size: 13px;
 }
 .reader-share-actions :is(a, button):hover { background: #eff6ef; }
-.reader-linkedin-icon { display: inline-grid; width: 17px; height: 17px; place-items: center; border-radius: 2px; background: #0a66c2; color: #fff; font: bold 13px Arial, sans-serif; }
+.reader-share-actions svg { width: 18px; height: 18px; flex: none; stroke: currentColor; stroke-width: 1.8; }
 .reader-share-feedback { margin: 6px 0 0; color: #426857; font-size: 13px; overflow-wrap: anywhere; }
 .reader-share-feedback:empty { margin: 0; }
 .reader-article-cta {
@@ -3449,6 +3456,6 @@ body:has(.cs-layout) .chat-widget{display:none}
   .article-reader-page.public .reader-body-wide { grid-template-columns: minmax(0, 1fr); }
   .article-reader-page.public .reader-toc { position: static; max-height: none; }
   .reader-toc ol { max-height: 240px; overflow-y: auto; }
-  .article-reader-page.public .reader-page-content :is(h2, h3) { scroll-margin-top: 96px; }
+  .article-reader-page.public { --reader-offset: 92px; }
   .reader-related-grid { grid-template-columns: minmax(0, 1fr); }
 }

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent, type ReactNode } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, Star } from "lucide-react";
 import type { Template } from "../App";
 import { ALL_TEMPLATE_CATEGORIES, matchesTemplateCategory, templateCategories } from "../templateCatalog";
@@ -40,7 +40,8 @@ export default function LandingCarousel({
   const [style, setStyle] = useState(ALL_TEMPLATE_CATEGORIES);
   const [free, setFree] = useState(false);
   const [selectedId, setSelectedId] = useState("");
-  const gesture = useRef<{x: number; y: number; suppressClick: boolean} | null>(null);
+  const gesture = useRef<{ id: number; x: number; y: number; dragging: boolean } | null>(null);
+  const suppressClick = useRef(false);
   const stage = useRef<HTMLDivElement>(null);
   const categories = templateCategories(templates).filter(item => item !== "Free");
   const rank = (item: Template) => {
@@ -68,6 +69,37 @@ export default function LandingCarousel({
     const item = visible[(next + visible.length) % visible.length];
     if (item) setSelectedId(item.id);
   };
+  const move = (event: PointerEvent<HTMLDivElement>) => {
+    const start = gesture.current;
+    if (!start || start.id !== event.pointerId) return;
+    const x = event.clientX - start.x;
+    const y = event.clientY - start.y;
+    if (!start.dragging) {
+      if (Math.abs(y) > 8 && Math.abs(y) >= Math.abs(x)) {
+        gesture.current = null;
+        return;
+      }
+      if (Math.abs(x) < 8 || Math.abs(x) < Math.abs(y) * 1.25) return;
+      start.dragging = true;
+      suppressClick.current = true;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      event.currentTarget.dataset.dragging = "true";
+    }
+    const stageWidth = event.currentTarget.clientWidth;
+    const offset = Math.max(-stageWidth * .28, Math.min(stageWidth * .28, x * .82));
+    event.currentTarget.style.setProperty("--drag-x", `${offset}px`);
+  };
+  const finish = (event: PointerEvent<HTMLDivElement>) => {
+    const start = gesture.current;
+    if (!start || start.id !== event.pointerId) return;
+    gesture.current = null;
+    delete event.currentTarget.dataset.dragging;
+    event.currentTarget.style.removeProperty("--drag-x");
+    if (event.type !== "pointerup" || !start.dragging) return;
+    const x = event.clientX - start.x;
+    const threshold = Math.min(64, event.currentTarget.clientWidth * .11);
+    if (Math.abs(x) >= threshold) select(index + (x < 0 ? 1 : -1));
+  };
   const filter = (next: string) => {
     setStyle(next);
     setSelectedId("");
@@ -91,7 +123,7 @@ export default function LandingCarousel({
         </div>
       </div>
       {active ? (
-        <div role="region" aria-roledescription={t("karusel", "carousel")} aria-label={t("Galeri desain", "Design gallery")}
+        <div role="region" aria-roledescription={t("karusel", "carousel")} aria-label={t("Galeri desain", "Design gallery")} data-reveal
           onKeyDown={event => {
             if (!["ArrowLeft", "ArrowRight"].includes(event.key) || visible.length < 2) return;
             event.preventDefault();
@@ -102,18 +134,21 @@ export default function LandingCarousel({
           }}>
           <div className="ikr-carousel-stage" ref={stage} style={{"--glow": active.accent || "#a77188"} as CSSProperties}
             onPointerDown={event => {
-              if (event.isPrimary && event.button === 0) gesture.current = {x:event.clientX, y:event.clientY, suppressClick:false};
-            }}
-            onPointerCancel={() => {gesture.current = null;}}
-            onPointerUp={event => {
-              const start = gesture.current;
-              if (!start) return;
-              const x = event.clientX - start.x, y = event.clientY - start.y;
-              if (visible.length > 1 && Math.abs(x) > 38 && Math.abs(x) > Math.abs(y) * 1.25) {
-                start.suppressClick = true;
-                select(index + (x < 0 ? 1 : -1));
+              if (!event.isPrimary || event.button !== 0) return;
+              suppressClick.current = false;
+              if (visible.length > 1) {
+                gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY, dragging: false };
               }
-            }}>
+            }}
+            onPointerMove={move}
+            onPointerCancel={finish}
+            onLostPointerCapture={event => {
+              if (event.target === event.currentTarget) finish(event);
+            }}
+            onPointerLeave={event => {
+              if (!gesture.current?.dragging && event.pointerType === "mouse") finish(event);
+            }}
+            onPointerUp={finish}>
             <div className="ikr-carousel-arc" aria-hidden="true" />
             <div className="ikr-carousel-deck">
               {visible.map((item, i) => {
@@ -134,7 +169,7 @@ export default function LandingCarousel({
                     "--tone": item.bg, "--depth": 10 - distance,
                   } as CSSProperties}
                   onClick={event => {
-                    if (event.detail && gesture.current?.suppressClick) return;
+                    if (event.detail && suppressClick.current) return;
                     if (distance === 0) onTemplate(item, true);
                     else select(i);
                   }}>
@@ -171,7 +206,7 @@ export default function LandingCarousel({
       ) : <p className="ikr-carousel-empty" role="status">{databaseOnline
         ? t("Belum ada desain yang cocok dengan filter ini.", "No designs match these filters.")
         : t("Katalog belum dapat dimuat.", "The catalog could not be loaded.")}</p>}
-      {templates.length > 0 && <button className="ikr-carousel-all" type="button" onClick={onSeeAll}>{t("Lihat semua desain", "See all designs")} <ArrowRight size={16} /></button>}
+      {templates.length > 0 && <button className="ikr-carousel-all" data-reveal type="button" onClick={onSeeAll}>{t("Lihat semua desain", "See all designs")} <ArrowRight size={16} /></button>}
     </section>
   );
 }

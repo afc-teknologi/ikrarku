@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ArrowRight,
   ChevronDown,
@@ -198,8 +198,7 @@ export function JournalCard({
   );
 }
 
-// Menampilkan maksimal 10 artikel, bergeser otomatis tiga-tiga
-// (1,2,3 → 2,3,4 → …) lalu kembali ke awal.
+// Geser artikel dengan scrolling bawaan browser dan snap per kartu.
 function JournalCarousel({
   articles,
   onArticle,
@@ -228,29 +227,42 @@ function JournalCarousel({
       ).slice(0, 10),
     [published, category],
   );
-  const perView = 3;
-  const maxStart = Math.max(0, visible.length - perView);
+  const viewport = useRef<HTMLDivElement>(null);
   const [start, setStart] = useState(0);
-  const [paused, setPaused] = useState(false);
-  useEffect(() => setStart(0), [category]);
+  const [perView, setPerView] = useState(3);
   useEffect(() => {
-    if (paused || visible.length <= perView) return;
-    const timer = window.setInterval(
-      () => setStart((previous) => (previous >= maxStart ? 0 : previous + 1)),
-      4000,
-    );
-    return () => window.clearInterval(timer);
-  }, [paused, maxStart, visible.length]);
+    const mobile = window.matchMedia("(max-width: 900px)");
+    const update = () => setPerView(mobile.matches ? 1 : 3);
+    update();
+    mobile.addEventListener("change", update);
+    return () => mobile.removeEventListener("change", update);
+  }, []);
+
+  const maxStart = Math.max(0, visible.length - perView);
   const safeStart = Math.min(start, maxStart);
-  // Geser manual: tombol panah, swipe, dan klik indikator.
-  const dragRef = useRef<{ x: number; handled: boolean } | null>(null);
-  const step = (direction: 1 | -1) =>
-    setStart((previous) => {
-      const next = Math.min(maxStart, Math.max(0, previous)) + direction;
-      if (next < 0) return maxStart;
-      if (next > maxStart) return 0;
-      return next;
+  const move = (next: number) => {
+    const rail = viewport.current;
+    const card = rail?.querySelectorAll(".ikr-journal-card")[next];
+    if (!rail || !card) return;
+    rail.scrollTo({
+      left: rail.scrollLeft + card.getBoundingClientRect().left - rail.getBoundingClientRect().left,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
     });
+  };
+  const syncPosition = () => {
+    const rail = viewport.current;
+    if (!rail) return;
+    const cards = rail.querySelectorAll(".ikr-journal-card");
+    if (cards.length < 2) return;
+    const distance = cards[1].getBoundingClientRect().left - cards[0].getBoundingClientRect().left;
+    if (distance) setStart(Math.max(0, Math.min(maxStart, Math.round(rail.scrollLeft / distance))));
+  };
+  const changeCategory = (next: string) => {
+    if (next === category) return;
+    viewport.current?.scrollTo({ left: 0, behavior: "instant" });
+    setStart(0);
+    setCategory(next);
+  };
   if (!visible.length)
     return (
       <div className="ikr-journal-empty">
@@ -265,7 +277,7 @@ function JournalCarousel({
           <button
             key={item}
             aria-pressed={category === item}
-            onClick={() => setCategory(item)}
+            onClick={() => changeCategory(item)}
           >
             {item === ALL ? tx.all : item}
           </button>
@@ -276,42 +288,14 @@ function JournalCarousel({
           <button
             className="ikr-journal-nav prev"
             aria-label={tx.jrPrev}
-            onClick={() => step(-1)}
+            disabled={safeStart === 0}
+            onClick={() => move(safeStart - 1)}
           >
             <ChevronLeft size={18} />
           </button>
         )}
-        <div
-          className="ikr-journal-viewport"
-          onMouseEnter={() => setPaused(true)}
-          onMouseLeave={() => setPaused(false)}
-          onPointerDown={(event) => {
-            dragRef.current = { x: event.clientX, handled: false };
-            setPaused(true);
-          }}
-          onPointerMove={(event) => {
-            const drag = dragRef.current;
-            if (!drag || drag.handled) return;
-            const delta = event.clientX - drag.x;
-            if (Math.abs(delta) > 48) {
-              step(delta < 0 ? 1 : -1);
-              drag.handled = true;
-            }
-          }}
-          onPointerUp={() => {
-            dragRef.current = null;
-            setPaused(false);
-          }}
-          onPointerLeave={() => {
-            dragRef.current = null;
-          }}
-        >
-          <div
-            className="ikr-journal-track"
-            style={{
-              transform: `translateX(calc(-${safeStart} * (100% + 22px) / ${perView}))`,
-            }}
-          >
+        <div className="ikr-journal-viewport" ref={viewport} onScroll={syncPosition}>
+          <div className="ikr-journal-track">
             {visible.map((article) => (
               <JournalCard
                 key={article.id}
@@ -326,7 +310,8 @@ function JournalCarousel({
           <button
             className="ikr-journal-nav next"
             aria-label={tx.jrNext}
-            onClick={() => step(1)}
+            disabled={safeStart === maxStart}
+            onClick={() => move(safeStart + 1)}
           >
             <ChevronRight size={18} />
           </button>
@@ -340,7 +325,8 @@ function JournalCarousel({
               type="button"
               aria-label={`${tx.jrGroup} ${index + 1}`}
               className={index === safeStart ? "is-active" : ""}
-              onClick={() => setStart(index)}
+              aria-current={index === safeStart ? "true" : undefined}
+              onClick={() => move(index)}
             />
           ))}
         </div>
@@ -380,6 +366,7 @@ export default function LandingPage({
   const [lang] = useSiteLang();
   const tx = COPY[lang];
   const root = useRef<HTMLDivElement>(null);
+  const hasArticles = articles.length > 0;
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || !("IntersectionObserver" in window) || !hero.current)
       return;
@@ -387,7 +374,7 @@ export default function LandingPage({
       if (!entry.isIntersecting) return;
       setHeroVisible(true);
       observer.disconnect();
-    }, { threshold: 0.15 });
+    }, { threshold: 0.05 });
     observer.observe(hero.current);
     return () => observer.disconnect();
   }, []);
@@ -401,7 +388,7 @@ export default function LandingPage({
       onScrolled?.();
     }
   }, [scrollTarget, onScrolled]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (
       window.matchMedia("(prefers-reduced-motion: reduce)").matches ||
       !("IntersectionObserver" in window)
@@ -415,14 +402,16 @@ export default function LandingPage({
             observer.unobserve(e.target);
           }
         }),
-      { threshold: 0.08 },
+      { rootMargin: "0px 0px 40px", threshold: 0 },
     );
     root.current?.querySelectorAll("[data-reveal]").forEach((el) => {
-      el.classList.add("will-reveal");
-      observer.observe(el);
+      if (!el.classList.contains("is-visible")) {
+        el.classList.add("will-reveal");
+        observer.observe(el);
+      }
     });
     return () => observer.disconnect();
-  }, []);
+  }, [hasArticles, templates.length]);
   return (
     <div className="ikr-landing" ref={root}>
       <main id="main-content">
@@ -450,7 +439,7 @@ export default function LandingPage({
             <img src={weddingHero} alt={tx.heroArt} fetchPriority="high" width={1122} height={1402} />
           </div>
         </section>
-        <div className="ikr-benefit-strip">
+        <div className="ikr-benefit-strip" data-reveal>
           <span>{tx.strip[0]}</span>
           <p>{tx.strip[1]}</p>
           <i />
@@ -537,7 +526,7 @@ export default function LandingPage({
             ))}
           </div>
         </section>
-        {!!articles.length && (
+        {hasArticles && (
           <section id="articles" className="ikr-section" data-reveal>
             <span className="ikr-eyebrow">{tx.jrEyebrow}</span>
             <h2>
@@ -553,7 +542,7 @@ export default function LandingPage({
             />
           </section>
         )}
-        <section className="ikr-final">
+        <section className="ikr-final" data-reveal>
           <span className="ikr-eyebrow">YOUR STORY STARTS HERE</span>
           <h2>
             {tx.finalTitle[0]}
