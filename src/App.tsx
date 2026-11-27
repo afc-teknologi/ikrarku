@@ -165,6 +165,9 @@ import {
   type SiteLang,
 } from "./i18n";
 import LandingPageView, { JournalCard } from "./components/LandingPage";
+import { chatNotices, observeStaffNotices, orderNotices, taskNotices, type StaffNotice } from "./staffNotices";
+import StaffNoticeMenu from "./components/StaffNoticeMenu";
+import { prepareArticleReading } from "./articleReading";
 import PublicHeader from "./components/PublicHeader";
 import DesignerControls from "./components/DesignerControls";
 import {
@@ -4121,10 +4124,7 @@ function App() {
   const [notificationMuted, setNotificationMuted] = useState<boolean>(
     () => localStorage.getItem("ikrarku-notification-muted") === "true",
   );
-  const notificationBaseline = useRef<{
-    tasks: number;
-    messages: number;
-  } | null>(null);
+  const [noticeTarget, setNoticeTarget] = useState<StaffNotice | null>(null);
   const customerSupportBaseline = useRef<number | null>(null);
 
   useEffect(() => {
@@ -4453,7 +4453,7 @@ function App() {
             coverUrl: item.coverUrl ? assetUrl(item.coverUrl) : undefined,
           })),
         );
-        if (permitted("tasks.view")) {
+        if (role === "User" && permitted("tasks.view")) {
           try {
             setTaskItems(await api.tasks());
           } catch {
@@ -4477,7 +4477,7 @@ function App() {
         } catch {
           setSoundCatalog([]);
         }
-        if (permitted("dashboard.cs") || permitted("conversations.view")) {
+        if (!permitted("conversations.view") && permitted("dashboard.cs")) {
           try {
             setCsMetricData(await api.csMetrics());
           } catch {
@@ -4488,11 +4488,6 @@ function App() {
               resolved: 0,
             });
           }
-          try {
-            setServerConversations(await api.conversations());
-          } catch {
-            setServerConversations([]);
-          }
         }
         if (permitted("conversations.outbound")) {
           try {
@@ -4501,7 +4496,7 @@ function App() {
             setContactableUsers([]);
           }
         }
-        if (permitted("orders.view")) {
+        if (role !== "Admin" && permitted("orders.view")) {
           try {
             setOrderAnalytics(await api.orderAnalytics());
           } catch {
@@ -4644,86 +4639,83 @@ function App() {
     void loadProtected();
   }, [currentAccountId, role, permissionKey]);
 
+  const announceStaffNotices = useEffectEvent((fresh: StaffNotice[]) => {
+    if (!fresh.length) return;
+    if (!notificationMuted) playNotificationTone();
+    const kinds = new Set(fresh.map(notice => notice.kind));
+    flash(kinds.size > 1 ? "Ada aktivitas baru di panel notifikasi."
+      : kinds.has("chat") ? "Pesan baru masuk ke Customer Service."
+      : kinds.has("order") ? "Order baru siap diproses."
+      : "Task baru masuk ke dashboard.");
+  });
+
   useEffect(() => {
-    if (
-      !currentAccountId ||
-      view === "landing" ||
-      view === "login" ||
-      view === "signup" ||
-      view === "verify-email"
-    )
-      return;
-    let stopped = false;
-    const poll = async () => {
-      try {
-        let nextTasks = taskItems.length;
-        let nextMessages = serverConversations.reduce(
-          (total, conv) =>
-            total +
-            (conv.messages || []).filter(
-              (message: any) => message.sender_type !== "support",
-            ).length,
-          0,
-        );
-        if (hasPermission("tasks.view")) {
-          const fresh = await api.tasks();
-          if (!stopped) {
-            setTaskItems(fresh);
-            nextTasks = fresh.filter(
-              (task: any) =>
-                !["Done", "Cancelled", "Approved", "Rejected"].includes(
-                  task.status,
-                ),
-            ).length;
-          }
-        }
-        if (hasPermission("conversations.view")) {
-          const fresh = await api.conversations();
-          if (!stopped) {
-            setServerConversations(fresh);
-            nextMessages = fresh.reduce(
-              (total: number, conv: any) =>
-                total +
-                (conv.messages || []).filter(
-                  (message: any) => message.sender_type !== "support",
-                ).length,
-              0,
-            );
-            try {
-              setCsMetricData(await api.csMetrics());
-            } catch {
-              /* ignore */
-            }
-          }
-        }
-        const previous = notificationBaseline.current;
-        if (
-          previous &&
-          (nextTasks > previous.tasks || nextMessages > previous.messages) &&
-          !notificationMuted
-        ) {
-          playNotificationTone();
-          flash(
-            nextMessages > previous.messages
-              ? "Pesan baru masuk ke Customer Service."
-              : "Task baru masuk ke dashboard.",
-          );
-        }
-        notificationBaseline.current = {
-          tasks: nextTasks,
-          messages: nextMessages,
+    if (!currentAccountId || role === "User") return;
+    const permissions = permissionKey.split("|");
+    const allowed = (permission: string) =>
+      permissions.includes("*") || permissions.includes(permission);
+    const globalOrders = role === "Admin" && allowed("orders.view");
+    const sources: Array<() => Promise<{ notices: StaffNotice[]; apply: () => void }>> = [];
+    if (allowed("conversations.view")) {
+      sources.push(async () => {
+        const conversations = await api.conversations();
+        return {
+          notices: chatNotices(conversations),
+          apply: () => setServerConversations(conversations),
         };
-      } catch {
-        /* polling remains silent while API is unavailable */
+      });
+    }
+    if (allowed("tasks.view")) {
+      sources.push(async () => {
+        const tasks = await api.tasks();
+        return {
+          notices: taskNotices(tasks, !globalOrders),
+          apply: () => setTaskItems(tasks),
+        };
+      });
+    }
+    if (globalOrders) {
+      sources.push(async () => {
+        const analytics = await api.orderAnalytics();
+        return {
+          notices: orderNotices(analytics.rows),
+          apply: () => setOrderAnalytics(analytics),
+        };
+      });
+    }
+    if (!sources.length) return;
+
+    const baselines = new Map<number, Set<string>>();
+    let stopped = false;
+    let timer: number | undefined;
+    const poll = async () => {
+      const results = await Promise.allSettled(sources.map(load => load()));
+      if (stopped) return;
+      const fresh = results.flatMap((result, index) => {
+        if (result.status !== "fulfilled") return [];
+        const { notices, apply } = result.value;
+        const observed = observeStaffNotices(baselines.get(index), notices);
+        baselines.set(index, observed.ids);
+        apply();
+        return observed.fresh;
+      });
+      announceStaffNotices(fresh);
+      if (allowed("conversations.view")) {
+        try {
+          const metrics = await api.csMetrics();
+          if (!stopped) setCsMetricData(metrics);
+        } catch {
+          /* Keep the last successful metrics. */
+        }
       }
+      if (!stopped) timer = window.setTimeout(() => void poll(), 10000);
     };
     void poll();
-    const interval = window.setInterval(() => void poll(), 10000);
     return () => {
       stopped = true;
-      window.clearInterval(interval);
+      window.clearTimeout(timer);
     };
-  }, [currentAccountId, view, notificationMuted, permissionKey]);
+  }, [currentAccountId, role, permissionKey]);
 
   const refreshMyChat = useCallback(
     async (notify = true) => {
@@ -4867,6 +4859,7 @@ function App() {
         window.location.pathname,
         window.location.search,
       );
+      if (target.articleSlug && target.articleSlug === articleSlug) return;
       fromPopStateRef.current = true;
       setArticleSlug(target.articleSlug);
       if (target.templateId) {
@@ -4901,7 +4894,7 @@ function App() {
     };
     window.addEventListener("popstate", onPop);
     return () => window.removeEventListener("popstate", onPop);
-  }, []);
+  }, [articleSlug]);
 
   // Judul tab & alamat per halaman.
   useEffect(() => {
@@ -6432,6 +6425,9 @@ function App() {
     setTaskItems([]);
     setMyOrders([]);
     setServerConversations([]);
+    setNoticeTarget(null);
+    setOrderAnalytics({ summary: { qty: 0, nominal: 0, customers: 0 }, rows: [] });
+    setToast("");
     setSiteOwnerUserId("");
     setActiveManagedUserId("");
     setLastAuthError("");
@@ -6758,6 +6754,16 @@ function App() {
               ? setView("customer-service")
               : setChatWidgetOpen(true)
           }
+          staffNotices={role !== "User" ? [
+            ...(hasPermission("conversations.view") ? chatNotices(serverConversations) : []),
+            ...(hasPermission("tasks.view") ? taskNotices(taskItems, role !== "Admin" || !hasPermission("orders.view")) : []),
+            ...(role === "Admin" && hasPermission("orders.view") ? orderNotices(orderAnalytics.rows) : []),
+          ] : undefined}
+          onNotice={(notice) => {
+            setNoticeTarget({ ...notice });
+            setView(notice.kind === "chat" ? "customer-service"
+              : notice.kind === "order" && role === "Admin" && hasPermission("orders.view") ? "orders" : "tasks");
+          }}
           onSettings={() => setAccountSettingsOpen(true)}
           onPaymentSettings={() => setView("payment-settings")}
           canPaymentSettings={hasPermission("settings.payment")}
@@ -7015,6 +7021,7 @@ function App() {
         {view === "orders" && (
           <OrdersAnalyticsPage
             data={orderAnalytics}
+            noticeTarget={noticeTarget?.kind === "order" ? noticeTarget : null}
             onRefresh={async () => {
               try {
                 setOrderAnalytics(await api.orderAnalytics());
@@ -7056,6 +7063,7 @@ function App() {
         {view === "tasks" && (
           <TasksPage
             tasks={taskItems}
+            noticeTarget={noticeTarget?.kind !== "chat" ? noticeTarget : null}
             onRefresh={async () => {
               try {
                 setTaskItems(await api.tasks());
@@ -7128,6 +7136,7 @@ function App() {
       {view === "customer-service" && (
           <CustomerServiceDatabase
             conversations={serverConversations}
+            noticeTarget={noticeTarget?.kind === "chat" ? noticeTarget : null}
             users={contactableUsers}
             onRefresh={async () => {
               setServerConversations(await api.conversations());
@@ -7154,11 +7163,12 @@ function App() {
               setServerConversations(await api.conversations());
               setCsMetricData(await api.csMetrics());
             }}
-            onRead={async (conversationId) => {
-              await api.markConversationRead(conversationId);
+            onRead={async (conversationId, messageId) => {
+              await api.markConversationRead(conversationId, messageId);
               setServerConversations((previous) =>
                 previous.map((item) =>
-                  item.id === conversationId
+                  item.id === conversationId &&
+                    item.messages?.findLast((message: any) => message.sender_type === "customer")?.id === messageId
                     ? { ...item, unreadCount: 0 }
                     : item,
                 ),
@@ -7689,7 +7699,10 @@ function JournalPage({
     return (
       <ArticleReaderPage
         article={article}
-        onBack={() => onOpenArticle(null)}
+        onBack={() => {
+          onOpenArticle(null);
+          window.scrollTo({ top: 0, behavior: "instant" });
+        }}
         publicMode
         articles={articles}
         onOpenArticle={onOpenArticle}
@@ -7789,7 +7802,11 @@ function LandingPage(props: {
     return (
       <ArticleReaderPage
         article={article}
-        onBack={() => onOpenArticle?.(null)}
+        onBack={() => {
+          onOpenArticle?.(null);
+          props.setView("journal");
+          window.scrollTo({ top: 0, behavior: "instant" });
+        }}
         publicMode
         articles={props.articles}
         onOpenArticle={(slug) => onOpenArticle?.(slug)}
@@ -9284,6 +9301,7 @@ function PaymentMethodCard({
 
 function TasksPage({
   tasks,
+  noticeTarget,
   onRefresh,
   onUpdate,
   onReview,
@@ -9292,6 +9310,7 @@ function TasksPage({
   onManageCanvas,
 }: {
   tasks: TaskItem[];
+  noticeTarget: StaffNotice | null;
   onRefresh: () => void;
   onUpdate: (id: string, status: string) => Promise<void>;
   onReview: (
@@ -9304,6 +9323,19 @@ function TasksPage({
   onManageCanvas?: (userId: string) => void;
 }) {
   const [filter, setFilter] = useState("All");
+  const lastFocusedNotice = useRef<StaffNotice | null>(null);
+  useEffect(() => {
+    if (!noticeTarget || lastFocusedNotice.current === noticeTarget) return;
+    const row = document.getElementById(`notice-task-${noticeTarget.target}`);
+    if (row) {
+      lastFocusedNotice.current = noticeTarget;
+      row.focus({ preventScroll: true });
+      row.scrollIntoView({ block: "center" });
+    }
+  }, [noticeTarget, tasks, filter]);
+  useLayoutEffect(() => {
+    if (noticeTarget) setFilter("All");
+  }, [noticeTarget]);
   const [feedback, setFeedback] = useState<Record<string, string>>({});
   const [previewTemplate, setPreviewTemplate] = useState<Template | null>(null);
   // Preview approval sebelumnya hanya punya satu tampilan; reviewer tidak bisa
@@ -9470,7 +9502,7 @@ function TasksPage({
       {visible.length ? (
         <div className="task-board">
           {visible.map((task) => (
-            <article key={task.id}>
+            <article key={task.id} id={`notice-task-${task.id}`} tabIndex={-1}>
               <header>
                 <span
                   className={`task-priority ${task.priority.toLowerCase()}`}
@@ -10396,6 +10428,8 @@ function Topbar({
   sidebarOpen,
   currentAccount,
   onChat,
+  staffNotices,
+  onNotice,
   onSettings,
   onPaymentSettings,
   onLogout,
@@ -10406,6 +10440,8 @@ function Topbar({
   sidebarOpen: boolean;
   currentAccount?: AuthAccount;
   onChat: () => void;
+  staffNotices?: StaffNotice[];
+  onNotice: (notice: StaffNotice) => void;
   onSettings: () => void;
   onPaymentSettings: () => void;
   onLogout: () => void;
@@ -10444,6 +10480,10 @@ function Topbar({
           <span />
           {currentAccount?.email || displayRole(role)}
         </div>
+        {staffNotices && currentAccount && (
+          <StaffNoticeMenu key={currentAccount.id} accountId={currentAccount.id}
+            items={staffNotices} onSelect={onNotice} />
+        )}
         <button
           className="icon-btn topbar-chat"
           onClick={onChat}
@@ -30664,12 +30704,24 @@ function AdminDashboard({
 
 function OrdersAnalyticsPage({
   data,
+  noticeTarget,
   onRefresh,
 }: {
   data: OrderAnalytics;
+  noticeTarget: StaffNotice | null;
   onRefresh: () => Promise<void>;
 }) {
   const [retrying, setRetrying] = useState<string | null>(null);
+  const lastFocusedNotice = useRef<StaffNotice | null>(null);
+  useEffect(() => {
+    if (!noticeTarget || lastFocusedNotice.current === noticeTarget) return;
+    const row = document.getElementById(`notice-order-${noticeTarget.target}`);
+    if (row) {
+      lastFocusedNotice.current = noticeTarget;
+      row.focus({ preventScroll: true });
+      row.scrollIntoView({ block: "center" });
+    }
+  }, [noticeTarget, data.rows]);
   const [error, setError] = useState("");
   // MoM A6 — hasil "Buat akun customer": tautan buat-password untuk dikirim
   // ulang lewat WhatsApp bila perlu (sudah otomatis masuk chat & email).
@@ -30805,7 +30857,7 @@ function OrdersAnalyticsPage({
               </thead>
               <tbody>
                 {data.rows.map((row, index) => (
-                  <tr key={`${row.order_no}-${index}`}>
+                  <tr key={`${row.order_no}-${index}`} id={`notice-order-${row.id}`} tabIndex={-1}>
                     <td>
                       <strong>{row.order_no}</strong>
                       <span>{row.order_status}</span>
@@ -31046,6 +31098,7 @@ function CustomerServiceDashboard({
 
 function CustomerServiceDatabase({
   conversations,
+  noticeTarget,
   users,
   onRefresh,
   onReply,
@@ -31054,6 +31107,7 @@ function CustomerServiceDatabase({
   onRead,
 }: {
   conversations: any[];
+  noticeTarget: StaffNotice | null;
   users: any[];
   onRefresh: () => Promise<void>;
   onReply: (
@@ -31063,9 +31117,9 @@ function CustomerServiceDatabase({
   ) => Promise<void>;
   onOutbound: (userId: string, text: string) => Promise<void>;
   onStatus: (id: string, status: string) => Promise<void>;
-  onRead: (id: string) => Promise<void>;
+  onRead: (id: string, messageId: string) => Promise<void>;
 }) {
-  const [selectedId, setSelectedId] = useState(conversations[0]?.id || "");
+  const [selectedId, setSelectedId] = useState(noticeTarget?.target || conversations[0]?.id || "");
   const [reply, setReply] = useState("");
   // QA16 TC-404 — lampiran file pada balasan (gambar/PDF, maks 10 MB).
   const [attachment, setAttachment] = useState<{
@@ -31099,14 +31153,29 @@ function CustomerServiceDatabase({
     return queryOk && filterOk;
   });
   const selected =
-    filtered.find((item) => item.id === selectedId) || filtered[0];
+    conversations.find((item) => item.id === selectedId) || filtered[0];
   useEffect(() => {
     if (!targetUserId && users[0]) setTargetUserId(users[0].id);
   }, [users, targetUserId]);
   useEffect(() => {
-    if (selected?.id && Number(selected.unreadCount) > 0)
-      void onRead(selected.id);
-  }, [selected?.id]);
+    if (!selectedId && selected?.id) setSelectedId(selected.id);
+  }, [selectedId, selected?.id]);
+  useLayoutEffect(() => {
+    if (!noticeTarget) return;
+    setQuery("");
+    setFilter("All");
+    setSelectedId(noticeTarget.target);
+  }, [noticeTarget]);
+  const markSelectedRead = useEffectEvent((id: string, messageId: string) => {
+    void onRead(id, messageId).catch(() => { /* Leave unread if the request failed. */ });
+  });
+  const latestSelectedCustomerId = selected?.messages?.findLast(
+    (message: any) => message.sender_type === "customer",
+  )?.id;
+  useEffect(() => {
+    if (selected?.id && latestSelectedCustomerId && Number(selected.unreadCount) > 0)
+      markSelectedRead(selected.id, latestSelectedCustomerId);
+  }, [selected?.id, latestSelectedCustomerId, selected?.unreadCount]);
   const slaText = (conv: any) => {
     if (!conv.needsReply || !conv.slaDueAt) return "";
     const ms = new Date(conv.slaDueAt).getTime() - Date.now();
@@ -32540,6 +32609,7 @@ export function resolveArticleLinks(
   };
   doc.querySelectorAll("a[href]").forEach((anchor) => {
     const raw = anchor.getAttribute("href") || "";
+    if (raw.startsWith("#")) return;
     let url: URL;
     try {
       url = new URL(raw, window.location.origin);
@@ -32617,12 +32687,46 @@ function ArticleReaderPage({
   setView?: (view: View) => void;
 }) {
   const t = useT();
-  const html = useMemo(
-    () => resolveArticleLinks(article.content, articles),
+  const reading = useMemo(
+    () => prepareArticleReading(resolveArticleLinks(article.content, articles)),
     [article.content, articles],
   );
+  const [activeHeading, setActiveHeading] = useState("");
+  const openArticleAtTop = (slug: string) => {
+    onOpenArticle?.(slug);
+    window.scrollTo({ top: 0, behavior: "instant" });
+  };
+  const related = articles
+    .filter(item => item.slug !== article.slug)
+    .sort((left, right) => Number(right.category === article.category) - Number(left.category === article.category))
+    .slice(0, 3);
+  useEffect(() => {
+    if (!publicMode || !reading.headings.length) return;
+    const entries = reading.headings.map(heading => document.getElementById(heading.id));
+    const update = () => {
+      const offset = (document.querySelector("header.ikr-nav")?.getBoundingClientRect().height || 0) + 44;
+      const current = entries.findLast(element => element && element.getBoundingClientRect().top <= offset);
+      setActiveHeading(current?.id || "");
+    };
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    update();
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+    };
+  }, [publicMode, reading.headings]);
+  useEffect(() => {
+    const fragment = window.location.hash.slice(1);
+    if (!publicMode || !fragment || window.location.pathname !== articleHref(article.slug)) return;
+    try {
+      document.getElementById(decodeURIComponent(fragment))?.scrollIntoView();
+    } catch {
+      /* An invalid fragment should not block the article. */
+    }
+  }, [publicMode, article.slug]);
   // Tautan internal dibuka di dalam aplikasi (tanpa muat ulang halaman).
-  const onContentClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const onContentClick = (event: React.MouseEvent<HTMLElement>) => {
     const anchor = (event.target as HTMLElement).closest("a");
     if (
       !anchor ||
@@ -32639,21 +32743,21 @@ function ArticleReaderPage({
     const parts = href.split(/[?#]/)[0].replace(/^\/+|\/+$/g, "").split("/");
     if (parts[0] === ARTICLE_PATH_SEGMENT && parts[1] && onOpenArticle) {
       event.preventDefault();
-      onOpenArticle(decodeURIComponent(parts[1]));
-      window.scrollTo({ top: 0 });
+      openArticleAtTop(decodeURIComponent(parts[1]));
       return;
     }
-    if ((parts[0] === "desain" || parts[0] === "templates") && setView) {
+    if ((parts[0] === "desain" || parts[0] === "templates") && setView && !href.includes("?")) {
       event.preventDefault();
       onBack();
       setView("designs");
+      window.scrollTo({ top: 0, behavior: "instant" });
     }
   };
   return (
     <div className={`article-reader-page wide ${publicMode ? "public" : ""}`}>
       <header>
         <button onClick={onBack}>
-          <ArrowLeft size={16} /> {publicMode ? t("Kembali", "Back") : "Back"}
+          <ArrowLeft size={16} /> {publicMode ? t("Kembali ke jurnal", "Back to journal") : "Back"}
         </button>
         {publicMode ? <Brand /> : <span>IKRARKU ARTICLE</span>}
         <div>{article.category}</div>
@@ -32676,10 +32780,29 @@ function ArticleReaderPage({
                 {formatArticleDate(article.date)}
               </time>{" "}
               · {article.author}
+              {publicMode && ` · ${t(`${reading.minutes} menit baca`, `${reading.minutes} min read`)}`}
             </small>
           </div>
         </section>
-        <div className="reader-body-wide">
+        <div className={`reader-body-wide${publicMode && !reading.headings.length ? " reader-no-toc" : ""}`}>
+          {publicMode && reading.headings.length > 0 && (
+            <aside className="reader-toc">
+              <details open>
+                <summary>{t("Daftar isi", "Contents")}</summary>
+                <nav aria-label={t("Daftar isi", "Contents")}>
+                  <ol>
+                    {reading.headings.map(heading => (
+                      <li key={heading.id} className={heading.level === 3 ? "reader-toc-subheading" : undefined}>
+                        <a href={`#${encodeURIComponent(heading.id)}`} aria-current={activeHeading === heading.id ? "location" : undefined}>
+                          {heading.text}
+                        </a>
+                      </li>
+                    ))}
+                  </ol>
+                </nav>
+              </details>
+            </aside>
+          )}
           <article lang={article.langFallback ? "id" : undefined}>
             {publicMode && article.langFallback && (
               <p className="article-lang-fallback">
@@ -32689,15 +32812,24 @@ function ArticleReaderPage({
             <div
               className="reader-page-content"
               onClick={onContentClick}
-              dangerouslySetInnerHTML={{ __html: html }}
+              dangerouslySetInnerHTML={{ __html: reading.html }}
             />
-            <footer>
-              {article.tags.map((tag) => (
-                <span key={tag}>#{tag}</span>
-              ))}
-            </footer>
+            {publicMode && <ArticleShare key={article.slug} article={article} />}
+            {article.tags.length > 0 && (
+              <footer>
+                {article.tags.map((tag) => <span key={tag}>#{tag}</span>)}
+              </footer>
+            )}
+            {publicMode && setView && (
+              <div className="reader-article-cta">
+                <strong>{t("Siap membuat undangan sendiri?", "Ready to create your invitation?")}</strong>
+                <a className="primary-btn" href="/desain" onClick={onContentClick}>
+                  {t("Lihat desain undangan", "Browse invitation designs")} <ArrowRight size={16} />
+                </a>
+              </div>
+            )}
           </article>
-          <aside>
+          {!publicMode && <aside>
             <Brand />
             <strong>
               {t("Lanjutkan persiapan pernikahan Anda.", "Continue your wedding journey.")}
@@ -32708,21 +32840,76 @@ function ArticleReaderPage({
                 "Explore templates, planning guides, and wedding websites managed in one platform.",
               )}
             </p>
-            {publicMode && setView && (
-              <button
-                className="primary-btn"
-                onClick={() => {
-                  onBack();
-                  setView("designs");
-                }}
-              >
-                {t("Lihat desain undangan", "Browse invitation designs")}
-              </button>
-            )}
-          </aside>
+          </aside>}
         </div>
+        {publicMode && onOpenArticle && related.length > 0 && (
+          <section className="reader-related">
+            <h2>{t("Baca juga", "Related articles")}</h2>
+            <div className="reader-related-grid">
+              {related.map(item => <JournalCard key={item.id} article={item}
+                readLabel={t("Baca cerita", "Read story")}
+                onOpen={item => openArticleAtTop(item.slug)} />)}
+            </div>
+          </section>
+        )}
       </main>
     </div>
+  );
+}
+
+function ArticleShare({ article }: { article: ArticleItem }) {
+  const t = useT();
+  const [feedback, setFeedback] = useState("");
+  const url = new URL(articleHref(article.slug), window.location.origin).href;
+  const encodedUrl = encodeURIComponent(url);
+  const shareText = encodeURIComponent(`${article.title} ${url}`);
+  const copy = async (instagram = false) => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setFeedback(instagram
+        ? t("Tautan tersalin. Tempel di DM atau stiker tautan Instagram Story.", "Link copied for an Instagram DM or Story link sticker.")
+        : t("Tautan artikel tersalin.", "Article link copied."));
+    } catch {
+      setFeedback(url);
+    }
+  };
+  const share = async () => {
+    try {
+      await navigator.share({ title: article.title, url });
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) await copy();
+    }
+  };
+  const links = [
+    { name: "WhatsApp", icon: <SocialGlyph name="whatsapp" size={18} />, url: `https://wa.me/?text=${shareText}` },
+    { name: "LinkedIn", icon: <span className="reader-linkedin-icon" aria-hidden="true">in</span>, url: `https://www.linkedin.com/sharing/share-offsite/?url=${encodedUrl}` },
+    { name: "Threads", icon: <SocialGlyph name="threads" size={18} />, url: `https://www.threads.com/intent/post?text=${shareText}` },
+    { name: "Facebook", icon: <SocialGlyph name="facebook" size={18} />, url: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}` },
+  ];
+  return (
+    <section className="reader-share" aria-label={t("Bagikan artikel", "Share article")}>
+      <h2>{t("Bagikan artikel", "Share this article")}</h2>
+      <div className="reader-share-actions">
+        {links.map(link => (
+          <a key={link.name} href={link.url} target="_blank" rel="noopener noreferrer">
+            {link.icon}{link.name}
+          </a>
+        ))}
+        <button type="button" onClick={() => void copy(true)}
+          aria-label={t("Salin tautan untuk Instagram", "Copy link for Instagram")}>
+          <SocialGlyph name="instagram" size={18} /> Instagram
+        </button>
+        <button type="button" onClick={() => void copy()}>
+          <Copy size={17} aria-hidden="true" /> {t("Salin tautan", "Copy link")}
+        </button>
+        {typeof navigator.share === "function" && (
+          <button type="button" onClick={() => void share()}>
+            <Share2 size={17} aria-hidden="true" /> {t("Bagikan via perangkat", "Share via device")}
+          </button>
+        )}
+      </div>
+      <p className="reader-share-feedback" role="status">{feedback}</p>
+    </section>
   );
 }
 

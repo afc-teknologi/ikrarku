@@ -420,8 +420,11 @@ export const api = {
       body: JSON.stringify({ body }),
     }),
   conversations: () => request<any[]>("/conversations"),
-  markConversationRead: (id: string) =>
-    request(`/conversations/${id}/read`, { method: "POST" }),
+  markConversationRead: (id: string, throughMessageId: string) =>
+    request(`/conversations/${id}/read`, {
+      method: "POST",
+      body: JSON.stringify({ throughMessageId }),
+    }),
   inboundMessage: (body: string, channel = "Web") =>
     request<any>("/conversations/inbound", {
       method: "POST",
