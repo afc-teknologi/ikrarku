@@ -6200,9 +6200,18 @@ app.post(
       .get(req.params.id);
     if (!c)
       return res.status(404).json({ error: "Conversation tidak ditemukan" });
+    const throughMessageId = req.body?.throughMessageId;
+    if (throughMessageId != null && typeof throughMessageId !== "string")
+      return res.status(400).json({ error: "ID pesan tidak valid" });
+    const through = throughMessageId
+      ? db.prepare("SELECT created_at FROM messages WHERE id=? AND conversation_id=? AND sender_type='customer'")
+        .get(throughMessageId, c.id)
+      : { created_at: now() };
+    if (!through) return res.status(404).json({ error: "Pesan tidak ditemukan" });
     db.prepare(
-      `INSERT INTO conversation_reads(conversation_id,user_id,last_read_at) VALUES(?,?,?) ON CONFLICT(conversation_id,user_id) DO UPDATE SET last_read_at=excluded.last_read_at`,
-    ).run(c.id, req.user.id, now());
+      `INSERT INTO conversation_reads(conversation_id,user_id,last_read_at) VALUES(?,?,?)
+       ON CONFLICT(conversation_id,user_id) DO UPDATE SET last_read_at=max(last_read_at,excluded.last_read_at)`,
+    ).run(c.id, req.user.id, through.created_at);
     res.json({ ok: true });
   },
 );

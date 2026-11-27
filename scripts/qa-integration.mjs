@@ -264,6 +264,30 @@ test("QA remediation: real HTTP routes, isolated SQLite, no external email/payme
       403,
     );
   });
+  await t.test("Chat read markers are staff-specific and stop at the message displayed", async () => {
+    const thread = await call("POST", "/public/chat", {
+      customerName: "Read marker QA",
+      body: "First message",
+    });
+    assert.equal(thread.status, 201);
+    const { conversationId, conversationToken } = thread.data;
+    db.prepare("UPDATE conversations SET assigned_cs_id=? WHERE id=?")
+      .run(cs.user.id, conversationId);
+    const inbox = async token => (await call("GET", "/conversations", undefined, token))
+      .data.find(item => item.id === conversationId);
+    const first = (await inbox(admin.token)).messages[0].id;
+    await call("POST", "/public/chat", { conversationToken, body: "Arrived while reading" });
+    const read = messageId => call("POST", `/conversations/${conversationId}/read`,
+      { throughMessageId: messageId }, admin.token);
+    assert.equal((await read(first)).status, 200);
+    const pending = await inbox(admin.token);
+    assert.equal(pending.unreadCount, 1);
+    assert.equal((await inbox(cs.token)).unreadCount, 2);
+    assert.equal((await read(pending.messages.at(-1).id)).status, 200);
+    assert.equal((await read(first)).status, 200);
+    assert.equal((await inbox(admin.token)).unreadCount, 0);
+    assert.equal((await read("missing-message")).status, 404);
+  });
   await t.test("QC 24 Nov: Admin ganti email & password akun tim tetap bisa login; customer belum verifikasi tetap ditolak", async () => {
     const created = await call(
       "POST",
